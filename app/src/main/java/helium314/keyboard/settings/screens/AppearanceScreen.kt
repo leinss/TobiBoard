@@ -74,6 +74,7 @@ fun AppearanceScreen(
         if (prefs.getBoolean(Settings.PREF_THEME_KEY_BORDERS, Defaults.PREF_THEME_KEY_BORDERS))
             Settings.PREF_NARROW_KEY_GAPS else null,
         Settings.PREF_KEYBOARD_HEIGHT_SCALE_PREFIX,
+        Settings.PREF_BOTTOM_ROW_SCALE_PREFIX,
         Settings.PREF_BOTTOM_PADDING_SCALE_PREFIX,
         Settings.PREF_SIDE_PADDING_SCALE_PREFIX,
         Settings.PREF_SPACE_BAR_TEXT,
@@ -221,6 +222,16 @@ fun createAppearanceSettings(context: Context) = listOf(
             dimensions = listOf(stringResource(R.string.landscape)),
             defaults = Defaults.PREF_KEYBOARD_HEIGHT_SCALE,
             range = 0.3f..1.5f,
+            description = { "${(100 * it).toInt()}%" }
+        ) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
+    },
+    Setting(context, Settings.PREF_BOTTOM_ROW_SCALE_PREFIX, R.string.prefs_bottom_row_scale) { setting ->
+        MultiSliderPreference(
+            name = setting.title,
+            baseKey = setting.key,
+            dimensions = listOf(stringResource(R.string.landscape)),
+            defaults = Defaults.PREF_BOTTOM_ROW_SCALE,
+            range = 0.5f..2f,
             description = { "${(100 * it).toInt()}%" }
         ) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
     },

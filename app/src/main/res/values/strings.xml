@@ -382,6 +382,8 @@
     <string name="prefs_keyboard_height_scale">Keyboard height scale</string>
     <!-- Title of the setting for setting bottom padding height -->
     <string name="prefs_bottom_padding_scale">Bottom padding scale</string>
+    <!-- Title of the setting for setting height of the bottom row -->
+    <string name="prefs_bottom_row_scale">Bottom row scale</string>
     <!-- Title of the setting for setting side padding -->
     <string name="prefs_side_padding_scale">Side padding scale</string>
     <!-- Title of the setting for adjusting font size on the keyboard -->

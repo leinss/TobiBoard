@@ -77,6 +77,14 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         if (heightRescale != 1f) {
             keysInRows.forEach { row -> row.forEach { it.mHeight *= heightRescale } }
         }
+        // rescale without changing keyboard height
+        if (params.mId.isAlphaOrSymbolKeyboard) {
+            val bottomRowScale = Settings.getValues().mBottomRowScale
+            val otherRowScale = (keysInRows.size - bottomRowScale) / (keysInRows.size - 1)
+            keysInRows.forEachIndexed { i, row ->
+                row.forEach { it.mHeight *= if (i == keysInRows.lastIndex) bottomRowScale else otherRowScale }
+            }
+        }
 
         return keysInRows
     }
