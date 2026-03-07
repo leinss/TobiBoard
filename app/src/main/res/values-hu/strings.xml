@@ -483,4 +483,5 @@
     <string name="gesture_data_reminder_message">Üdvözöljük!\n Korábban használta az ujjmozdulatok gyűjtését, de már jó ideje nem adott hozzá adatokat. Szeretne ismét közreműködni?</string>
     <string name="ask_later">Később döntöm el</string>
     <string name="gesture_data_take_me_there">Ugrás az ujjmozdulatok gyüjtésére</string>
+    <string name="prefs_bottom_row_scale">Alsó sor magassága</string>
 </resources>

@@ -483,4 +483,5 @@
     <string name="gesture_data_reminder_message">Здравствуйте!\nРанее вы использовали сбор данных о жестах, но уже довольно давно не добавляли новые данные. Хотите попробовать еще раз?</string>
     <string name="ask_later">Спросить позже</string>
     <string name="gesture_data_take_me_there">Перейти</string>
+    <string name="prefs_bottom_row_scale">Масштаб нижнего ряда</string>
 </resources>

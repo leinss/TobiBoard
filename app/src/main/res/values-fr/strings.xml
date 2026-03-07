@@ -489,4 +489,5 @@ Nouveau dictionnaire:
     <string name="ask_later">Demandez-moi plus tard</string>
     <string name="gesture_data_take_me_there">Y aller</string>
     <string name="timestamp_description">Vous pouvez ajouter la clé d\'horodatage à l\'aide d\'une disposition personnalisée avec la clé « timestamp » ou le code de clé -10043</string>
+    <string name="prefs_bottom_row_scale">Échelle de la rangée du bas</string>
 </resources>

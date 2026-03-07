@@ -486,4 +486,5 @@
     <string name="gesture_data_promotion_message">您好！\n 既然您已经安装了滑行输入库，您或许会对 HeliBoard 的完全开源滑行输入库项目感兴趣。您可以贡献滑行输入数据来提供帮助。如需了解详情，请访问滑行输入数据收集界面。</string>
     <string name="gesture_data_reminder_message">您好！\n 您之前使用过滑行输入数据收集功能，但已经很久没有添加数据了。是否要再次贡献数据？</string>
     <string name="timestamp_description">您可以使用自定义布局添加时间戳键，使用“timestamp”键或键码 -10043</string>
+    <string name="prefs_bottom_row_scale">底行比例</string>
 </resources>

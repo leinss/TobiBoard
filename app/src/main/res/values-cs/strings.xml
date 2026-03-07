@@ -485,4 +485,5 @@
     <string name="ask_later">Zeptat se později</string>
     <string name="gesture_data_take_me_there">Vezměte mě tam</string>
     <string name="timestamp_description">Klávesu času můžete přidat pomocí vlastního rozložení s klávesou „čas“ nebo kódem klávesy -10043</string>
+    <string name="prefs_bottom_row_scale">Velikost spodní řady</string>
 </resources>
