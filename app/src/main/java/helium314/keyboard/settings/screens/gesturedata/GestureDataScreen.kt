@@ -60,12 +60,15 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PlatformImeOptions
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.android.inputmethod.latin.BinaryDictionary
@@ -98,6 +101,7 @@ import helium314.keyboard.latin.utils.locale
 import helium314.keyboard.settings.DropDownField
 import helium314.keyboard.latin.utils.NextScreenIcon
 import helium314.keyboard.latin.utils.Theme
+import helium314.keyboard.latin.utils.appendLink
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.InfoDialog
 import helium314.keyboard.settings.dialogs.ThreeButtonAlertDialog
@@ -452,6 +456,7 @@ fun GestureDataScreen(
 private fun BottomBar(hasWords: Boolean, onDeleted: () -> Unit) {
     var showExportDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showLinks by remember { mutableStateOf(false) }
     val dao = GestureDataDao.getInstance(LocalContext.current)!!
     BottomAppBar(
         actions = {
@@ -476,6 +481,13 @@ private fun BottomBar(hasWords: Boolean, onDeleted: () -> Unit) {
                     Icon(
                         painterResource(R.drawable.ic_share),
                         "share",
+                        Modifier.size(30.dp)
+                    )
+                }
+                IconButton(onClick = { showLinks = true}) {
+                    Icon(
+                        painterResource(R.drawable.ic_link),
+                        "links",
                         Modifier.size(30.dp)
                     )
                 }
@@ -547,6 +559,25 @@ private fun BottomBar(hasWords: Boolean, onDeleted: () -> Unit) {
                 }
             )
         }
+    }
+    if (showLinks) {
+        val text = buildAnnotatedString {
+            appendLine(stringResource(R.string.gesture_data_links))
+            append("• ")
+            appendLink("PeerTube", Links.GESTURE_DATA_VIDEO_PEERTUBE)
+            appendLine()
+            append("• ")
+            appendLink("YouTube", Links.GESTURE_DATA_VIDEO_YOUTUBE)
+            appendLine()
+            append("• ")
+            appendLink("HeliBoard wiki", Links.GESTURE_DATA_WIKI)
+            appendLine()
+            appendLine()
+            append("Tool for visualizing gesture data:")
+            append(" ")
+            appendLink("Swipe-O-Scope", Links.SWIPE_O_SCOPE)
+        }
+        InfoDialog(text) { showLinks = false }
     }
 }
 

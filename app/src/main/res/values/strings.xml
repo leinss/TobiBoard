@@ -926,6 +926,8 @@ New dictionary:
     <string name="emoji_search_title">Search emoji</string>
     <!-- Placeholder text for search field -->
     <string name="search_field_placeholder">Search</string>
+    <!-- Button to show later -->
+    <string name="ask_later">Ask me later</string>
 
 
     <!-- gesture data gathering, new strings for normal use should go above -->
@@ -1071,12 +1073,12 @@ New dictionary:
         Hey there!\n
         You previously used the gesture data gathering, but did not add data for quite a while. Do you want to contribute again?
     </string>
-    <!-- Button to show later
-     string will probably be removed once data gathering is finished (end of 2026 latest) -->
-    <string name="ask_later">Ask me later</string>
     <!-- Button to go to gesture data gathering screen
      string will probably be removed once data gathering is finished (end of 2026 latest) -->
     <string name="gesture_data_take_me_there">Take me there</string>
+    <!-- Message followed by a list of links
+     string will probably be removed once data gathering is finished (end of 2026 latest) -->
+    <string name="gesture_data_links">Information on gesture data gathering on:</string>
 
     <!-- new strings should go above the section for gesture data gathering -->
 </resources>
