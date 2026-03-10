@@ -490,4 +490,6 @@
     <string name="gesture_data_reminder_message">Caro utente,\ngrazie per aver contribuito alla raccolta dati per la digitazione gestuale. È passato un po\' di tempo dal tuo ultimo contributo: vuoi partecipare di nuovo?</string>
     <string name="ask_later">Non adesso</string>
     <string name="gesture_data_take_me_there">Vai alla raccolta dati</string>
+    <string name="timestamp_description">Puoi aggiungere un tasto al tuo layout inserendo come valore \'timestamp\' o il codice -10043</string>
+    <string name="prefs_bottom_row_scale">Altezza dell\'ultima riga</string>
 </resources>

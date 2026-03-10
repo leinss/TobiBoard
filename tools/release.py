@@ -19,9 +19,11 @@ def check_git():
 
 # download and update translations
 def update_translations():
-    url = "https://translate.codeberg.org/download/heliboard/?format=zip"
     zip_file_name = "translations.zip"
-    urlretrieve(url, zip_file_name)
+    # currently need to download manually because auto-download is blocked by codeberg ai scraper defense
+    if not os.path.isfile(zip_file_name):
+        url = "https://translate.codeberg.org/download/heliboard/?format=zip"
+        urlretrieve(url, zip_file_name)
     # extract all in heliboard/heliboard/app/src/main/res and heliboard/heliboard/fastlane/metadata
     with zipfile.ZipFile(zip_file_name, "r") as f:
         for file in f.filelist:
