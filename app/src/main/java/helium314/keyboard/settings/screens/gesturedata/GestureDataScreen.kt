@@ -60,7 +60,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.input.ImeAction
@@ -68,7 +67,6 @@ import androidx.compose.ui.text.input.PlatformImeOptions
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.android.inputmethod.latin.BinaryDictionary
@@ -149,7 +147,7 @@ fun GestureDataScreen(
     var lastData by remember { mutableStateOf<WordData?>(null) }
     var sessionWordCount by remember { mutableIntStateOf(0) }
     var dbActiveWordCount by remember { mutableIntStateOf(dao.count(activeMode = true)) }
-    var showUploadDialog by rememberSaveable { mutableStateOf(true) }
+    var showMuchDataDialog by rememberSaveable { mutableStateOf(true) }
     var showEndDialog by rememberSaveable { mutableStateOf(true) }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -195,10 +193,10 @@ fun GestureDataScreen(
         }
 
     }
-    if (showUploadDialog) {
-        if (dao.count() < 10000)
-            showUploadDialog = false
-        InfoDialog(stringResource(R.string.gesture_data_much_data)) { showUploadDialog = false }
+    if (showMuchDataDialog) {
+        if (dao.count(exported = false) < 5000)
+            showMuchDataDialog = false
+        InfoDialog(stringResource(R.string.gesture_data_much_data)) { showMuchDataDialog = false }
     }
     @Composable fun activeGathering() {
         val availableDicts = remember { getAvailableDictionaries(ctx) }
