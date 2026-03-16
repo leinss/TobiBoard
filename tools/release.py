@@ -16,7 +16,6 @@ def check_git():
         if cont != "y":
             sys.exit()
 
-
 # download and update translations
 def update_translations():
     zip_file_name = "translations.zip"
@@ -32,6 +31,9 @@ def update_translations():
                 continue
             file.filename = file.filename.replace("heliboard/heliboard/", "")
             f.extract(file)
+    result = subprocess.run(["git", "status", "--short"], capture_output=True)
+    if b"?? app/src/main/res/values" in result.stdout:
+        print("new translation(s) found, add it to locales_config.xml")
     os.remove(zip_file_name)
 
 
