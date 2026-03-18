@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -56,6 +57,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -100,6 +102,7 @@ import helium314.keyboard.settings.DropDownField
 import helium314.keyboard.latin.utils.NextScreenIcon
 import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.latin.utils.appendLink
+import helium314.keyboard.latin.utils.dpToPx
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.InfoDialog
 import helium314.keyboard.settings.dialogs.ThreeButtonAlertDialog
@@ -153,6 +156,9 @@ fun GestureDataScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     val words = remember { mutableListOf<Pair<String, Long>>() }
     val scope = rememberCoroutineScope()
+    var activeGathering by remember { mutableStateOf(false) }
+    var showActiveInfoDialog by remember { mutableStateOf(false) }
+    val maybeNotEnoughSpace = activeGathering && useWideLayout
     fun nextWord(save: Boolean) {
         if (!save) {
             lastData = null
@@ -261,6 +267,20 @@ fun GestureDataScreen(
                 }
             }
         }
+        @Composable fun buttons() {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ButtonWithText(stringResource(R.string.gesture_data_how_to_use)) {
+                    showActiveInfoDialog = true
+                }
+                ButtonWithText(stringResource(R.string.gesture_data_active_stop)) {
+                    activeGathering = false
+                }
+            }
+        }
         @Composable fun ColumnScope.texts() {
             val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             val text = when {
@@ -306,7 +326,13 @@ fun GestureDataScreen(
             horizontalArrangement = Arrangement.Center
         ) {
             Column {
-                texts()
+                if (maybeNotEnoughSpace) {
+                    texts()
+                    buttons()
+                } else {
+                    buttons()
+                    texts()
+                }
                 val exportedAndDeletedCount by remember { mutableIntStateOf(getExportedActiveDeletionCount(ctx)) }
                 val oldActiveWords by remember {
                     sessionWordCount = 0
@@ -335,7 +361,6 @@ fun GestureDataScreen(
     }
 
     val scrollState = rememberScrollState()
-    var activeGathering by remember { mutableStateOf(false) }
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
         bottomBar = { BottomBar(sessionWordCount + dbActiveWordCount > 0) { dbActiveWordCount = dao.count(activeMode = true) } }
@@ -346,34 +371,26 @@ fun GestureDataScreen(
                 .padding(horizontal = 12.dp)
                 .then(Modifier.padding(innerPadding)),
         ) {
-            var showActiveInfoDialog by remember { mutableStateOf(false) }
             var showInfoDialog by remember { mutableStateOf(false) }
             var showPrivacyDialog by remember { mutableStateOf(false) }
-            TopAppBar(
-                title = { Text(stringResource(R.string.gesture_data_screen)) },
-                navigationIcon = {
-                    IconButton(onClick = { if (activeGathering) activeGathering = false else onClickBack() }) {
-                        Icon(
-                            painterResource(R.drawable.ic_arrow_back),
-                            stringResource(R.string.spoken_description_action_previous)
-                        )
-                    }
-                },
-            )
+            if (maybeNotEnoughSpace) {
+                val top = with(LocalDensity.current) { WindowInsets.statusBars.getTop(this).toDp() }
+                Spacer(Modifier.height(top))
+            } else {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.gesture_data_screen)) },
+                    navigationIcon = {
+                        IconButton(onClick = { if (activeGathering) activeGathering = false else onClickBack() }) {
+                            Icon(
+                                painterResource(R.drawable.ic_arrow_back),
+                                stringResource(R.string.spoken_description_action_previous)
+                            )
+                        }
+                    },
+                )
+            }
             BackHandler(enabled = activeGathering) { activeGathering = false }
             if (activeGathering) { // AnimatedVisibility results in buggy behavior for some reason
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    ButtonWithText(stringResource(R.string.gesture_data_how_to_use)) {
-                        showActiveInfoDialog = true
-                    }
-                    ButtonWithText(stringResource(R.string.gesture_data_active_stop)) {
-                        activeGathering = false
-                    }
-                }
                 activeGathering()
             }
             AnimatedVisibility(!activeGathering) {
