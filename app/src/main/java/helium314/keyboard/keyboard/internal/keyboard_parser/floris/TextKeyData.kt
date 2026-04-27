@@ -205,8 +205,10 @@ sealed interface KeyData : AbstractKeyData {
                 }
             }
             // remove emoji shortcut on enter in tablet mode (like original, because bottom row always has an emoji key)
-            // (probably not necessary, but whatever) and in emoji mode
-            if ((Settings.getInstance().isTablet || params.mId.mElementId == KeyboardId.ELEMENT_EMOJI_BOTTOM_ROW)
+            // and in emoji mode, and when the dedicated emoji key is enabled (so the shortcut isn't duplicated).
+            if ((Settings.getInstance().isTablet
+                    || params.mId.mElementId == KeyboardId.ELEMENT_EMOJI_BOTTOM_ROW
+                    || params.mId.mEmojiKeyEnabled)
                 && popupKeys.remove("!icon/emoji_action_key|!code/key_emoji")) {
                 val i = popupKeys.indexOfFirst { it.startsWith(Key.POPUP_KEYS_FIXED_COLUMN_ORDER) }
                 if (i > -1) {
