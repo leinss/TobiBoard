@@ -152,7 +152,7 @@ fun createPreferencesSettings(context: Context) = listOf(
             Defaults.PREF_LANGUAGE_SWITCH_KEY
         ) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
     },
-    Setting(context, Settings.PREF_SHOW_EMOJI_KEY, R.string.show_emoji_key) {
+    Setting(context, Settings.PREF_SHOW_EMOJI_KEY, R.string.show_emoji_key, R.string.show_emoji_key_summary) {
         SwitchPreference(it, Defaults.PREF_SHOW_EMOJI_KEY) { KeyboardSwitcher.getInstance().reloadKeyboard() }
     },
     Setting(context, Settings.PREF_REMOVE_REDUNDANT_POPUPS,

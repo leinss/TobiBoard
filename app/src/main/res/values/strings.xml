@@ -84,6 +84,8 @@
     <string name="language_switch_key_behavior">Language switch key behavior</string>
     <!-- Option to show shortcut key to emoji palettes -->
     <string name="show_emoji_key">Emoji key</string>
+    <!-- Summary explaining the side-effect of enabling the dedicated emoji key -->
+    <string name="show_emoji_key_summary">Adds a dedicated emoji button to the keyboard. While enabled, the emoji shortcut is removed from the Return key long-press menu.</string>
     <!-- Units abbreviation for the duration (milliseconds) -->
     <string name="abbreviation_unit_milliseconds">%s ms</string>
     <!-- Units abbreviation for the duration (minutes) -->
