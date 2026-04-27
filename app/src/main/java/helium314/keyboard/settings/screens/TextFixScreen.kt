@@ -76,16 +76,16 @@ fun createTextFixSettings(context: Context) = listOf(
         val providerPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
         val items = when (AiProvider.fromPref(providerPref)) {
             AiProvider.OPENROUTER -> listOf(
-                "GPT-5.4 Nano (Default, Cheap, ZDR + Cache)" to "openai/gpt-5.4-nano",
-                "GPT-5.4 Mini (Medium, ZDR + Cache)" to "openai/gpt-5.4-mini",
+                "GPT-5.4 Mini (Default, ZDR + Cache)" to "openai/gpt-5.4-mini",
+                "GPT-5.4 Nano (Cheap, ZDR + Cache)" to "openai/gpt-5.4-nano",
                 "Gemini 3 Flash Preview (Medium, ZDR + Cache)" to "google/gemini-3-flash-preview",
                 "DeepSeek V4 Pro (Medium, ZDR)" to "deepseek/deepseek-v4-pro",
                 "Claude Haiku 4.5 (Cheap, ZDR + Cache)" to "anthropic/claude-haiku-4.5",
                 ctx.getString(R.string.voice_custom_model) to "custom",
             )
             AiProvider.PAYPERQ -> listOf(
-                "GPT-5.4 Nano (Default, Cheap)" to "openai/gpt-5.4-nano",
-                "GPT-5.4 Mini (Medium)" to "openai/gpt-5.4-mini",
+                "GPT-5.4 Mini (Default)" to "openai/gpt-5.4-mini",
+                "GPT-5.4 Nano (Cheap)" to "openai/gpt-5.4-nano",
                 "Gemini 3 Flash Preview (Medium)" to "google/gemini-3-flash-preview",
                 "DeepSeek V4 Pro (Medium)" to "deepseek/deepseek-v4-pro",
                 "Claude Haiku 4.5 (Cheap)" to "anthropic/claude-haiku-4.5",

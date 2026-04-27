@@ -70,28 +70,23 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         addView(stopButton)
     }
 
-    /**
-     * 40dp circle (visually) with a real 40dp hit area. Previously the button was fixed at 36dp
-     * with `minimumWidth/Height = 48dp`, but LayoutParams set to 36dp overrode the minimums —
-     * so the effective tap area was actually 36dp. The suggestion strip is only ~44dp tall so
-     * we can't reach the 48dp Material recommendation without overflow; 40dp + 8dp sibling gap
-     * gets us close while keeping the buttons comfortably separated.
-     */
+    // 32dp keeps the buttons inside the ~44dp suggestion strip with comfortable vertical
+    // breathing room; the 6dp sibling gap preserves separation without crowding the timer.
     private fun makeRoundButton(isCancel: Boolean, descRes: Int, onClick: () -> Unit): ImageView {
-        val size = dp(40)
+        val size = dp(32)
         return ImageView(context).apply {
-            layoutParams = LayoutParams(size, size).apply { marginStart = dp(8) }
+            layoutParams = LayoutParams(size, size).apply { marginStart = dp(6) }
             val bg = GradientDrawable().apply { shape = GradientDrawable.OVAL }
             background = bg
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-            val innerSize = dp(14)
+            val innerSize = dp(11)
             val icon = GradientDrawable().apply {
                 shape = if (isCancel) GradientDrawable.OVAL else GradientDrawable.RECTANGLE
                 if (!isCancel) cornerRadius = dp(2).toFloat()
                 setSize(innerSize, innerSize)
             }
             setImageDrawable(icon)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(dp(6), dp(6), dp(6), dp(6))
             isClickable = true
             isFocusable = true
             contentDescription = context.getString(descRes)
