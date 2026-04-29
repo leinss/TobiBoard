@@ -12,6 +12,17 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Records audio from the microphone directly to a WAV file on disk.
@@ -43,7 +54,8 @@ class AudioRecorder(
     }
 
     private var audioRecord: AudioRecord? = null
-    private var recordingThread: Thread? = null
+    private val recordingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var recordingJob: Job? = null
     private var pcmOutputFile: RandomAccessFile? = null
     @Volatile private var pcmBytesWritten: Long = 0L
     @Volatile private var amplitudeSum: Long = 0L
@@ -110,10 +122,9 @@ class AudioRecorder(
             recordingStartMs = System.currentTimeMillis()
             audioRecord?.startRecording()
 
-            recordingThread = Thread({
+            recordingJob = recordingScope.launch(CoroutineName("AudioRecorder")) {
                 runRecordingLoop(bufferSize)
-            }, "AudioRecorder")
-            recordingThread?.start()
+            }
             true
         } catch (e: SecurityException) {
             Log.e(TAG, "Microphone permission not granted", e)
@@ -134,11 +145,11 @@ class AudioRecorder(
         }
     }
 
-    private fun runRecordingLoop(bufferSize: Int) {
+    private suspend fun runRecordingLoop(bufferSize: Int) {
         val buffer = ByteArray(bufferSize)
         var hasSpoken = false
         var silenceRunStartMs = 0L
-        while (isRecording) {
+        while (isRecording && currentCoroutineContext().isActive) {
             if (System.currentTimeMillis() - recordingStartMs > maxDurationMs) {
                 isRecording = false
                 onMaxDurationReached?.invoke()
@@ -237,11 +248,14 @@ class AudioRecorder(
     private fun teardownRecorder() {
         isRecording = false
         try { audioRecord?.stop() } catch (e: IllegalStateException) { Log.w(TAG, "AudioRecord.stop() failed", e) }
-        recordingThread?.let { t ->
-            t.interrupt()
-            try { t.join(2000) } catch (e: InterruptedException) { Thread.currentThread().interrupt() }
+        recordingJob?.let { job ->
+            runBlocking {
+                withTimeoutOrNull(2000) {
+                    job.cancelAndJoin()
+                }
+            }
         }
-        recordingThread = null
+        recordingJob = null
         releaseAudioEffects()
         audioRecord?.release()
         audioRecord = null

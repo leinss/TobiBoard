@@ -231,9 +231,7 @@ class OpenRouterClient(
     private fun buildRequestEnvelope(enforceZdr: Boolean): Pair<String, String> {
         val messages = JSONArray().apply {
             put(buildSystemMessage())
-            put(buildTextMessage(STABLE_AUDIO_INSTRUCTION))
-            runtimeInstruction?.takeIf { it.isNotBlank() }?.let { put(buildTextMessage(it)) }
-            put(buildAudioMessage(AUDIO_PLACEHOLDER))
+            put(buildAudioInputMessage(AUDIO_PLACEHOLDER))
         }
         val body = JSONObject().apply {
             put("model", model)
@@ -275,7 +273,15 @@ class OpenRouterClient(
         }
     }
 
-    private fun buildAudioMessage(base64Audio: String): JSONObject {
+    private fun buildAudioInputMessage(base64Audio: String): JSONObject {
+        val instruction = listOfNotNull(
+            STABLE_AUDIO_INSTRUCTION,
+            runtimeInstruction?.takeIf { it.isNotBlank() },
+        ).joinToString("\n")
+        val textContent = JSONObject().apply {
+            put("type", "text")
+            put("text", instruction)
+        }
         val audioContent = JSONObject().apply {
             put("type", "input_audio")
             put("input_audio", JSONObject().apply {
@@ -285,7 +291,10 @@ class OpenRouterClient(
         }
         return JSONObject().apply {
             put("role", "user")
-            put("content", JSONArray().apply { put(audioContent) })
+            put("content", JSONArray().apply {
+                put(textContent)
+                put(audioContent)
+            })
         }
     }
 
@@ -399,7 +408,8 @@ class OpenRouterClient(
         out.writeBytes("\r\n")
     }
 
-    private fun parseContent(responseBody: String): String {
+    @VisibleForTesting
+    internal fun parseContent(responseBody: String): String {
         val json = try {
             JSONObject(responseBody)
         } catch (e: JSONException) {
@@ -410,15 +420,34 @@ class OpenRouterClient(
         if (choices == null || choices.length() == 0) {
             throw OpenRouterException("API response missing choices")
         }
-        val content = choices.optJSONObject(0)
-            ?.optJSONObject("message")
-            ?.optString("content")
-            ?.trim()
-            .orEmpty()
+        val message = choices.optJSONObject(0)?.optJSONObject("message")
+        val content = extractMessageText(message)
         if (content.isEmpty()) {
             throw OpenRouterException("API response missing content")
         }
         return content
+    }
+
+    @VisibleForTesting
+    internal fun extractMessageText(message: JSONObject?): String {
+        if (message == null) return ""
+        message.optJSONObject("audio")?.optString("transcript")?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            return it
+        }
+        val rawContent = message.opt("content") ?: return ""
+        if (rawContent is String) return rawContent.trim()
+        if (rawContent is JSONArray) {
+            val parts = mutableListOf<String>()
+            for (i in 0 until rawContent.length()) {
+                val item = rawContent.optJSONObject(i) ?: continue
+                item.optString("text").trim().takeIf { it.isNotEmpty() }?.let { parts.add(it) }
+                item.optJSONObject("audio")?.optString("transcript")?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                    parts.add(it)
+                }
+            }
+            return parts.joinToString("\n").trim()
+        }
+        return rawContent.toString().trim()
     }
 
     private fun parseTranscriptionContent(responseBody: String): String {

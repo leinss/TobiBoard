@@ -201,6 +201,8 @@ fun createVoiceSettings(context: Context) = listOf(
         val items = when (AiProvider.fromPref(providerPref)) {
             AiProvider.OPENROUTER -> listOf(
                 "Voxtral Small 24B (Recommended, Cheap)" to "mistralai/voxtral-small-24b-2507",
+                "Whisper 1 (Transcription)" to "openai/whisper-1",
+                "GPT-4o Transcribe (Best Accuracy)" to "openai/gpt-4o-transcribe",
                 "Gemini 2.5 Flash Lite (Cheap)" to "google/gemini-2.5-flash-lite",
                 "Gemini 2.5 Flash (Medium)" to "google/gemini-2.5-flash",
                 "GPT-4o Audio Preview (Expensive)" to "openai/gpt-4o-audio-preview",

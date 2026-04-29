@@ -11,7 +11,6 @@
 
 # after upgrading to gradle 8, stack traces contain "unknown source"
 -keepattributes SourceFile,LineNumberTable
--dontobfuscate
 
 # Tink (pulled in by androidx.security:security-crypto) references compile-only
 # annotations that are not on the runtime classpath. These are safe to ignore.
