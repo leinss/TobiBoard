@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +78,7 @@ import helium314.keyboard.latin.voice.defaultApiKey
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.dialogs.TextInputDialog
+import kotlinx.coroutines.delay
 
 @Composable
 fun WelcomeWizard(
@@ -120,12 +122,24 @@ fun WelcomeWizard(
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
+    LaunchedEffect(step) {
+        if (step == switchStep) {
+            repeat(20) {
+                val nextStep = determineStep()
+                if (nextStep != switchStep) {
+                    step = nextStep
+                    return@LaunchedEffect
+                }
+                delay(500)
+            }
+        }
+    }
     val useWideLayout = isWideScreen()
     val backgroundColor = Color(ContextCompat.getColor(ctx, R.color.setup_background))
     val stepBackgroundColor = MaterialTheme.colorScheme.surface
     val actionContainerColor = Color(ContextCompat.getColor(ctx, R.color.setup_step_background))
     val primaryActionColor = MaterialTheme.colorScheme.primary
-    val primaryActionContentColor = MaterialTheme.colorScheme.onPrimary
+    val primaryActionContentColor = Color.White
     val infoContainerColor = MaterialTheme.colorScheme.primaryContainer
     val infoContentColor = MaterialTheme.colorScheme.onPrimaryContainer
     val textColor = Color(ContextCompat.getColor(ctx, R.color.setup_text_action))
