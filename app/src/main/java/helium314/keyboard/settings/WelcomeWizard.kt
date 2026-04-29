@@ -124,6 +124,10 @@ fun WelcomeWizard(
     val backgroundColor = Color(ContextCompat.getColor(ctx, R.color.setup_background))
     val stepBackgroundColor = MaterialTheme.colorScheme.surface
     val actionContainerColor = Color(ContextCompat.getColor(ctx, R.color.setup_step_background))
+    val primaryActionColor = MaterialTheme.colorScheme.primary
+    val primaryActionContentColor = MaterialTheme.colorScheme.onPrimary
+    val infoContainerColor = MaterialTheme.colorScheme.primaryContainer
+    val infoContentColor = MaterialTheme.colorScheme.onPrimaryContainer
     val textColor = Color(ContextCompat.getColor(ctx, R.color.setup_text_action))
     val textColorDim = textColor.copy(alpha = 0.55f)
     val titleColor = Color(ContextCompat.getColor(ctx, R.color.setup_text_title))
@@ -158,8 +162,8 @@ fun WelcomeWizard(
                 val isSelected = currentStep == it
                 Surface(
                     shape = CircleShape,
-                    color = if (isSelected) textColor else actionContainerColor.copy(alpha = 0.5f),
-                    contentColor = if (isSelected) stepBackgroundColor else textColorDim,
+                    color = if (isSelected) primaryActionColor else actionContainerColor.copy(alpha = 0.5f),
+                    contentColor = if (isSelected) primaryActionContentColor else textColorDim,
                     modifier = Modifier.size(28.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -172,7 +176,7 @@ fun WelcomeWizard(
         LinearProgressIndicator(
             progress = { currentStep / totalSetupSteps.toFloat() },
             modifier = Modifier.fillMaxWidth(),
-            color = textColor,
+            color = primaryActionColor,
             trackColor = actionContainerColor.copy(alpha = 0.35f)
         )
         Spacer(Modifier.height(20.dp))
@@ -182,7 +186,10 @@ fun WelcomeWizard(
         Button(
             onClick = action,
             shape = RoundedCornerShape(20.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = textColor),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = primaryActionColor,
+                contentColor = primaryActionContentColor
+            ),
             modifier = Modifier.fillMaxWidth()
         ) {
             Icon(icon, null, Modifier.padding(end = 8.dp).size(22.dp))
@@ -194,8 +201,8 @@ fun WelcomeWizard(
         OutlinedButton(
             onClick = action,
             shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.dp, textColor.copy(alpha = 0.35f)),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = textColor),
+            border = BorderStroke(1.dp, primaryActionColor.copy(alpha = 0.45f)),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = primaryActionColor),
             modifier = Modifier.fillMaxWidth()
         ) {
             if (icon != null) Icon(icon, null, Modifier.padding(end = 8.dp).size(20.dp))
@@ -226,8 +233,8 @@ fun WelcomeWizard(
                 ProgressHeader(currentStep)
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = actionContainerColor.copy(alpha = 0.45f),
-                    contentColor = textColor,
+                    color = infoContainerColor,
+                    contentColor = infoContentColor,
                     modifier = Modifier.size(56.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -261,7 +268,8 @@ fun WelcomeWizard(
         if (step == welcomeStep)
             Step0(
                 actionContainerColor = actionContainerColor,
-                textColor = textColor,
+                primaryActionColor = primaryActionColor,
+                primaryActionContentColor = primaryActionContentColor,
                 onClick = { step = enableStep }
             )
         else
@@ -290,15 +298,14 @@ fun WelcomeWizard(
                         instruction = stringResource(R.string.setup_step2_instruction, appName),
                         icon = painterResource(R.drawable.ic_setup_select),
                         primaryText = stringResource(R.string.setup_step2_action),
-                        primaryAction = imm::showInputMethodPicker,
-                        secondaryText = stringResource(R.string.setup_step3_action),
-                        secondaryAction = close
+                        primaryAction = imm::showInputMethodPicker
                     )
                 } else if (step in providerStep..voiceStep) {
                     AiProviderSetupStep(
                         step = step,
                         stepBackgroundColor = stepBackgroundColor,
-                        actionContainerColor = actionContainerColor,
+                        infoContainerColor = infoContainerColor,
+                        infoContentColor = infoContentColor,
                         textColor = textColor,
                         textColorDim = textColorDim,
                         titleColor = titleColor,
@@ -326,11 +333,11 @@ fun WelcomeWizard(
                         currentStep = step,
                         title = stringResource(R.string.setup_step3_title),
                         instruction = stringResource(R.string.setup_step3_instruction, appName),
-                        icon = painterResource(R.drawable.sym_keyboard_language_switch),
-                        primaryText = stringResource(R.string.setup_step3_action),
-                        primaryAction = close,
-                        secondaryText = stringResource(R.string.setup_finish_action),
-                        secondaryAction = finish
+                        icon = painterResource(R.drawable.ic_setup_check),
+                        primaryText = stringResource(R.string.setup_finish_action),
+                        primaryAction = finish,
+                        secondaryText = stringResource(R.string.setup_step3_action),
+                        secondaryAction = close
                     )
                 }
             }
@@ -376,7 +383,8 @@ fun WelcomeWizard(
 private fun AiProviderSetupStep(
     step: Int,
     stepBackgroundColor: Color,
-    actionContainerColor: Color,
+    infoContainerColor: Color,
+    infoContentColor: Color,
     textColor: Color,
     textColorDim: Color,
     titleColor: Color,
@@ -507,8 +515,8 @@ private fun AiProviderSetupStep(
             progressHeader(step)
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = actionContainerColor.copy(alpha = 0.45f),
-                contentColor = textColor,
+                color = infoContainerColor,
+                contentColor = infoContentColor,
                 modifier = Modifier.size(56.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -653,7 +661,8 @@ private fun AiProviderSetupStep(
 @Composable
 fun Step0(
     actionContainerColor: Color,
-    textColor: Color,
+    primaryActionColor: Color,
+    primaryActionContentColor: Color,
     onClick: () -> Unit
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -670,7 +679,10 @@ fun Step0(
         Button(
             onClick = onClick,
             shape = RoundedCornerShape(20.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = textColor),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = primaryActionColor,
+                contentColor = primaryActionContentColor
+            ),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(stringResource(R.string.setup_start_action))
