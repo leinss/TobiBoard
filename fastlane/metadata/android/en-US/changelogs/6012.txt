@@ -1,0 +1,1 @@
+Default text-fix model is now GPT-5.4 Mini for both OpenRouter and PayPerQ; Nano stays available as the cheap option. Recording toolbar stop and cancel buttons shrunk to 32dp so they sit more comfortably in the suggestion strip.
