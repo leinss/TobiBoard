@@ -10,12 +10,10 @@ import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,13 +23,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -78,6 +83,14 @@ fun WelcomeWizard(
     close: () -> Unit,
     finish: () -> Unit
 ) {
+    val welcomeStep = 0
+    val enableStep = 1
+    val switchStep = 2
+    val providerStep = 3
+    val apiKeyStep = 4
+    val voiceStep = 5
+    val doneStep = 6
+    val totalSetupSteps = 6
     val ctx = LocalContext.current
     val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
     var aiSetupSkipped by rememberSaveable { mutableStateOf(false) }
@@ -89,10 +102,10 @@ fun WelcomeWizard(
                 && PermissionsUtil.checkAllPermissionsGranted(ctx, Manifest.permission.RECORD_AUDIO)
     }
     fun determineStep(): Int = when {
-        !UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm) -> 0
-        !UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm) -> 2
-        isAiProviderReady() || aiSetupSkipped -> 4
-        else -> 3
+        !UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm) -> welcomeStep
+        !UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm) -> switchStep
+        isAiProviderReady() || aiSetupSkipped -> doneStep
+        else -> providerStep
     }
     var step by rememberSaveable { mutableIntStateOf(determineStep()) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -108,143 +121,221 @@ fun WelcomeWizard(
         }
     }
     val useWideLayout = isWideScreen()
-    val stepBackgroundColor = Color(ContextCompat.getColor(ctx, R.color.setup_step_background))
+    val backgroundColor = Color(ContextCompat.getColor(ctx, R.color.setup_background))
+    val stepBackgroundColor = MaterialTheme.colorScheme.surface
+    val actionContainerColor = Color(ContextCompat.getColor(ctx, R.color.setup_step_background))
     val textColor = Color(ContextCompat.getColor(ctx, R.color.setup_text_action))
-    val textColorDim = textColor.copy(alpha = 0.5f)
+    val textColorDim = textColor.copy(alpha = 0.55f)
     val titleColor = Color(ContextCompat.getColor(ctx, R.color.setup_text_title))
     val appName = stringResource(ctx.applicationInfo.labelRes)
     @Composable fun bigText() {
-        val resource = if (step == 0) R.string.setup_welcome_title else R.string.setup_steps_title
-        Column(Modifier.padding(bottom = 36.dp)) {
+        val resource = if (step == welcomeStep) R.string.setup_welcome_title else R.string.setup_steps_title
+        Column(Modifier.padding(bottom = 28.dp)) {
             Text(
                 stringResource(resource, appName),
-                style = MaterialTheme.typography.displayMedium,
-                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.headlineLarge,
+                textAlign = if (useWideLayout) TextAlign.Start else TextAlign.Center,
                 color = titleColor,
             )
             if (JniUtils.sHaveGestureLib)
                 Text(
                     stringResource(R.string.setup_welcome_additional_description),
                     style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.End,
+                    textAlign = if (useWideLayout) TextAlign.Start else TextAlign.Center,
                     color = titleColor,
                     modifier = Modifier.fillMaxWidth()
                 )
         }
     }
     @Composable
-    fun ColumnScope.Step(step: Int, title: String, instruction: String, actionText: String, icon: Painter, action: () -> Unit) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            (1..4).forEach {
-                Text(it.toString(), color = if (step == it) titleColor else textColorDim)
-            }
-        }
-        Column(Modifier
-            .background(color = stepBackgroundColor)
-            .padding(16.dp)
-        ) {
-            Text(title)
-            Text(instruction, style = MaterialTheme.typography.bodyLarge.merge(color = textColor))
-        }
-        Spacer(Modifier.height(4.dp))
+    fun ProgressHeader(currentStep: Int) {
         Row(
-            Modifier.clickable { action() }
-                .background(color = stepBackgroundColor)
-                .padding(16.dp),
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, null, Modifier.padding(end = 6.dp).size(32.dp), tint = textColor)
-            Text(actionText, Modifier.weight(1f))
+            (1..totalSetupSteps).forEach {
+                val isSelected = currentStep == it
+                Surface(
+                    shape = CircleShape,
+                    color = if (isSelected) textColor else actionContainerColor.copy(alpha = 0.5f),
+                    contentColor = if (isSelected) stepBackgroundColor else textColorDim,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(it.toString(), style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        LinearProgressIndicator(
+            progress = { currentStep / totalSetupSteps.toFloat() },
+            modifier = Modifier.fillMaxWidth(),
+            color = textColor,
+            trackColor = actionContainerColor.copy(alpha = 0.35f)
+        )
+        Spacer(Modifier.height(20.dp))
+    }
+    @Composable
+    fun PrimaryAction(actionText: String, icon: Painter, action: () -> Unit) {
+        Button(
+            onClick = action,
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = textColor),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(icon, null, Modifier.padding(end = 8.dp).size(22.dp))
+            Text(actionText, Modifier.weight(1f), textAlign = TextAlign.Center)
+        }
+    }
+    @Composable
+    fun SecondaryAction(actionText: String, icon: Painter? = null, action: () -> Unit) {
+        OutlinedButton(
+            onClick = action,
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, textColor.copy(alpha = 0.35f)),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = textColor),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (icon != null) Icon(icon, null, Modifier.padding(end = 8.dp).size(20.dp))
+            Text(actionText, Modifier.weight(1f), textAlign = TextAlign.Center)
+        }
+    }
+    @Composable
+    fun WizardPage(
+        currentStep: Int,
+        title: String,
+        instruction: String,
+        icon: Painter,
+        primaryText: String,
+        primaryAction: () -> Unit,
+        secondaryText: String? = null,
+        secondaryAction: (() -> Unit)? = null,
+        tertiaryText: String? = null,
+        tertiaryAction: (() -> Unit)? = null,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = stepBackgroundColor,
+            tonalElevation = 2.dp,
+            shadowElevation = 2.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(24.dp)) {
+                ProgressHeader(currentStep)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = actionContainerColor.copy(alpha = 0.45f),
+                    contentColor = textColor,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, null, Modifier.size(30.dp))
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                Text(title, style = MaterialTheme.typography.headlineSmall.merge(color = titleColor))
+                Spacer(Modifier.height(8.dp))
+                Text(instruction, style = MaterialTheme.typography.bodyLarge.merge(color = textColor))
+                Spacer(Modifier.height(24.dp))
+                PrimaryAction(primaryText, icon, primaryAction)
+                if (secondaryText != null && secondaryAction != null) {
+                    Spacer(Modifier.height(10.dp))
+                    SecondaryAction(secondaryText, null, secondaryAction)
+                }
+                if (tertiaryText != null && tertiaryAction != null) {
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(
+                        onClick = tertiaryAction,
+                        colors = ButtonDefaults.textButtonColors(contentColor = textColorDim),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(tertiaryText)
+                    }
+                }
+            }
         }
     }
     @Composable fun steps() {
-        if (step == 0)
-            Step0 { step = 1 }
+        if (step == welcomeStep)
+            Step0(
+                actionContainerColor = actionContainerColor,
+                textColor = textColor,
+                onClick = { step = enableStep }
+            )
         else
             Column {
                 val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
                     step = determineStep()
                 }
-                if (step == 1) {
-                    Step(
-                        step,
-                        stringResource(R.string.setup_step1_title, appName),
-                        stringResource(R.string.setup_step1_instruction, appName),
-                        stringResource(R.string.setup_step1_action),
-                        painterResource(R.drawable.ic_setup_key)
-                    ) {
+                if (step == enableStep) {
+                    WizardPage(
+                        currentStep = step,
+                        title = stringResource(R.string.setup_step1_title, appName),
+                        instruction = stringResource(R.string.setup_step1_instruction, appName),
+                        icon = painterResource(R.drawable.ic_setup_key),
+                        primaryText = stringResource(R.string.setup_step1_action),
+                        primaryAction = {
                         val intent = Intent()
                         intent.action = AndroidSettings.ACTION_INPUT_METHOD_SETTINGS
                         intent.addCategory(Intent.CATEGORY_DEFAULT)
                         launcher.launch(intent)
-                    }
-                } else if (step == 2) {
-                    Step(
-                        step,
-                        stringResource(R.string.setup_step2_title, appName),
-                        stringResource(R.string.setup_step2_instruction, appName),
-                        stringResource(R.string.setup_step2_action),
-                        painterResource(R.drawable.ic_setup_select),
-                        imm::showInputMethodPicker
+                        }
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        Modifier.clickable { close() }
-                            .background(color = stepBackgroundColor)
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.sym_keyboard_language_switch),
-                            null,
-                            Modifier.padding(end = 6.dp).size(32.dp),
-                            tint = textColor
-                        )
-                        Text(stringResource(R.string.setup_step3_action), Modifier.weight(1f))
-                    }
-                } else if (step == 3) {
+                } else if (step == switchStep) {
+                    WizardPage(
+                        currentStep = step,
+                        title = stringResource(R.string.setup_step2_title, appName),
+                        instruction = stringResource(R.string.setup_step2_instruction, appName),
+                        icon = painterResource(R.drawable.ic_setup_select),
+                        primaryText = stringResource(R.string.setup_step2_action),
+                        primaryAction = imm::showInputMethodPicker,
+                        secondaryText = stringResource(R.string.setup_step3_action),
+                        secondaryAction = close
+                    )
+                } else if (step in providerStep..voiceStep) {
                     AiProviderSetupStep(
+                        step = step,
                         stepBackgroundColor = stepBackgroundColor,
+                        actionContainerColor = actionContainerColor,
                         textColor = textColor,
+                        textColorDim = textColorDim,
                         titleColor = titleColor,
-                        onConfigured = { step = 4 },
+                        progressHeader = { ProgressHeader(it) },
+                        primaryAction = { actionText, icon, action -> PrimaryAction(actionText, icon, action) },
+                        secondaryAction = { actionText, icon, action -> SecondaryAction(actionText, icon, action) },
+                        onProviderConfigured = { step = apiKeyStep },
+                        onApiKeyConfigured = { step = voiceStep },
+                        onVoiceConfigured = { step = doneStep },
                         onSkip = {
-                            aiSetupSkipped = true
-                            step = 4
+                            if (step == voiceStep) aiSetupSkipped = true
+                            step = when (step) {
+                                providerStep -> apiKeyStep
+                                apiKeyStep -> voiceStep
+                                else -> doneStep
+                            }
                         },
                         onOpenVoiceSettings = {
                             close()
                             SettingsDestination.navigateTo(SettingsDestination.Voice)
                         },
                     )
-                } else { // step 4
-                    Step(
-                        step,
-                        stringResource(R.string.setup_step3_title),
-                        stringResource(R.string.setup_step3_instruction, appName),
-                        stringResource(R.string.setup_step3_action),
-                        painterResource(R.drawable.sym_keyboard_language_switch),
-                        close
+                } else { // doneStep
+                    WizardPage(
+                        currentStep = step,
+                        title = stringResource(R.string.setup_step3_title),
+                        instruction = stringResource(R.string.setup_step3_instruction, appName),
+                        icon = painterResource(R.drawable.sym_keyboard_language_switch),
+                        primaryText = stringResource(R.string.setup_step3_action),
+                        primaryAction = close,
+                        secondaryText = stringResource(R.string.setup_finish_action),
+                        secondaryAction = finish
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        Modifier.clickable { finish() }
-                            .background(color = stepBackgroundColor)
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.ic_setup_check),
-                            null,
-                            Modifier.padding(end = 6.dp).size(32.dp),
-                            tint = textColor
-                        )
-                        Text(stringResource(R.string.setup_finish_action), Modifier.weight(1f))
-                    }
                 }
             }
     }
-    Surface {
+    Surface(color = backgroundColor) {
         CompositionLocalProvider(
             LocalContentColor provides textColor,
             LocalTextStyle provides MaterialTheme.typography.titleLarge.merge(color = textColor),
@@ -253,11 +344,17 @@ fun WelcomeWizard(
                 modifier = Modifier
                     .fillMaxSize()
                     .safeDrawingPadding()
-                    .padding(32.dp),
+                    .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 if (useWideLayout)
-                    Row(Modifier.verticalScroll(rememberScrollState())) {
+                    Row(
+                        Modifier
+                            .verticalScroll(rememberScrollState())
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(32.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(Modifier.weight(0.4f)) {
                             bigText()
                         }
@@ -277,10 +374,18 @@ fun WelcomeWizard(
 
 @Composable
 private fun AiProviderSetupStep(
+    step: Int,
     stepBackgroundColor: Color,
+    actionContainerColor: Color,
     textColor: Color,
+    textColorDim: Color,
     titleColor: Color,
-    onConfigured: () -> Unit,
+    progressHeader: @Composable (Int) -> Unit,
+    primaryAction: @Composable (String, Painter, () -> Unit) -> Unit,
+    secondaryAction: @Composable (String, Painter?, () -> Unit) -> Unit,
+    onProviderConfigured: () -> Unit,
+    onApiKeyConfigured: () -> Unit,
+    onVoiceConfigured: () -> Unit,
     onSkip: () -> Unit,
     onOpenVoiceSettings: () -> Unit,
 ) {
@@ -335,7 +440,7 @@ private fun AiProviderSetupStep(
         if (granted) {
             prefs.edit { putBoolean(Settings.PREF_VOICE_INPUT_ENABLED, true) }
             voiceEnabled = true
-            if (apiKeySet) onConfigured()
+            onVoiceConfigured()
         } else {
             Toast.makeText(ctx, permissionDeniedMessage, Toast.LENGTH_SHORT).show()
         }
@@ -349,7 +454,7 @@ private fun AiProviderSetupStep(
                 SecretStore.setApiKey(ctx, selectedProvider.apiKeyPrefKey(), key)
                 apiKeySet = key.isNotBlank()
                 showApiKeyDialog = false
-                if (key.isNotBlank() && micGranted && voiceEnabled) onConfigured()
+                if (key.isNotBlank()) onApiKeyConfigured()
             },
             initialText = SecretStore.getApiKey(ctx, selectedProvider.apiKeyPrefKey(), selectedProvider.defaultApiKey()),
             title = {
@@ -391,114 +496,184 @@ private fun AiProviderSetupStep(
         )
     }
 
-    @Composable
-    fun ActionRow(actionText: String, icon: Painter, action: () -> Unit) {
-        Row(
-            Modifier.clickable { action() }
-                .background(color = stepBackgroundColor)
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, null, Modifier.padding(end = 6.dp).size(32.dp), tint = textColor)
-            Text(actionText, Modifier.weight(1f))
-        }
-    }
-
-    Column {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            (1..4).forEach {
-                Text(it.toString(), color = if (it == 3) titleColor else textColor.copy(alpha = 0.5f))
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        color = stepBackgroundColor,
+        tonalElevation = 2.dp,
+        shadowElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(24.dp)) {
+            progressHeader(step)
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = actionContainerColor.copy(alpha = 0.45f),
+                contentColor = textColor,
+                modifier = Modifier.size(56.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        painterResource(
+                            if (step == 5) R.drawable.sym_keyboard_voice_rounded else R.drawable.ic_settings_preferences
+                        ),
+                        null,
+                        Modifier.size(30.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            when (step) {
+                3 -> {
+                    Text(
+                        stringResource(R.string.setup_ai_provider_choice_title),
+                        style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.setup_ai_provider_choice_instruction),
+                        style = MaterialTheme.typography.bodyLarge.merge(color = textColor)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        stringResource(R.string.setup_ai_provider_current_provider, providerName(selectedProvider)),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim)
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    primaryAction(
+                        stringResource(R.string.setup_ai_provider_select, providerName(selectedProvider)),
+                        painterResource(R.drawable.ic_settings_preferences)
+                    ) {
+                        showProviderDialog = true
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    secondaryAction(
+                        stringResource(R.string.setup_continue_action),
+                        painterResource(R.drawable.ic_setup_check),
+                        onProviderConfigured
+                    )
+                }
+                4 -> {
+                    Text(
+                        stringResource(R.string.setup_ai_provider_key_title),
+                        style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.setup_ai_provider_key_instruction, providerName(selectedProvider)),
+                        style = MaterialTheme.typography.bodyLarge.merge(color = textColor)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        stringResource(
+                            R.string.setup_ai_provider_key_status,
+                            if (apiKeySet) stringResource(R.string.setup_status_done) else stringResource(R.string.setup_status_missing)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim)
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    primaryAction(
+                        if (apiKeySet) {
+                            stringResource(R.string.setup_ai_provider_update_key, providerName(selectedProvider))
+                        } else {
+                            stringResource(R.string.setup_ai_provider_add_key, providerName(selectedProvider))
+                        },
+                        painterResource(R.drawable.ic_settings_preferences)
+                    ) {
+                        if (!SecretStore.isSecureStorageAvailable(ctx)) {
+                            Toast.makeText(ctx, secureStorageMessage, Toast.LENGTH_SHORT).show()
+                        } else {
+                            showApiKeyDialog = true
+                        }
+                    }
+                    if (apiKeySet) {
+                        Spacer(Modifier.height(10.dp))
+                        secondaryAction(
+                            stringResource(R.string.setup_continue_action),
+                            painterResource(R.drawable.ic_setup_check),
+                            onApiKeyConfigured
+                        )
+                    }
+                }
+                else -> {
+                    Text(
+                        stringResource(R.string.setup_ai_provider_voice_title),
+                        style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.setup_ai_provider_voice_instruction),
+                        style = MaterialTheme.typography.bodyLarge.merge(color = textColor)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        stringResource(
+                            R.string.setup_ai_provider_voice_status,
+                            if (micGranted) stringResource(R.string.setup_status_done) else stringResource(R.string.setup_status_missing),
+                            if (voiceEnabled) stringResource(R.string.setup_status_done) else stringResource(R.string.setup_status_missing),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim)
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    primaryAction(
+                        if (micGranted && voiceEnabled) stringResource(R.string.setup_ai_provider_voice_ready) else stringResource(R.string.setup_ai_provider_enable_voice),
+                        painterResource(R.drawable.sym_keyboard_voice_rounded)
+                    ) {
+                        if (!SecretStore.isSecureStorageAvailable(ctx)) {
+                            Toast.makeText(ctx, secureStorageMessage, Toast.LENGTH_SHORT).show()
+                            return@primaryAction
+                        }
+                        if (micGranted) {
+                            prefs.edit { putBoolean(Settings.PREF_VOICE_INPUT_ENABLED, true) }
+                            voiceEnabled = true
+                            onVoiceConfigured()
+                        } else {
+                            showMicRationale = true
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    secondaryAction(
+                        stringResource(R.string.setup_ai_provider_voice_settings),
+                        painterResource(R.drawable.ic_settings_default),
+                        onOpenVoiceSettings
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            TextButton(
+                onClick = onSkip,
+                colors = ButtonDefaults.textButtonColors(contentColor = textColorDim),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.setup_ai_provider_skip))
             }
         }
-        Column(
-            Modifier
-                .background(color = stepBackgroundColor)
-                .padding(16.dp)
-        ) {
-            Text(stringResource(R.string.setup_ai_provider_title))
-            Text(
-                stringResource(R.string.setup_ai_provider_instruction),
-                style = MaterialTheme.typography.bodyLarge.merge(color = textColor)
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                stringResource(
-                    R.string.setup_ai_provider_status,
-                    providerName(selectedProvider),
-                    if (apiKeySet) stringResource(R.string.setup_status_done) else stringResource(R.string.setup_status_missing),
-                    if (micGranted) stringResource(R.string.setup_status_done) else stringResource(R.string.setup_status_missing),
-                    if (voiceEnabled) stringResource(R.string.setup_status_done) else stringResource(R.string.setup_status_missing),
-                ),
-                style = MaterialTheme.typography.bodyMedium.merge(color = textColor)
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        ActionRow(
-            stringResource(R.string.setup_ai_provider_select, providerName(selectedProvider)),
-            painterResource(R.drawable.ic_settings_preferences)
-        ) {
-            showProviderDialog = true
-        }
-        Spacer(Modifier.height(4.dp))
-        ActionRow(
-            if (apiKeySet) {
-                stringResource(R.string.setup_ai_provider_update_key, providerName(selectedProvider))
-            } else {
-                stringResource(R.string.setup_ai_provider_add_key, providerName(selectedProvider))
-            },
-            painterResource(R.drawable.ic_settings_preferences)
-        ) {
-            if (!SecretStore.isSecureStorageAvailable(ctx)) {
-                Toast.makeText(ctx, secureStorageMessage, Toast.LENGTH_SHORT).show()
-            } else {
-                showApiKeyDialog = true
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        ActionRow(
-            if (micGranted && voiceEnabled) stringResource(R.string.setup_ai_provider_voice_ready) else stringResource(R.string.setup_ai_provider_enable_voice),
-            painterResource(R.drawable.sym_keyboard_voice_rounded)
-        ) {
-            if (!SecretStore.isSecureStorageAvailable(ctx)) {
-                Toast.makeText(ctx, secureStorageMessage, Toast.LENGTH_SHORT).show()
-                return@ActionRow
-            }
-            if (micGranted) {
-                prefs.edit { putBoolean(Settings.PREF_VOICE_INPUT_ENABLED, true) }
-                voiceEnabled = true
-                if (apiKeySet) onConfigured()
-            } else {
-                showMicRationale = true
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        ActionRow(
-            stringResource(R.string.setup_ai_provider_voice_settings),
-            painterResource(R.drawable.ic_settings_default),
-            onOpenVoiceSettings
-        )
-        Spacer(Modifier.height(4.dp))
-        ActionRow(
-            stringResource(R.string.setup_ai_provider_skip),
-            painterResource(R.drawable.ic_setup_check),
-            onSkip
-        )
     }
 }
 
 @Composable
-fun Step0(onClick: () -> Unit) {
+fun Step0(
+    actionContainerColor: Color,
+    textColor: Color,
+    onClick: () -> Unit
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Image(painterResource(R.drawable.setup_welcome_image), null)
-        Row(Modifier.clickable { onClick() }
-            .padding(top = 4.dp, start = 4.dp, end = 4.dp)
-            //.background(color = MaterialTheme.colorScheme.primary)
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = actionContainerColor.copy(alpha = 0.35f),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Spacer(Modifier.weight(1f))
-            Text(
-                stringResource(R.string.setup_start_action),
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+            Box(Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
+                Image(painterResource(R.drawable.setup_welcome_image), null)
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        Button(
+            onClick = onClick,
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = textColor),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.setup_start_action))
         }
     }
 }

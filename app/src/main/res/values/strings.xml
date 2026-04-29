@@ -583,6 +583,8 @@ language, hence "No language". -->
     <string name="setup_welcome_additional_description">with Gesture Typing</string>
     <!-- The label of the button that starts the setup wizard. -->
     <string name="setup_start_action">Get started</string>
+    <!-- The label of a setup wizard button that advances to the next optional step. -->
+    <string name="setup_continue_action">Continue</string>
     <!-- Title of the setup wizard. %s is the application name. -->
     <string name="setup_steps_title">"Setting up %s"</string>
     <!-- Title of the 1st step in the setup wizard. %s is the application name. -->
@@ -1172,9 +1174,18 @@ New dictionary:
     <string name="setup_ai_provider_status">Provider: %1$s\nAPI key: %2$s\nMicrophone: %3$s\nVoice input: %4$s</string>
     <string name="setup_status_done">done</string>
     <string name="setup_status_missing">missing</string>
+    <string name="setup_ai_provider_choice_title">Choose your AI provider</string>
+    <string name="setup_ai_provider_choice_instruction">Voice input needs an AI provider before it can transcribe speech. Pick the service you want to use now, or keep the current provider and continue.</string>
+    <string name="setup_ai_provider_current_provider">Current provider: %1$s</string>
     <string name="setup_ai_provider_select">Provider: %1$s</string>
+    <string name="setup_ai_provider_key_title">Add your API key</string>
+    <string name="setup_ai_provider_key_instruction">%1$s needs an API key to process voice input. The key is stored securely on this device and can be changed later in Voice settings.</string>
+    <string name="setup_ai_provider_key_status">API key: %1$s</string>
     <string name="setup_ai_provider_add_key">Add %1$s API key</string>
     <string name="setup_ai_provider_update_key">Update %1$s API key</string>
+    <string name="setup_ai_provider_voice_title">Enable voice input</string>
+    <string name="setup_ai_provider_voice_instruction">Allow microphone access and turn on Voice Input so the keyboard can record your speech when you tap the voice key.</string>
+    <string name="setup_ai_provider_voice_status">Microphone: %1$s\nVoice input: %2$s</string>
     <string name="setup_ai_provider_enable_voice">Allow microphone and enable voice</string>
     <string name="setup_ai_provider_voice_ready">Voice input is ready</string>
     <string name="setup_ai_provider_voice_settings">Open full Voice settings</string>
