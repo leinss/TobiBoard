@@ -116,5 +116,5 @@ WisprBoard stands on the shoulders of giants:
 
 <div align="center">
 <br>
-<sub>Most of the codebase changes are made with the assistance of AI. Even with Zero Data Retention, always try to minimize sensitive data disclosure to 3rd parties.</sub>
+<sub>Code changes are AI-assisted but human-reviewed and tested before release; product and architecture decisions are mine. Even with Zero Data Retention, always minimize sensitive data disclosure to 3rd parties.</sub>
 </div>

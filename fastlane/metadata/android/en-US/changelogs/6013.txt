@@ -1,0 +1,1 @@
+Enabling the dedicated emoji key now removes the emoji shortcut from the Return-key long-press popup, mirroring the language-switch-key behavior. The setting summary explains the trade-off so it's discoverable.

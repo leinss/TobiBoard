@@ -1,0 +1,1 @@
+Replace broken PPQ text-fix presets with non-private models. PPQ's private/* models need a separate proxy and were returning 400 on direct API calls; defaults now match the working OpenRouter list (gpt-5.4-nano default, plus mini and gemini-3-flash-preview).
