@@ -1,0 +1,1 @@
+Voice setup and onboarding improvements: clearer skippable setup steps, better button contrast, automatic keyboard-switch detection, expected speech-language hints, and a more forgiving quiet-speech threshold.
