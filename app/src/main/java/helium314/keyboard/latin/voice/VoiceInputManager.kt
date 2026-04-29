@@ -16,6 +16,15 @@ import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.prefs
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 
 /**
  * Orchestrates voice recording, transcription via the selected AI provider, and text insertion.
@@ -60,12 +69,13 @@ class VoiceInputManager(
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var audioRecorder: AudioRecorder = newRecorder()
     @Volatile private var state = State.IDLE
     @Volatile private var pendingConsentDeadline: Long = 0L
     private val consentWindowMs = 10_000L
     private var currentAudioFile: File? = null
-    @Volatile private var transcriptionThread: Thread? = null
+    @Volatile private var transcriptionJob: Job? = null
     @Volatile private var transcriptionClient: OpenRouterClient? = null
     @Volatile private var activeTranscriptionToken = 0L
 
@@ -241,25 +251,21 @@ class VoiceInputManager(
         activeTranscriptionToken = requestToken
         transcriptionClient = client
 
-        val crashHandler = Thread.UncaughtExceptionHandler { _, e ->
-            Log.e(TAG, "Transcription thread crashed", e)
-            finishTranscription(
-                requestToken = requestToken,
-                error = context.getString(R.string.voice_error_transcription_failed),
-            )
-        }
-        val thread = Thread {
+        transcriptionJob = backgroundScope.launch(CoroutineName("VoiceTranscription")) {
             try {
-                val transcription = sanitizeTranscription(client.transcribe(wavFile))
+                val transcription = sanitizeTranscription(runInterruptible { client.transcribe(wavFile) })
                 if (transcription.isBlank()) {
                     finishTranscription(
                         requestToken = requestToken,
                         error = context.getString(R.string.voice_error_transcription_failed),
                     )
-                    return@Thread
+                    return@launch
                 }
                 val finalText = applySpacing(transcription, spacingContext)
                 finishTranscription(requestToken = requestToken, result = finalText)
+            } catch (e: CancellationException) {
+                if (BuildConfig.DEBUG) Log.i(TAG, "Transcription cancelled")
+                finishTranscription(requestToken = requestToken)
             } catch (e: InterruptedException) {
                 if (BuildConfig.DEBUG) Log.i(TAG, "Transcription cancelled")
                 finishTranscription(requestToken = requestToken)
@@ -273,12 +279,7 @@ class VoiceInputManager(
                 // Best-effort: delete the audio after the request, whether it succeeded or not.
                 if (wavFile.exists()) wavFile.delete()
             }
-        }.apply {
-            name = "VoiceTranscription"
-            uncaughtExceptionHandler = crashHandler
         }
-        transcriptionThread = thread
-        thread.start()
     }
 
     /** Cancel either a live recording or an in-flight upload. */
@@ -295,8 +296,8 @@ class VoiceInputManager(
             State.TRANSCRIBING -> {
                 activeTranscriptionToken += 1
                 transcriptionClient?.cancel()
-                transcriptionThread?.interrupt()
-                transcriptionThread = null
+                transcriptionJob?.cancel()
+                transcriptionJob = null
                 transcriptionClient = null
                 // The transcription thread's finally block will handle file deletion; only
                 // reach in here if it couldn't start.
@@ -358,7 +359,7 @@ class VoiceInputManager(
             if (activeTranscriptionToken != requestToken) {
                 return@post
             }
-            transcriptionThread = null
+            transcriptionJob = null
             transcriptionClient = null
             state = State.IDLE
             callbacks.onFinished()

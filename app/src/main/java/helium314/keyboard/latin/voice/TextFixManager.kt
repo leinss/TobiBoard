@@ -15,6 +15,15 @@ import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.InputTypeUtils
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.prefs
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 
 /**
  * Orchestrates text-fix requests to the selected AI provider. Reads the user's selected text via a callback,
@@ -92,8 +101,9 @@ class TextFixManager(
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var activeClient: OpenRouterClient? = null
-    @Volatile private var activeThread: Thread? = null
+    @Volatile private var activeJob: Job? = null
     @Volatile private var activeToken = 0L
     @Volatile private var state = State.IDLE
     @Volatile private var pendingConsentDeadline: Long = 0L
@@ -174,29 +184,23 @@ class TextFixManager(
         activeToken = token
         activeClient = client
 
-        val thread = Thread {
+        activeJob = backgroundScope.launch(CoroutineName("TextFixRequest")) {
             try {
-                val proposed = sanitize(client.fixText(input))
+                val proposed = sanitize(runInterruptible { client.fixText(input) })
                 if (proposed.isBlank()) {
                     finish(token, error = context.getString(R.string.text_fix_error_empty))
-                    return@Thread
+                    return@launch
                 }
                 finish(token, original = input, result = proposed)
+            } catch (e: CancellationException) {
+                finish(token)
             } catch (e: InterruptedException) {
                 finish(token)
             } catch (e: Exception) {
                 Log.e(TAG, "Text fix failed", e)
                 finish(token, error = safeUserFacingError(e))
             }
-        }.apply {
-            name = "TextFixRequest"
-            uncaughtExceptionHandler = Thread.UncaughtExceptionHandler { _, e ->
-                Log.e(TAG, "Text fix thread crashed", e)
-                finish(token, error = context.getString(R.string.text_fix_error_failed))
-            }
         }
-        activeThread = thread
-        thread.start()
     }
 
     @Synchronized
@@ -204,8 +208,8 @@ class TextFixManager(
         if (state != State.WORKING) return
         activeToken += 1
         activeClient?.cancel()
-        activeThread?.interrupt()
-        activeThread = null
+        activeJob?.cancel()
+        activeJob = null
         activeClient = null
         state = State.IDLE
         callbacks.onFinished()
@@ -219,7 +223,7 @@ class TextFixManager(
     ) {
         mainHandler.post {
             if (activeToken != token) return@post
-            activeThread = null
+            activeJob = null
             activeClient = null
             state = State.IDLE
             callbacks.onFinished()
