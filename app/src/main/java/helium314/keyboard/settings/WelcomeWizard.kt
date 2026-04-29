@@ -199,7 +199,11 @@ fun WelcomeWizard(
                     modifier = Modifier.size(28.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(it.toString(), style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            it.toString(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isSelected) primaryActionContentColor else textColorDim
+                        )
                     }
                 }
             }
@@ -224,8 +228,18 @@ fun WelcomeWizard(
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(icon, null, Modifier.padding(end = 8.dp).size(22.dp))
-            Text(actionText, Modifier.weight(1f), textAlign = TextAlign.Center)
+            Icon(
+                icon,
+                null,
+                Modifier.padding(end = 8.dp).size(22.dp),
+                tint = primaryActionContentColor
+            )
+            Text(
+                actionText,
+                Modifier.weight(1f),
+                color = primaryActionContentColor,
+                textAlign = TextAlign.Center
+            )
         }
     }
     @Composable
@@ -719,7 +733,10 @@ fun Step0(
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(stringResource(R.string.setup_start_action))
+            Text(
+                stringResource(R.string.setup_start_action),
+                color = primaryActionContentColor
+            )
         }
     }
 }
