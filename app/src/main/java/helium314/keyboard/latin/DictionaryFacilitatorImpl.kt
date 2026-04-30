@@ -39,6 +39,7 @@ import helium314.keyboard.latin.utils.locale
 import helium314.keyboard.latin.utils.prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 import java.io.File
@@ -58,6 +59,7 @@ import java.util.concurrent.TimeUnit
  * a client for interacting with dictionaries.
  */
 class DictionaryFacilitatorImpl : DictionaryFacilitator {
+    @Volatile
     private var dictionaryGroups = listOf(DictionaryGroup())
 
     @Volatile
@@ -181,6 +183,11 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
                 dictGroupToCleanup.closeDict(dictType)
             }
         }
+        // The old DictionaryGroup instances are discarded; cancel their scopes so the
+        // per-group CoroutineScope(Dispatchers.IO) doesn't leak across resets.
+        for (oldGroup in oldDictionaryGroups) {
+            if (newDictionaryGroups.none { it === oldGroup }) oldGroup.close()
+        }
 
         mValidSpellingWordWriteCache?.evictAll()
         mValidSpellingWordReadCache?.evictAll()
@@ -302,6 +309,7 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
             for (dictType in DictionaryFacilitator.ALL_DICTIONARY_TYPES) {
                 dictionaryGroup.closeDict(dictType)
             }
+            dictionaryGroup.close()
         }
     }
 
@@ -529,7 +537,11 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
         val suggestionResults = SuggestionResults(
             SuggestedWords.MAX_SUGGESTIONS, ngramContext.isBeginningOfSentenceContext, false
         )
-        waitForOtherDicts?.await()
+        // Bounded wait so a stuck dictionary coroutine cannot block the suggestion thread forever.
+        // On timeout we proceed with whatever results have arrived rather than blocking input.
+        if (waitForOtherDicts != null && !waitForOtherDicts.await(2, TimeUnit.SECONDS)) {
+            Log.w(TAG, "Timed out waiting for secondary dictionary suggestions; returning partial results")
+        }
 
         suggestionsArray.forEach {
             if (it == null) return@forEach
@@ -775,6 +787,7 @@ private class DictionaryGroup(
     // typing in. For now, this is simply the number of times a word from this language
     // has been committed in a row, with an exception when typing a single word not contained
     // in this language.
+    @Volatile
     var confidence = 1
 
     // allow to go above max confidence, for better determination of currently preferred language
@@ -818,15 +831,16 @@ private class DictionaryGroup(
         else null
     }
 
-    private val blacklist = hashSetOf<String>().apply {
+    // ConcurrentHashMap-backed set: isBlacklisted() runs on the suggestion worker while
+    // addToBlacklist()/removeFromBlacklist() are invoked from other threads, so a plain HashSet
+    // can throw ConcurrentModificationException or return inconsistent reads.
+    private val blacklist: MutableSet<String> = ConcurrentHashMap.newKeySet<String>().apply {
         if (blacklistFile?.isFile != true) return@apply
         scope.launch {
-            synchronized(this) {
-                try {
-                    addAll(blacklistFile.readLines())
-                } catch (e: IOException) {
-                    Log.e(TAG, "Exception while trying to read blacklist from ${blacklistFile.name}", e)
-                }
+            try {
+                addAll(blacklistFile.readLines())
+            } catch (e: IOException) {
+                Log.e(TAG, "Exception while trying to read blacklist from ${blacklistFile.name}", e)
             }
         }
     }
@@ -859,6 +873,10 @@ private class DictionaryGroup(
                 }
             }
         }
+    }
+
+    fun close() {
+        scope.cancel()
     }
 
     // --------------- Dictionary handling -------------------
