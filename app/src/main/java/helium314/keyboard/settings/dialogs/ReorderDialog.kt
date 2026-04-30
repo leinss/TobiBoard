@@ -48,8 +48,14 @@ fun <T: Any> ReorderDialog(
     val listState = rememberLazyListState()
 
     val dragDropState = rememberReorderableLazyListState(listState) { from, to ->
+        val itemOffset = if (description != null) 1 else 0
+        val fromIndex = from.index - itemOffset
+        val toIndex = to.index - itemOffset
+        if (fromIndex !in reorderableItems.indices || toIndex !in 0..reorderableItems.size) {
+            return@rememberReorderableLazyListState
+        }
         reorderableItems = reorderableItems.toMutableList().apply {
-            add(to.index, removeAt(from.index))
+            add(toIndex, removeAt(fromIndex))
         }
     }
     ThreeButtonAlertDialog(
