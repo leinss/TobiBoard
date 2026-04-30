@@ -151,7 +151,7 @@ fun KeyboardIconsSet.GetIcon(name: String?) {
     val drawable = getNewDrawable(name, ctx)
     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
         if (drawable is VectorDrawable)
-            Icon(painterResource(iconIds[name?.lowercase()]!!), name, Modifier.fillMaxSize(0.8f))
+            getIconId(name)?.let { Icon(painterResource(it), name, Modifier.fillMaxSize(0.8f)) }
         else if (drawable != null) {
             val px = with(LocalDensity.current) { 40.dp.toPx() }.toInt()
             Icon(drawable.toBitmap(px, px).asImageBitmap(), name, Modifier.fillMaxSize(0.8f))

@@ -48,6 +48,10 @@ class KeyboardIconsSet private constructor() {
         iconsByName[it] ?: iconsByName[alternativeNames[it]]
     }
 
+    fun getIconId(name: String?): Int? = name?.lowercase(Locale.US)?.let {
+        iconIds[it] ?: iconIds[alternativeNames[it]]
+    }
+
     /** gets drawable from resources, with mutate (might be necessary to avoid coloring issues...) */
     fun getNewDrawable(name: String?, context: Context): Drawable? = name?.lowercase(Locale.US)?.let { name ->
         (iconIds[name] ?: iconIds[alternativeNames[name]])?.let { ContextCompat.getDrawable(context, it)?.mutate() }

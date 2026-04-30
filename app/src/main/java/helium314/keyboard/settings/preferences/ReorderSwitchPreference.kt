@@ -35,10 +35,7 @@ fun ReorderSwitchPreference(setting: Setting, default: String, dialogDescription
     if (showDialog) {
         val ctx = LocalContext.current
         val prefs = ctx.prefs()
-        val items = prefs.getString(setting.key, default)!!.split(Separators.ENTRY).map {
-            val both = it.split(Separators.KV)
-            KeyAndState(both.first(), both.last().toBoolean())
-        }
+        val items = parseReorderItems(prefs.getString(setting.key, default), default)
         ReorderDialog(
             onConfirmed = { reorderedItems ->
                 val value = reorderedItems.joinToString(Separators.ENTRY) { it.name + Separators.KV + it.state }
@@ -71,3 +68,25 @@ fun ReorderSwitchPreference(setting: Setting, default: String, dialogDescription
 }
 
 private class KeyAndState(var name: String, var state: Boolean)
+
+private fun parseReorderItems(value: String?, default: String): List<KeyAndState> {
+    val defaultItems = parseReorderItems(default)
+    if (value.isNullOrBlank()) return defaultItems
+
+    val knownNames = defaultItems.mapTo(mutableSetOf()) { it.name }
+    val result = parseReorderItems(value)
+        .filter { it.name in knownNames }
+        .distinctBy { it.name }
+        .toMutableList()
+    val presentNames = result.mapTo(mutableSetOf()) { it.name }
+    defaultItems.filterTo(result) { it.name !in presentNames }
+    return result.ifEmpty { defaultItems }
+}
+
+private fun parseReorderItems(value: String): List<KeyAndState> =
+    value.split(Separators.ENTRY).mapNotNull { token ->
+        val parts = token.split(Separators.KV)
+        val name = parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val state = parts.getOrNull(1)?.toBooleanStrictOrNull() ?: return@mapNotNull null
+        KeyAndState(name, state)
+    }
