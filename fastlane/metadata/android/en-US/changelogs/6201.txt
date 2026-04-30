@@ -1,0 +1,1 @@
+Fixes haptic feedback so the keyboard only vibrates when your finger is actually on a visible key.
