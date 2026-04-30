@@ -25,6 +25,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withContext
 
 /**
  * Orchestrates voice recording, transcription via the selected AI provider, and text insertion.
@@ -70,7 +71,7 @@ class VoiceInputManager(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var audioRecorder: AudioRecorder = newRecorder()
+    private var audioRecorder: AudioRecorder = AudioRecorder(outputFile = File(cacheAudioDir(), "rec_placeholder.wav"))
     @Volatile private var state = State.IDLE
     @Volatile private var pendingConsentDeadline: Long = 0L
     private val consentWindowMs = 10_000L
@@ -78,6 +79,8 @@ class VoiceInputManager(
     @Volatile private var transcriptionJob: Job? = null
     @Volatile private var transcriptionClient: OpenRouterClient? = null
     @Volatile private var activeTranscriptionToken = 0L
+    @Volatile private var stopFinalizeJob: Job? = null
+    @Volatile private var isStopFinalizing = false
 
     fun getState() = state
 
@@ -140,7 +143,9 @@ class VoiceInputManager(
         val autoStopSec = prefs.getInt(Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS, Defaults.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS)
             .coerceIn(1, 10)
 
-        // Fresh cache file per recording; older ones are swept away in newRecorder().
+        // Fresh cache file per recording; older ones are swept on every start so a process
+        // killed mid-recording can't leak audio across sessions.
+        sweepOrphanRecordings()
         val audioFile = File(cacheAudioDir(), "rec_${System.currentTimeMillis()}.wav")
         currentAudioFile = audioFile
         audioRecorder = AudioRecorder(
@@ -169,9 +174,29 @@ class VoiceInputManager(
 
     @Synchronized
     fun stopRecording() {
-        if (state != State.RECORDING) return
+        if (state != State.RECORDING || isStopFinalizing) return
+        isStopFinalizing = true
 
-        val wavFile = audioRecorder.stop()
+        // Kicking the WAV finalization off the main thread: AudioRecorder.stop() returns a
+        // Deferred that completes once the recording loop drains and the file header is
+        // written. Awaiting it here on the IME main thread used to ANR for up to 2s.
+        val deferred = audioRecorder.stop()
+        stopFinalizeJob = backgroundScope.launch(CoroutineName("VoiceFinalize")) {
+            val wavFile = deferred.await()
+            withContext(Dispatchers.Main.immediate) { onRecordingFinalized(wavFile) }
+        }
+    }
+
+    @Synchronized
+    private fun onRecordingFinalized(wavFile: File?) {
+        isStopFinalizing = false
+        stopFinalizeJob = null
+        // The user may have cancelled while we were waiting for the recorder to drain.
+        if (state != State.RECORDING) {
+            wavFile?.takeIf { it.exists() }?.delete()
+            return
+        }
+
         if (wavFile == null || !wavFile.exists() || wavFile.length() <= 44L) {
             wavFile?.delete()
             currentAudioFile = null
@@ -230,6 +255,7 @@ class VoiceInputManager(
 
         val model = resolveProviderModel(selectedModel, customModel)
         if (model == null) {
+            wavFile.delete()
             state = State.IDLE
             callbacks.onFinished()
             callbacks.onError(context.getString(R.string.voice_error_no_model))
@@ -273,7 +299,7 @@ class VoiceInputManager(
                 Log.e(TAG, "Transcription failed", e)
                 finishTranscription(
                     requestToken = requestToken,
-                    error = safeUserFacingError(e),
+                    error = safeUserFacingError(context, e, R.string.voice_error_transcription_failed),
                 )
             } finally {
                 // Best-effort: delete the audio after the request, whether it succeeded or not.
@@ -288,7 +314,11 @@ class VoiceInputManager(
         when (state) {
             State.RECORDING -> {
                 audioRecorder.cancel()
-                currentAudioFile?.delete()
+                // If a stop() was already in flight, its finalize callback will see state==IDLE
+                // and discard the resulting file. Otherwise, the loop's finally deletes it.
+                stopFinalizeJob?.cancel()
+                stopFinalizeJob = null
+                isStopFinalizing = false
                 currentAudioFile = null
                 state = State.IDLE
                 callbacks.onFinished()
@@ -316,8 +346,7 @@ class VoiceInputManager(
         return dir
     }
 
-    private fun newRecorder(): AudioRecorder {
-        // Sweep orphaned captures left over from process death before starting a new recording.
+    private fun sweepOrphanRecordings() {
         runCatching {
             cacheAudioDir().listFiles()?.forEach { file ->
                 if (file.name.startsWith("rec_") && file.extension.equals("wav", ignoreCase = true)) {
@@ -325,26 +354,6 @@ class VoiceInputManager(
                 }
             }
         }
-        return AudioRecorder(outputFile = File(cacheAudioDir(), "rec_placeholder.wav"))
-    }
-
-    /**
-     * Exception messages can occasionally echo request data (e.g. URLs, query strings).
-     * For UI surfaces we prefer our own curated strings and only expose the exception
-     * message when it comes from our own OpenRouterException, whose messages we control.
-     */
-    private fun safeUserFacingError(e: Throwable): String {
-        if (e is OpenRouterException) {
-            val raw = e.message
-            if (!raw.isNullOrBlank()) {
-                // Defense in depth: strip anything that looks like a bearer token or api key
-                // in case the remote echoed one back into an error message we surface.
-                return raw
-                    .replace(Regex("(?i)Bearer\\s+\\S+"), "Bearer ***")
-                    .replace(Regex("(?i)(\"?api[_-]?key\"?\\s*[:=]\\s*\"?)[^\"\\s,}]+"), "$1***")
-            }
-        }
-        return context.getString(R.string.voice_error_transcription_failed)
     }
 
     private fun sanitizeTranscription(raw: String): String =

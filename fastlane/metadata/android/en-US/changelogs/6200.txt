@@ -1,0 +1,8 @@
+Voice & text-fix reliability and polish:
+
+- Releasing the voice button no longer briefly freezes the keyboard.
+- Default voice model now points at a slug the picker actually offers.
+- Switching AI providers keeps your model choice when it's still supported.
+- API-key setting masks key length so accidental truncation is visible.
+- Settings backup is faster and rejects oversized snapshots.
+- App startup pre-warms encrypted storage but no longer risks wiping the key.

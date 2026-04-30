@@ -21,6 +21,19 @@ object SecretStore {
 
     fun isSecureStorageAvailable(context: Context): Boolean = securePrefs(context) != null
 
+    /**
+     * Force the EncryptedSharedPreferences and AndroidKeyStore master key to be loaded from
+     * background code. Called once at app start so the IME's first transcription does not pay
+     * the cold-decrypt cost on the input thread.
+     *
+     * Crucially, warm-up does NOT trigger the recovery path: if the keystore is transiently
+     * unhappy at boot, we do not want to wipe the user's stored API key. Recovery still runs
+     * on a real read/write attempt, where the user is actively using the feature.
+     */
+    fun warmUp(context: Context) {
+        securePrefs(context, allowRecovery = false)
+    }
+
     fun getApiKey(context: Context, prefKey: String, default: String): String {
         val secure = securePrefs(context)
         if (secure != null) {
@@ -53,14 +66,22 @@ object SecretStore {
     @Volatile
     private var recoveryAttempted = false
 
-    private fun securePrefs(context: Context): SharedPreferences? {
+    private fun securePrefs(context: Context, allowRecovery: Boolean = true): SharedPreferences? {
         // EncryptedSharedPreferences relies on KeyGenParameterSpec (API 23+). Keep the reference
         // inside this method so the class isn't loaded on older devices.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
         return try {
             EncryptedPrefsFactory.create(context, ENCRYPTED_FILE)
         } catch (e: Throwable) {
+            // Warm-up (allowRecovery=false) is best-effort: the first real read/write will run
+            // through the same path with allowRecovery=true and log + recover then. Skipping the
+            // warning here keeps test stderr (Robolectric has no AndroidKeyStore) and the
+            // never-used-voice install case quiet.
+            if (!allowRecovery) return null
             Log.w(TAG, "Failed to open encrypted prefs", e)
+            // Recovery wipes the encrypted prefs file and master key alias. Only run it from
+            // explicit read/write paths; warm-up must never destroy a working API key on a
+            // transient KeyStore hiccup.
             if (recoveryAttempted) return null
             recoveryAttempted = true
             Log.w(TAG, "Attempting one-shot recovery of encrypted prefs master key")

@@ -183,7 +183,11 @@ object Defaults {
     const val PREF_OPENROUTER_API_KEY = ""
     const val PREF_OPENROUTER_ZDR_ENABLED = true
     const val PREF_PAYPERQ_API_KEY = ""
-    const val PREF_VOICE_MODEL = "google/gemini-3-flash-preview"
+    // Must be a slug the voice picker actually offers for both providers — the previous
+    // default ("google/gemini-3-flash-preview") is a text-fix model that the OpenRouter and
+    // PayPerQ voice pickers don't expose, so it would silently leave the picker without a
+    // valid selection on fresh installs.
+    const val PREF_VOICE_MODEL = "mistralai/voxtral-small-24b-2507"
     const val PREF_VOICE_MODEL_CUSTOM = ""
     const val PREF_VOICE_TRANSCRIPTION_PROMPT = "Transcribe this audio exactly as spoken. Output only the transcription, nothing else."
     const val PREF_VOICE_TRANSCRIPTION_DICTIONARY = ""

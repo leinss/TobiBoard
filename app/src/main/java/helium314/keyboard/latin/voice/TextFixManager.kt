@@ -203,7 +203,7 @@ class TextFixManager(
                 finish(token)
             } catch (e: Exception) {
                 Log.e(TAG, "Text fix failed", e)
-                finish(token, error = safeUserFacingError(e))
+                finish(token, error = safeUserFacingError(context, e, R.string.text_fix_error_failed))
             }
         }
     }
@@ -241,16 +241,4 @@ class TextFixManager(
     }
 
     private fun sanitize(raw: String): String = sanitizeModelOutput(raw, MAX_OUTPUT_LENGTH)
-
-    private fun safeUserFacingError(e: Throwable): String {
-        if (e is OpenRouterException) {
-            val raw = e.message
-            if (!raw.isNullOrBlank()) {
-                return raw
-                    .replace(Regex("(?i)Bearer\\s+\\S+"), "Bearer ***")
-                    .replace(Regex("(?i)(\"?api[_-]?key\"?\\s*[:=]\\s*\"?)[^\"\\s,}]+"), "$1***")
-            }
-        }
-        return context.getString(R.string.text_fix_error_failed)
-    }
 }

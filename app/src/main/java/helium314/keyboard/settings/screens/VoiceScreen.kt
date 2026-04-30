@@ -37,6 +37,8 @@ import helium314.keyboard.latin.voice.resolveVoiceModel
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
 import helium314.keyboard.latin.voice.defaultApiKey
+import helium314.keyboard.latin.voice.supportsTextFixSlug
+import helium314.keyboard.latin.voice.supportsVoiceSlug
 import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.Setting
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
@@ -178,16 +180,20 @@ fun createVoiceSettings(context: Context) = listOf(
         )
         ListPreference(setting, items, Defaults.PREF_AI_PROVIDER) { value ->
             val provider = AiProvider.fromPref(value)
+            // Only swap the saved model when the previous one isn't valid for the new provider:
+            // we don't want to wipe a deliberate user selection just because they re-picked the
+            // same provider, or switched away and back. The defaults are slugs supported by
+            // both providers, so a single fallback works either way.
+            val currentVoice = prefs.getString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
+                ?: Defaults.PREF_VOICE_MODEL
+            val currentTextFix = prefs.getString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
+                ?: Defaults.PREF_TEXT_FIX_MODEL
             prefs.edit {
-                when (provider) {
-                    AiProvider.OPENROUTER -> {
-                        putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
-                        putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
-                    }
-                    AiProvider.PAYPERQ -> {
-                        putString(Settings.PREF_VOICE_MODEL, "mistralai/voxtral-small-24b-2507")
-                        putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
-                    }
+                if (!provider.supportsVoiceSlug(currentVoice)) {
+                    putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
+                }
+                if (!provider.supportsTextFixSlug(currentTextFix)) {
+                    putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
                 }
             }
         }
@@ -305,7 +311,10 @@ private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {
             }
             showDialog = true
         },
-        description = if (stored.isNotEmpty()) "••••••••" else setting.description,
+        // Mask the key but reflect its length so the user can spot accidental truncation
+        // ("did I paste the whole thing?") without ever exposing the value itself. Capped to
+        // keep the row layout stable.
+        description = if (stored.isNotEmpty()) "•".repeat(stored.length.coerceIn(8, 24)) else setting.description,
     )
     if (showDialog) {
         TextInputDialog(

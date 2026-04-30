@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
+import androidx.annotation.StringRes
 import helium314.keyboard.latin.settings.Defaults
 import java.util.Locale
 
@@ -41,6 +42,28 @@ internal fun applySpacing(text: String, ctx: VoiceInputManager.SpacingContext?):
     val prefix = if (needsLeading) " " else ""
     val suffix = if (needsTrailing) " " else ""
     return prefix + text + suffix
+}
+
+private val SENSITIVE_USER_FACING_PATTERNS: List<Pair<Regex, String>> = listOf(
+    Regex("(?i)Bearer\\s+\\S+") to "Bearer ***",
+    Regex("(?i)(\"?api[_-]?key\"?\\s*[:=]\\s*\"?)[^\"\\s,}]+") to "$1***",
+)
+
+/**
+ * Resolves a user-facing error message from a transcription/text-fix exception. If the throwable
+ * is one of our own [OpenRouterException]s we surface its message after scrubbing tokens; for
+ * everything else we fall back to [fallbackResId] so unrelated stack traces never leak.
+ */
+internal fun safeUserFacingError(context: Context, e: Throwable, @StringRes fallbackResId: Int): String {
+    if (e is OpenRouterException) {
+        val raw = e.message?.takeIf { it.isNotBlank() }
+        if (raw != null) {
+            return SENSITIVE_USER_FACING_PATTERNS.fold(raw) { acc, (regex, replacement) ->
+                acc.replace(regex, replacement)
+            }
+        }
+    }
+    return context.getString(fallbackResId)
 }
 
 internal fun isNetworkAvailable(context: Context): Boolean {
