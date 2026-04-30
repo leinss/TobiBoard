@@ -219,6 +219,11 @@ public final class InputLogic {
         mSpaceState = SpaceState.NONE;
     }
 
+    /** Tear down resources held for the lifetime of the IME (HandlerThread, etc.). */
+    public void onDestroy() {
+        mInputLogicHandler.destroy();
+    }
+
     /**
      * React to a string input.
      * <p>
@@ -816,6 +821,7 @@ public final class InputLogic {
                 break;
             case KeyCode.SEND_INTENT_ONE, KeyCode.SEND_INTENT_TWO, KeyCode.SEND_INTENT_THREE:
                 IntentUtils.handleSendIntentKey(mLatinIME, event.getKeyCode());
+                break;
             case KeyCode.IME_HIDE_UI:
                 mLatinIME.requestHideSelf(0);
                 break;
