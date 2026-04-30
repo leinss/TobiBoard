@@ -1,0 +1,1 @@
+Fix long-press Return popup haptics and prevent the action-button reorder settings from crashing.
