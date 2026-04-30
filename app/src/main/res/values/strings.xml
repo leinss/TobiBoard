@@ -1220,4 +1220,6 @@ New dictionary:
     <string name="text_fix_2_enabled_summary">Adds a second Text Fix button to long-press Return, with its own custom prompt</string>
     <string name="text_fix_2_prompt">Second Fix Prompt</string>
     <string name="text_fix_2_prompt_summary">Instruction sent for the second text fix variation</string>
+    <string name="popup_drag_haptic">Haptic feedback on popup drag</string>
+    <string name="popup_drag_haptic_summary">Light tick when sliding across popup buttons (e.g. long-press Return). Independent from keypress vibration.</string>
 </resources>
