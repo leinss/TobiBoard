@@ -10,6 +10,7 @@ import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.LayoutUtilsCustom
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.SubtypeSettings
+import helium314.keyboard.latin.voice.SecretStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,6 +26,9 @@ class App : Application() {
         scope.launch { // do some uncritical work in background for faster startup
             SupportedEmojis.load(this@App)
             LayoutUtilsCustom.removeMissingLayouts(this@App)
+            // Warm up EncryptedSharedPreferences + AndroidKeyStore master key so the first
+            // voice/text-fix request doesn't pay the cold-decrypt cost on the IME main thread.
+            SecretStore.warmUp(this@App)
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
             @Suppress("DEPRECATION")
             Log.i(

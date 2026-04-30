@@ -6,23 +6,23 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
+import android.os.SystemClock
 import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.utils.Log
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Records audio from the microphone directly to a WAV file on disk.
@@ -63,7 +63,9 @@ class AudioRecorder(
     private var noiseSuppressor: NoiseSuppressor? = null
     private var agc: AutomaticGainControl? = null
     @Volatile private var isRecording = false
+    @Volatile private var cancelRequested = false
     @Volatile private var recordingStartMs: Long = 0L
+    private var completion: CompletableDeferred<File?>? = null
 
     /** Duration of the last completed recording, in milliseconds. Updated by [stop]. */
     @Volatile var lastDurationMs: Long = 0L
@@ -79,7 +81,7 @@ class AudioRecorder(
 
     /** Live elapsed time since start(), 0 when idle. */
     val currentDurationMs: Long
-        get() = if (isRecording && recordingStartMs > 0) System.currentTimeMillis() - recordingStartMs else 0L
+        get() = if (isRecording && recordingStartMs > 0) SystemClock.elapsedRealtime() - recordingStartMs else 0L
 
     var onMaxDurationReached: (() -> Unit)? = null
     var onAutoStopSilence: (() -> Unit)? = null
@@ -111,19 +113,30 @@ class AudioRecorder(
             outputFile.parentFile?.mkdirs()
             val raf = RandomAccessFile(outputFile, "rw")
             raf.setLength(0L)
-            // Write a 44-byte placeholder; stop() rewrites with accurate sizes.
+            // Write a 44-byte placeholder; finalizeOutputFile rewrites with accurate sizes.
             raf.write(ByteArray(WAV_HEADER_SIZE))
             pcmOutputFile = raf
             pcmBytesWritten = 0L
             amplitudeSum = 0L
             amplitudeCount = 0L
             currentAmplitude = 0.0
+            cancelRequested = false
             isRecording = true
-            recordingStartMs = System.currentTimeMillis()
+            recordingStartMs = SystemClock.elapsedRealtime()
             audioRecord?.startRecording()
 
+            val deferred = CompletableDeferred<File?>()
+            completion = deferred
             recordingJob = recordingScope.launch(CoroutineName("AudioRecorder")) {
-                runRecordingLoop(bufferSize)
+                try {
+                    runRecordingLoop(bufferSize)
+                } finally {
+                    // Resource release and file finalization happen on the recording thread,
+                    // so callers (including the IME main thread) never have to block waiting
+                    // for the loop to drain.
+                    cleanupAudioRecord()
+                    deferred.complete(finalizeOutputFile())
+                }
             }
             true
         } catch (e: SecurityException) {
@@ -150,7 +163,7 @@ class AudioRecorder(
         var hasSpoken = false
         var silenceRunStartMs = 0L
         while (isRecording && currentCoroutineContext().isActive) {
-            if (System.currentTimeMillis() - recordingStartMs > maxDurationMs) {
+            if (SystemClock.elapsedRealtime() - recordingStartMs > maxDurationMs) {
                 isRecording = false
                 onMaxDurationReached?.invoke()
                 break
@@ -173,7 +186,7 @@ class AudioRecorder(
                     amplitudeSum += (amp * samples).toLong()
                     amplitudeCount += samples
                     if (autoStopSilenceMs > 0L) {
-                        val now = System.currentTimeMillis()
+                        val now = SystemClock.elapsedRealtime()
                         if (amp >= SPEECH_AMPLITUDE_THRESHOLD) {
                             hasSpoken = true
                             silenceRunStartMs = 0L
@@ -202,23 +215,61 @@ class AudioRecorder(
     }
 
     /**
-     * Finalizes the WAV header and returns the output file.
-     * Callers are responsible for deleting the file after consuming it.
-     * Returns null if no usable audio was captured.
+     * Requests a graceful stop and returns a [Deferred] that completes with the finalized WAV
+     * file (or null if no usable audio was captured). Returns immediately — callers should
+     * `await` the deferred from a background coroutine, never block the main thread on it.
+     * Callers own the returned file and must delete it.
      */
-    fun stop(): File? {
-        teardownRecorder()
+    fun stop(): Deferred<File?> {
+        isRecording = false
+        // AudioRecord.stop() is documented as safe from any thread and unblocks an in-flight
+        // read(); the loop then exits and its `finally` block does the rest of the teardown.
+        try { audioRecord?.stop() } catch (e: IllegalStateException) {
+            Log.w(TAG, "AudioRecord.stop() failed", e)
+        }
+        return completion ?: CompletableDeferred<File?>().apply { complete(null) }
+    }
 
+    /**
+     * Aborts the recording and discards the output file. Non-blocking; if the recording loop
+     * is in flight, its `finally` block deletes the partial file once it observes the cancel.
+     */
+    fun cancel() {
+        cancelRequested = true
+        isRecording = false
+        try { audioRecord?.stop() } catch (e: IllegalStateException) {
+            Log.w(TAG, "AudioRecord.stop() failed", e)
+        }
+        if (recordingJob == null) {
+            // Either start() failed before launching, or stop() already ran. Make sure any
+            // partial file is gone and per-recording state is reset.
+            closeOutputSafely()
+            if (outputFile.exists()) outputFile.delete()
+            resetCounters()
+        }
+    }
+
+    private fun cleanupAudioRecord() {
+        try { audioRecord?.stop() } catch (_: Throwable) {}
+        releaseAudioEffects()
+        try { audioRecord?.release() } catch (_: Throwable) {}
+        audioRecord = null
+        recordingStartMs = 0L
+    }
+
+    private fun finalizeOutputFile(): File? {
         val pcmBytes = pcmBytesWritten
         lastDurationMs = if (pcmBytes >= 2) (pcmBytes * 1000L) / (SAMPLE_RATE.toLong() * 2L) else 0L
         lastMeanAmplitude = if (amplitudeCount > 0) amplitudeSum.toDouble() / amplitudeCount else 0.0
         currentAmplitude = 0.0
-
         val raf = pcmOutputFile
         pcmOutputFile = null
-        if (raf == null || pcmBytes < 2) {
+        recordingJob = null
+
+        if (cancelRequested || raf == null || pcmBytes < 2) {
             try { raf?.close() } catch (_: Throwable) {}
             if (outputFile.exists()) outputFile.delete()
+            if (cancelRequested) resetCounters()
             return null
         }
         return try {
@@ -233,33 +284,13 @@ class AudioRecorder(
         }
     }
 
-    fun cancel() {
-        teardownRecorder()
-        closeOutputSafely()
-        if (outputFile.exists()) outputFile.delete()
+    private fun resetCounters() {
         pcmBytesWritten = 0L
         amplitudeSum = 0L
         amplitudeCount = 0L
         lastDurationMs = 0L
         lastMeanAmplitude = 0.0
         currentAmplitude = 0.0
-    }
-
-    private fun teardownRecorder() {
-        isRecording = false
-        try { audioRecord?.stop() } catch (e: IllegalStateException) { Log.w(TAG, "AudioRecord.stop() failed", e) }
-        recordingJob?.let { job ->
-            runBlocking {
-                withTimeoutOrNull(2000) {
-                    job.cancelAndJoin()
-                }
-            }
-        }
-        recordingJob = null
-        releaseAudioEffects()
-        audioRecord?.release()
-        audioRecord = null
-        recordingStartMs = 0L
     }
 
     private fun cleanupStartFailure() {

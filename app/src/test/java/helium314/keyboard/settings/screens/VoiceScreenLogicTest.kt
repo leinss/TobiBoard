@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.settings.screens
 
+import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.voice.AiProvider
+import helium314.keyboard.latin.voice.supportsTextFixSlug
+import helium314.keyboard.latin.voice.supportsVoiceSlug
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -12,7 +15,7 @@ class VoiceScreenLogicTest {
     fun voiceItemsHideConfigurationWhenVoiceInputIsDisabled() {
         val items = buildVoiceScreenItems(
             voiceInputEnabled = false,
-            voiceModel = "google/gemini-3-flash-preview",
+            voiceModel = "mistralai/voxtral-small-24b-2507",
         )
 
         assertTrue(Settings.PREF_VOICE_INPUT_ENABLED in items)
@@ -27,7 +30,7 @@ class VoiceScreenLogicTest {
     fun voiceItemsShowCustomModelOnlyWhenSelected() {
         val regularModelItems = buildVoiceScreenItems(
             voiceInputEnabled = true,
-            voiceModel = "google/gemini-3-flash-preview",
+            voiceModel = "mistralai/voxtral-small-24b-2507",
         )
         val customModelItems = buildVoiceScreenItems(
             voiceInputEnabled = true,
@@ -59,15 +62,32 @@ class VoiceScreenLogicTest {
     }
 
     @Test
+    fun defaultModelsAreValidSlugsForBothProviders() {
+        // Guard against the regression where Defaults.PREF_VOICE_MODEL was a text-fix slug
+        // that the voice picker didn't actually offer, leaving fresh installs and the
+        // provider-switch fallback writing a value the rest of the app considered unsupported.
+        for (provider in AiProvider.values()) {
+            assertTrue(
+                provider.supportsVoiceSlug(Defaults.PREF_VOICE_MODEL),
+                "Defaults.PREF_VOICE_MODEL must be a voice slug supported by $provider"
+            )
+            assertTrue(
+                provider.supportsTextFixSlug(Defaults.PREF_TEXT_FIX_MODEL),
+                "Defaults.PREF_TEXT_FIX_MODEL must be a text-fix slug supported by $provider"
+            )
+        }
+    }
+
+    @Test
     fun voiceItemsShowAutoStopDurationOnlyWhenEnabled() {
         val autoStopOffItems = buildVoiceScreenItems(
             voiceInputEnabled = true,
-            voiceModel = "google/gemini-3-flash-preview",
+            voiceModel = "mistralai/voxtral-small-24b-2507",
             voiceAutoStop = false,
         )
         val autoStopOnItems = buildVoiceScreenItems(
             voiceInputEnabled = true,
-            voiceModel = "google/gemini-3-flash-preview",
+            voiceModel = "mistralai/voxtral-small-24b-2507",
             voiceAutoStop = true,
         )
 

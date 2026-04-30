@@ -111,14 +111,14 @@ private fun backupLauncher(onError: (String) -> Unit): ManagedActivityResultLaun
                     backupPayload.files.forEach {
                         val fileStream = FileInputStream(it).buffered()
                         zipStream.putNextEntry(ZipEntry(it.path.replace(backupPayload.filesPrefix, "")))
-                        fileStream.copyTo(zipStream, 1024)
+                        fileStream.copyTo(zipStream, 8 * 1024)
                         fileStream.close()
                         zipStream.closeEntry()
                     }
                     backupPayload.protectedFiles.forEach {
                         val fileStream = FileInputStream(it).buffered()
                         zipStream.putNextEntry(ZipEntry(it.path.replace(backupPayload.protectedFilesPrefix, "unprotected/")))
-                        fileStream.copyTo(zipStream, 1024)
+                        fileStream.copyTo(zipStream, 8 * 1024)
                         fileStream.close()
                         zipStream.closeEntry()
                     }
@@ -310,10 +310,10 @@ private fun stageBackup(ctx: android.content.Context, inputStream: InputStream):
                     FileUtils.copyStreamToNewFile(zip, File(stageFilesDir, entryName))
                 }
                 entryName == PREFS_FILE_NAME -> {
-                    prefsSnapshot = parseSettingsSnapshot(String(zip.readBytes()).split("\n"))
+                    prefsSnapshot = parseSettingsSnapshot(readSnapshotCapped(zip).split("\n"))
                 }
                 entryName == PROTECTED_PREFS_FILE_NAME -> {
-                    protectedPrefsSnapshot = parseSettingsSnapshot(String(zip.readBytes()).split("\n"))
+                    protectedPrefsSnapshot = parseSettingsSnapshot(readSnapshotCapped(zip).split("\n"))
                 }
             }
             zip.closeEntry()
@@ -376,6 +376,26 @@ internal fun normalizeBackupEntryName(name: String): String {
     val normalized = name.replace('\\', '/').trimStart('/')
     require(!normalized.contains("../")) { "Unsafe backup entry: $name" }
     return normalized
+}
+
+// Real preference snapshots are kilobytes; this cap is ~3 orders of magnitude of headroom and
+// guards against a malformed archive that would otherwise OOM on the IO thread.
+private const val MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024
+
+private fun readSnapshotCapped(input: InputStream): String {
+    val buf = java.io.ByteArrayOutputStream()
+    val chunk = ByteArray(8 * 1024)
+    var total = 0
+    while (true) {
+        val n = input.read(chunk)
+        if (n == -1) break
+        total += n
+        if (total > MAX_SNAPSHOT_BYTES) {
+            throw IllegalArgumentException("Settings snapshot exceeds size limit")
+        }
+        buf.write(chunk, 0, n)
+    }
+    return buf.toString(Charsets.UTF_8.name())
 }
 
 private fun refreshAfterRestore(ctx: android.content.Context) {
