@@ -57,6 +57,8 @@ fun PreferencesScreen(
             Settings.PREF_VIBRATION_DURATION_SETTINGS else null,
         if (vibrateOn)
             Settings.PREF_VIBRATE_IN_DND_MODE else null,
+        if (AudioAndHapticFeedbackManager.getInstance().hasVibrator())
+            Settings.PREF_POPUP_DRAG_HAPTIC else null,
         Settings.PREF_SOUND_ON,
         if (soundOn)
             Settings.PREF_KEYPRESS_SOUND_VOLUME else null,
@@ -116,6 +118,9 @@ fun createPreferencesSettings(context: Context) = listOf(
     },
     Setting(context, Settings.PREF_VIBRATE_IN_DND_MODE, R.string.vibrate_in_dnd_mode) {
         SwitchPreference(it, Defaults.PREF_VIBRATE_IN_DND_MODE)
+    },
+    Setting(context, Settings.PREF_POPUP_DRAG_HAPTIC, R.string.popup_drag_haptic, R.string.popup_drag_haptic_summary) {
+        SwitchPreference(it, Defaults.PREF_POPUP_DRAG_HAPTIC)
     },
     Setting(context, Settings.PREF_SOUND_ON, R.string.sound_on_keypress) {
         SwitchPreference(it, Defaults.PREF_SOUND_ON)

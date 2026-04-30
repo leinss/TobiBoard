@@ -95,6 +95,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_TEXT_FIX_CONSENT_GIVEN = "text_fix_consent_given";
     public static final String PREF_TEXT_FIX_2_ENABLED = "text_fix_2_enabled";
     public static final String PREF_TEXT_FIX_2_PROMPT = "text_fix_2_prompt";
+    public static final String PREF_POPUP_DRAG_HAPTIC = "popup_drag_haptic";
 
     public static final String PREF_AUTO_CAP = "auto_cap";
     public static final String PREF_VIBRATE_ON = "vibrate_on";
