@@ -177,7 +177,7 @@ fun createAdvancedSettings(context: Context) = listOf(
         SwitchPreference(it, Defaults.PREF_ABC_AFTER_EMOJI)
     },
     Setting(context, Settings.PREF_ABC_AFTER_CLIP, R.string.switch_keyboard_after, R.string.after_clip) {
-        SwitchPreference(it, Defaults.PREF_ABC_AFTER_EMOJI)
+        SwitchPreference(it, Defaults.PREF_ABC_AFTER_CLIP)
     },
     Setting(context, Settings.PREF_CUSTOM_CURRENCY_KEY, R.string.customize_currencies) { setting ->
         var showDialog by rememberSaveable { mutableStateOf(false) }
