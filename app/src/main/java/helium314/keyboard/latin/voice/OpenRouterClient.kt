@@ -231,7 +231,9 @@ class OpenRouterClient(
     private fun buildRequestEnvelope(enforceZdr: Boolean): Pair<String, String> {
         val messages = JSONArray().apply {
             put(buildSystemMessage())
-            put(buildAudioInputMessage(AUDIO_PLACEHOLDER))
+            put(buildTextMessage(STABLE_AUDIO_INSTRUCTION))
+            runtimeInstruction?.takeIf { it.isNotBlank() }?.let { put(buildTextMessage(it)) }
+            put(buildAudioMessage(AUDIO_PLACEHOLDER))
         }
         val body = JSONObject().apply {
             put("model", model)
@@ -273,15 +275,7 @@ class OpenRouterClient(
         }
     }
 
-    private fun buildAudioInputMessage(base64Audio: String): JSONObject {
-        val instruction = listOfNotNull(
-            STABLE_AUDIO_INSTRUCTION,
-            runtimeInstruction?.takeIf { it.isNotBlank() },
-        ).joinToString("\n")
-        val textContent = JSONObject().apply {
-            put("type", "text")
-            put("text", instruction)
-        }
+    private fun buildAudioMessage(base64Audio: String): JSONObject {
         val audioContent = JSONObject().apply {
             put("type", "input_audio")
             put("input_audio", JSONObject().apply {
@@ -291,10 +285,7 @@ class OpenRouterClient(
         }
         return JSONObject().apply {
             put("role", "user")
-            put("content", JSONArray().apply {
-                put(textContent)
-                put(audioContent)
-            })
+            put("content", JSONArray().apply { put(audioContent) })
         }
     }
 
