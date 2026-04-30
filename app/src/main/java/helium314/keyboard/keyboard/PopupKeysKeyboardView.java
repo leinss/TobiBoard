@@ -193,7 +193,7 @@ public class PopupKeysKeyboardView extends KeyboardView implements PopupKeysPane
     @Override
     public void onDownEvent(final int x, final int y, final int pointerId, final long eventTime) {
         mActivePointerId = pointerId;
-        mCurrentKey = detectKey(x, y);
+        mCurrentKey = detectKey(x, y, false /* allowHaptic */);
     }
 
     @Override
@@ -202,7 +202,7 @@ public class PopupKeysKeyboardView extends KeyboardView implements PopupKeysPane
             return;
         }
         final boolean hasOldKey = (mCurrentKey != null);
-        mCurrentKey = detectKey(x, y);
+        mCurrentKey = detectKey(x, y, true /* allowHaptic */);
         if (hasOldKey && mCurrentKey == null) {
             // A popup keys keyboard is canceled when detecting no key.
             mController.onCancelPopupKeysPanel();
@@ -216,7 +216,7 @@ public class PopupKeysKeyboardView extends KeyboardView implements PopupKeysPane
         }
         // Calling {@link #detectKey(int,int,int)} here is harmless because the last move event and
         // the following up event share the same coordinates.
-        mCurrentKey = detectKey(x, y);
+        mCurrentKey = detectKey(x, y, false /* allowHaptic */);
         if (mCurrentKey != null) {
             updateReleaseKeyGraphics(mCurrentKey);
             onKeyInput(mCurrentKey, x, y);
@@ -245,7 +245,7 @@ public class PopupKeysKeyboardView extends KeyboardView implements PopupKeysPane
         }
     }
 
-    private Key detectKey(int x, int y) {
+    private Key detectKey(int x, int y, final boolean allowHaptic) {
         final Key oldKey = mCurrentKey;
         final Key newKey = mKeyDetector.detectHitKey(x, y);
         if (newKey == oldKey) {
@@ -260,11 +260,10 @@ public class PopupKeysKeyboardView extends KeyboardView implements PopupKeysPane
             updatePressKeyGraphics(newKey);
             invalidateKey(newKey);
         }
-        // Fire a delicate pulse only when the finger enters the popup from empty space.
-        // Sliding directly from one popup button to another should not feel like a second
-        // pulse from leaving the first button.
+        // Fire only for drag-hover transitions over popup buttons. Opening the popup via
+        // long-press calls this with haptics disabled, and leaving to empty space is silent.
         final SettingsValues sv = Settings.getInstance().getCurrent();
-        if (sv != null && sv.mPopupDragHaptic && oldKey == null && newKey != null) {
+        if (allowHaptic && sv != null && sv.mPopupDragHaptic && newKey != null) {
             AudioAndHapticFeedbackManager.getInstance().vibrateTick();
         }
         return newKey;
