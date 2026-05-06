@@ -559,7 +559,14 @@ sealed interface KeyData : AbstractKeyData {
             KeyLabel.COMMA -> SimplePopups(getCommaPopupKeys(params))
             KeyLabel.PERIOD -> getPeriodPopups(params)
             KeyLabel.ACTION -> getActionKeyPopupKeys(params)
-            KeyLabel.SHIFT -> null
+            KeyLabel.SHIFT -> {
+                if (params.mId.isAlphabetKeyboard) SimplePopups(
+                    listOf(
+                        "!noPanelAutoPopupKey!",
+                        " |!code/key_capslock"
+                    )
+                ) else null
+            }
             KeyLabel.COM -> SimplePopups(
                 listOf(Key.POPUP_KEYS_HAS_LABELS).plus(params.mLocaleKeyboardInfos.tlds.drop(1))
             )
