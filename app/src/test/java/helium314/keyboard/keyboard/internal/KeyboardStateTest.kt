@@ -41,6 +41,19 @@ class KeyboardStateTest {
     }
 
     @Test
+    fun shiftTapIsConsumedWhenShiftUpdateRunsBeforeLetterEvent() {
+        load()
+
+        tap(KeyCode.SHIFT)
+        assertEquals(Layout.MANUAL_SHIFTED, actions.layout)
+
+        pressLetterWithPreEventShiftUpdate('A', TextUtils.CAP_MODE_SENTENCES)
+
+        assertEquals(Layout.ALPHABET, actions.layout)
+        assertFalse(actions.everShiftLocked)
+    }
+
+    @Test
     fun automaticSentenceCapsCanReturnAfterManualShiftWasConsumed() {
         load()
 
@@ -92,6 +105,13 @@ class KeyboardStateTest {
 
     private fun typeLetter(letter: Char, autoCapsFlags: Int) {
         state.onPressKey(letter.code, true, autoCapsFlags, null)
+        state.onEvent(Event.createEventForCodePointFromUnknownSource(letter.code), autoCapsFlags, null)
+        state.onReleaseKey(letter.code, false, autoCapsFlags, null)
+    }
+
+    private fun pressLetterWithPreEventShiftUpdate(letter: Char, autoCapsFlags: Int) {
+        state.onPressKey(letter.code, true, autoCapsFlags, null)
+        state.onUpdateShiftState(autoCapsFlags, null)
         state.onEvent(Event.createEventForCodePointFromUnknownSource(letter.code), autoCapsFlags, null)
         state.onReleaseKey(letter.code, false, autoCapsFlags, null)
     }
