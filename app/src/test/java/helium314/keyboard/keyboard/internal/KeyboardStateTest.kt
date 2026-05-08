@@ -27,44 +27,30 @@ class KeyboardStateTest {
     }
 
     @Test
-    fun shiftTapIsConsumedEvenWhenAutoCapsStateIsStillShifted() {
+    fun shiftTapWhileAutoShiftedWaitsForNextLetter() {
         load()
-
-        tap(KeyCode.SHIFT)
-        assertEquals(Layout.MANUAL_SHIFTED, actions.layout)
-
-        typeLetter('A', TextUtils.CAP_MODE_SENTENCES)
         state.onUpdateShiftState(TextUtils.CAP_MODE_SENTENCES, null)
-
-        assertEquals(Layout.ALPHABET, actions.layout)
-        assertFalse(actions.everShiftLocked)
-    }
-
-    @Test
-    fun shiftTapIsConsumedWhenShiftUpdateRunsBeforeLetterEvent() {
-        load()
-
-        tap(KeyCode.SHIFT)
-        assertEquals(Layout.MANUAL_SHIFTED, actions.layout)
-
-        pressLetterWithPreEventShiftUpdate('A', TextUtils.CAP_MODE_SENTENCES)
-
-        assertEquals(Layout.ALPHABET, actions.layout)
-        assertFalse(actions.everShiftLocked)
-    }
-
-    @Test
-    fun automaticSentenceCapsCanReturnAfterManualShiftWasConsumed() {
-        load()
-
-        tap(KeyCode.SHIFT)
-        typeLetter('A', TextUtils.CAP_MODE_SENTENCES)
-        state.onUpdateShiftState(TextUtils.CAP_MODE_SENTENCES, null)
-        assertEquals(Layout.ALPHABET, actions.layout)
-
-        typeLetter('.', TextUtils.CAP_MODE_SENTENCES)
-
         assertEquals(Layout.AUTOMATIC_SHIFTED, actions.layout)
+
+        tap(KeyCode.SHIFT, TextUtils.CAP_MODE_SENTENCES)
+
+        assertEquals(Layout.MANUAL_SHIFTED, actions.layout)
+        assertFalse(actions.everShiftLocked)
+    }
+
+    @Test
+    fun shiftUpdateAfterShiftTapDoesNotRestoreAutomaticShift() {
+        load()
+        state.onUpdateShiftState(TextUtils.CAP_MODE_SENTENCES, null)
+        assertEquals(Layout.AUTOMATIC_SHIFTED, actions.layout)
+
+        tap(KeyCode.SHIFT, TextUtils.CAP_MODE_SENTENCES)
+        state.onUpdateShiftState(TextUtils.CAP_MODE_SENTENCES, null)
+        assertEquals(Layout.MANUAL_SHIFTED, actions.layout)
+
+        typeLetter('A', TextUtils.CAP_MODE_SENTENCES)
+
+        assertEquals(Layout.ALPHABET, actions.layout)
         assertFalse(actions.everShiftLocked)
     }
 
@@ -98,20 +84,17 @@ class KeyboardStateTest {
     }
 
     private fun tap(code: Int) {
-        state.onPressKey(code, true, Constants.TextUtils.CAP_MODE_OFF, null)
-        state.onEvent(Event.createSoftwareKeypressEvent(code, 0, 0, 0, false), Constants.TextUtils.CAP_MODE_OFF, null)
-        state.onReleaseKey(code, false, Constants.TextUtils.CAP_MODE_OFF, null)
+        tap(code, Constants.TextUtils.CAP_MODE_OFF)
+    }
+
+    private fun tap(code: Int, autoCapsFlags: Int) {
+        state.onPressKey(code, true, autoCapsFlags, null)
+        state.onEvent(Event.createSoftwareKeypressEvent(code, 0, 0, 0, false), autoCapsFlags, null)
+        state.onReleaseKey(code, false, autoCapsFlags, null)
     }
 
     private fun typeLetter(letter: Char, autoCapsFlags: Int) {
         state.onPressKey(letter.code, true, autoCapsFlags, null)
-        state.onEvent(Event.createEventForCodePointFromUnknownSource(letter.code), autoCapsFlags, null)
-        state.onReleaseKey(letter.code, false, autoCapsFlags, null)
-    }
-
-    private fun pressLetterWithPreEventShiftUpdate(letter: Char, autoCapsFlags: Int) {
-        state.onPressKey(letter.code, true, autoCapsFlags, null)
-        state.onUpdateShiftState(autoCapsFlags, null)
         state.onEvent(Event.createEventForCodePointFromUnknownSource(letter.code), autoCapsFlags, null)
         state.onReleaseKey(letter.code, false, autoCapsFlags, null)
     }
