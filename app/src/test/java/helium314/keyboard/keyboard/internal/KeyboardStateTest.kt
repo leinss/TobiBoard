@@ -34,8 +34,24 @@ class KeyboardStateTest {
         assertEquals(Layout.MANUAL_SHIFTED, actions.layout)
 
         typeLetter('A', TextUtils.CAP_MODE_SENTENCES)
+        state.onUpdateShiftState(TextUtils.CAP_MODE_SENTENCES, null)
 
         assertEquals(Layout.ALPHABET, actions.layout)
+        assertFalse(actions.everShiftLocked)
+    }
+
+    @Test
+    fun automaticSentenceCapsCanReturnAfterManualShiftWasConsumed() {
+        load()
+
+        tap(KeyCode.SHIFT)
+        typeLetter('A', TextUtils.CAP_MODE_SENTENCES)
+        state.onUpdateShiftState(TextUtils.CAP_MODE_SENTENCES, null)
+        assertEquals(Layout.ALPHABET, actions.layout)
+
+        typeLetter('.', TextUtils.CAP_MODE_SENTENCES)
+
+        assertEquals(Layout.AUTOMATIC_SHIFTED, actions.layout)
         assertFalse(actions.everShiftLocked)
     }
 
