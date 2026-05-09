@@ -91,13 +91,20 @@ public final class InputLogic {
     private int mSpaceState;
     // Never null
     public SuggestedWords mSuggestedWords = SuggestedWords.getEmptyInstance();
-    public Suggest mSuggest; // non-final for active gesture data gathering, revert when data gathering phase is done (end of 2026 latest)
-    public DictionaryFacilitator mDictionaryFacilitator; // non-final for active gesture data gathering, revert when data gathering phase is done (end of 2026 latest)
+    // volatile because LatinIME swaps these on the main thread (gesture data gathering) while
+    // the suggestion worker reads them on its own thread; without happens-before another thread
+    // can see a partially-constructed Suggest or a stale facilitator and crash native code.
+    // Fields stay non-final for the duration of the gesture data gathering phase (end of 2026).
+    public volatile Suggest mSuggest;
+    public volatile DictionaryFacilitator mDictionaryFacilitator;
     private SingleDictionaryFacilitator mEmojiDictionaryFacilitator;
-    public void setFacilitator(DictionaryFacilitator facilitator) { // only for active gesture data gathering, remove when data gathering phase is done (end of 2026 latest)
+    public synchronized void setFacilitator(DictionaryFacilitator facilitator) {
         if (mDictionaryFacilitator == facilitator) return;
+        // Construct the new Suggest before publishing the new facilitator, so any reader that
+        // sees the new mDictionaryFacilitator also sees a Suggest backed by it.
+        final Suggest newSuggest = new Suggest(facilitator);
         mDictionaryFacilitator = facilitator;
-        mSuggest = new Suggest(mDictionaryFacilitator);
+        mSuggest = newSuggest;
     }
 
     public LastComposedWord mLastComposedWord = LastComposedWord.NOT_A_COMPOSED_WORD;
@@ -2602,8 +2609,10 @@ public final class InputLogic {
                     settingsValues.mAutoCorrectEnabled,
                     inputStyle, sequenceNumber);
             callback.onGetSuggestedWords(suggestedWords);
-        } catch (Exception e) {
-            // better go without suggestions than have the keyboard crash
+        } catch (RuntimeException e) {
+            // Catch RuntimeException (NPE, IllegalState, native-wrapped errors) but let Errors
+            // (OOM, native crashes surfaced as VirtualMachineError) propagate so we don't mask
+            // a corrupted dictionary as a silent empty suggestion strip.
             Log.e(TAG, "Error fetching suggested words, using empty words instead", e);
             callback.onGetSuggestedWords(SuggestedWords.getEmptyInstance());
             KeyboardSwitcher.getInstance().showToast("Error getting suggestions", true);

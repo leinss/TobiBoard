@@ -222,11 +222,11 @@ class AudioRecorder(
      */
     fun stop(): Deferred<File?> {
         isRecording = false
-        // AudioRecord.stop() is documented as safe from any thread and unblocks an in-flight
-        // read(); the loop then exits and its `finally` block does the rest of the teardown.
-        try { audioRecord?.stop() } catch (e: IllegalStateException) {
-            Log.w(TAG, "AudioRecord.stop() failed", e)
-        }
+        // AudioRecord.stop() is documented as safe from any thread, but on some OEMs it can
+        // block 150–500ms while the audio HAL drains. Always dispatch it off-thread so callers
+        // (including the IME main thread) never risk an ANR. The recording loop's read() will
+        // also exit on its own once isRecording=false on the next ~80ms iteration.
+        dispatchAudioRecordStopAsync()
         return completion ?: CompletableDeferred<File?>().apply { complete(null) }
     }
 
@@ -237,15 +237,23 @@ class AudioRecorder(
     fun cancel() {
         cancelRequested = true
         isRecording = false
-        try { audioRecord?.stop() } catch (e: IllegalStateException) {
-            Log.w(TAG, "AudioRecord.stop() failed", e)
-        }
+        // Same rationale as stop(): never call AudioRecord.stop() on the caller's thread.
+        dispatchAudioRecordStopAsync()
         if (recordingJob == null) {
             // Either start() failed before launching, or stop() already ran. Make sure any
             // partial file is gone and per-recording state is reset.
             closeOutputSafely()
             if (outputFile.exists()) outputFile.delete()
             resetCounters()
+        }
+    }
+
+    private fun dispatchAudioRecordStopAsync() {
+        val ar = audioRecord ?: return
+        recordingScope.launch(CoroutineName("AudioRecorderStop")) {
+            try { ar.stop() } catch (e: IllegalStateException) {
+                Log.w(TAG, "AudioRecord.stop() failed", e)
+            }
         }
     }
 

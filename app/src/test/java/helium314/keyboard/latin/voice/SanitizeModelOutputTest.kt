@@ -76,4 +76,28 @@ class SanitizeModelOutputTest {
         val result = sanitizeModelOutput(input, 10)
         assertEquals("abcdefghij", result)
     }
+
+    @Test
+    fun maxLengthTruncationDoesNotSplitCombiningSequence() {
+        // 'e' + U+0301 COMBINING ACUTE ACCENT renders as 'é'. Truncating between the two
+        // would leave a dangling combining mark.
+        val input = "abcdefghie\u0301TAIL"
+        val result = sanitizeModelOutput(input, 10)
+        assertTrue("result must not end on a combining mark", result.isEmpty() || result.last() != '\u0301')
+        assertTrue("result length must not exceed maxLength", result.length <= 10)
+    }
+
+    @Test
+    fun maxLengthTruncationDoesNotSplitZwjFamily() {
+        // Truncate right inside a man+ZWJ+woman sequence; result must drop the partial cluster.
+        val prefix = "a".repeat(8)
+        val family = "\uD83D\uDC68\u200D\uD83D\uDC69" // man + ZWJ + woman
+        val input = prefix + family + "TAIL"
+        val result = sanitizeModelOutput(input, 10)
+        assertFalse("result must not end on ZWJ", result.endsWith('\u200D'))
+        assertFalse(
+            "result must not end on a high surrogate",
+            result.isNotEmpty() && Character.isHighSurrogate(result.last())
+        )
+    }
 }

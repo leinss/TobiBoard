@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.annotation.StringRes
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.settings.Defaults
+import java.text.BreakIterator
 import java.util.Locale
 
 private val SANITIZE_OUTPUT_REGEX =
@@ -20,10 +21,13 @@ private val SANITIZE_OUTPUT_REGEX =
 internal fun sanitizeModelOutput(raw: String, maxLength: Int): String {
     val cleaned = raw.replace(SANITIZE_OUTPUT_REGEX, "").trim()
     if (cleaned.length <= maxLength) return cleaned
-    // Avoid splitting a surrogate pair at the truncation boundary.
-    var end = maxLength
-    if (end > 0 && Character.isHighSurrogate(cleaned[end - 1])) end -= 1
-    return cleaned.substring(0, end)
+    // Truncate at a grapheme cluster boundary so we never split a surrogate pair, a ZWJ emoji
+    // sequence, or a base+combining-mark cluster — any of which would render as broken glyphs.
+    val breaker = BreakIterator.getCharacterInstance()
+    breaker.setText(cleaned)
+    val boundary = breaker.preceding(maxLength + 1)
+    val end = if (boundary == BreakIterator.DONE) 0 else boundary
+    return cleaned.substring(0, end.coerceAtMost(maxLength))
 }
 
 /**

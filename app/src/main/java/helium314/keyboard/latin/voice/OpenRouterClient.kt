@@ -103,53 +103,14 @@ class OpenRouterClient(
      * regardless of recording length. Throws [OpenRouterException] on non-retryable failures
      * or after retries are exhausted. The caller owns the file and must delete it.
      */
-    fun transcribe(audioFile: File): String {
-        var lastError: Exception? = null
-        var nextDelayOverrideMs: Long = -1L
-        val enforceZdr = useZeroDataRetention
-        var attempt = 0
-        while (attempt < MAX_ATTEMPTS) {
-            if (Thread.currentThread().isInterrupted) throw InterruptedException()
-            try {
-                return if (provider == AiProvider.OPENROUTER && transcriptionMode == VoiceTranscriptionMode.OPENROUTER_STT) {
-                    performOpenRouterSttTranscription(audioFile, enforceZdr)
-                } else if (provider == AiProvider.PAYPERQ && "/" !in model) {
-                    performPayPerQTranscription(audioFile)
-                } else {
-                    performRequest(audioFile, enforceZdr)
-                }
-            } catch (e: OpenRouterException) {
-                if (provider == AiProvider.OPENROUTER && enforceZdr && e.isZdrRouteUnavailable()) {
-                    throw OpenRouterException(
-                        "No zero data retention route is available for this model",
-                        e.statusCode,
-                        e.retryAfterMs,
-                        e.errorBody,
-                    )
-                }
-                if (e.statusCode !in RETRYABLE_STATUSES || attempt == MAX_ATTEMPTS - 1) throw e
-                lastError = e
-                nextDelayOverrideMs = if ((e.statusCode == 429 || e.statusCode == 503) && e.retryAfterMs > 0) e.retryAfterMs else -1L
-            } catch (e: SocketTimeoutException) {
-                if (attempt == MAX_ATTEMPTS - 1) throw OpenRouterException("Request timed out")
-                lastError = e
-                nextDelayOverrideMs = -1L
-            } catch (e: InterruptedIOException) {
-                throw InterruptedException()
-            } catch (e: java.io.IOException) {
-                if (attempt == MAX_ATTEMPTS - 1) throw OpenRouterException(sanitizeForLog(e.message ?: "Network error"))
-                lastError = e
-                nextDelayOverrideMs = -1L
-            }
-            val delayMs = if (nextDelayOverrideMs > 0) nextDelayOverrideMs else (500L shl attempt).coerceAtMost(4_000L)
-            if (BuildConfig.DEBUG) Log.i(TAG, "Retrying after ${delayMs}ms (attempt ${attempt + 1})")
-            try { Thread.sleep(delayMs) } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                throw e
-            }
-            attempt++
+    fun transcribe(audioFile: File): String = withRetries("Transcription") {
+        if (provider == AiProvider.OPENROUTER && transcriptionMode == VoiceTranscriptionMode.OPENROUTER_STT) {
+            performOpenRouterSttTranscription(audioFile, useZeroDataRetention)
+        } else if (provider == AiProvider.PAYPERQ && "/" !in model) {
+            performPayPerQTranscription(audioFile)
+        } else {
+            performRequest(audioFile, useZeroDataRetention)
         }
-        throw OpenRouterException(sanitizeForLog(lastError?.message ?: "Transcription failed"))
     }
 
     fun cancel() {
@@ -161,7 +122,17 @@ class OpenRouterClient(
      * reply. Uses [systemPrompt] as the system message. Retries transient failures with the
      * same policy as [transcribe].
      */
-    fun fixText(userText: String): String {
+    fun fixText(userText: String): String = withRetries("Request") {
+        performTextRequest(userText, useZeroDataRetention)
+    }
+
+    /**
+     * Runs [request] up to [MAX_ATTEMPTS] times with exponential backoff (or server-supplied
+     * Retry-After), translating retryable HTTP statuses, socket timeouts, and IOExceptions into
+     * sleeps. Throws on the final attempt or non-retryable failures. The [label] is used only
+     * for the terminal error message ("$label failed [after retries]").
+     */
+    private inline fun <T> withRetries(label: String, request: () -> T): T {
         var lastError: Exception? = null
         var nextDelayOverrideMs: Long = -1L
         val enforceZdr = useZeroDataRetention
@@ -169,7 +140,7 @@ class OpenRouterClient(
         while (attempt < MAX_ATTEMPTS) {
             if (Thread.currentThread().isInterrupted) throw InterruptedException()
             try {
-                return performTextRequest(userText, enforceZdr)
+                return request()
             } catch (e: OpenRouterException) {
                 if (provider == AiProvider.OPENROUTER && enforceZdr && e.isZdrRouteUnavailable()) {
                     throw OpenRouterException(
@@ -189,18 +160,22 @@ class OpenRouterClient(
             } catch (e: InterruptedIOException) {
                 throw InterruptedException()
             } catch (e: java.io.IOException) {
-                if (attempt == MAX_ATTEMPTS - 1) throw OpenRouterException(sanitizeForLog(e.message ?: "Network error"))
+                // Never propagate the underlying IOException's message — on some Android stacks
+                // it includes the full request URL plus headers (Authorization: Bearer …). Swap
+                // it for a constant; the cause chain remains intact for debug logging.
+                if (attempt == MAX_ATTEMPTS - 1) throw OpenRouterException("Network error")
                 lastError = e
                 nextDelayOverrideMs = -1L
             }
             val delayMs = if (nextDelayOverrideMs > 0) nextDelayOverrideMs else (500L shl attempt).coerceAtMost(4_000L)
+            if (BuildConfig.DEBUG) Log.i(TAG, "Retrying after ${delayMs}ms (attempt ${attempt + 1})")
             try { Thread.sleep(delayMs) } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
                 throw e
             }
             attempt++
         }
-        throw OpenRouterException(sanitizeForLog(lastError?.message ?: "Request failed"))
+        throw OpenRouterException(if (lastError == null) "$label failed" else "$label failed after retries")
     }
 
     private fun performTextRequest(userText: String, enforceZdr: Boolean): String {
