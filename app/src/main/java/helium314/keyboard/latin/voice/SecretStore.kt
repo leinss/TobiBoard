@@ -24,14 +24,11 @@ object SecretStore {
     /**
      * Force the EncryptedSharedPreferences and AndroidKeyStore master key to be loaded from
      * background code. Called once at app start so the IME's first transcription does not pay
-     * the cold-decrypt cost on the input thread.
-     *
-     * Crucially, warm-up does NOT trigger the recovery path: if the keystore is transiently
-     * unhappy at boot, we do not want to wipe the user's stored API key. Recovery still runs
-     * on a real read/write attempt, where the user is actively using the feature.
+     * the cold-decrypt cost on the input thread. Best-effort: if the keystore is transiently
+     * unhappy at boot, the next real read/write will simply retry.
      */
     fun warmUp(context: Context) {
-        securePrefs(context, allowRecovery = false)
+        securePrefs(context)
     }
 
     fun getApiKey(context: Context, prefKey: String, default: String): String {
@@ -63,39 +60,31 @@ object SecretStore {
         }
     }
 
-    @Volatile
-    private var recoveryAttempted = false
-
-    private fun securePrefs(context: Context, allowRecovery: Boolean = true): SharedPreferences? {
+    private fun securePrefs(context: Context): SharedPreferences? {
         // EncryptedSharedPreferences relies on KeyGenParameterSpec (API 23+). Keep the reference
         // inside this method so the class isn't loaded on older devices.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
         return try {
             EncryptedPrefsFactory.create(context, ENCRYPTED_FILE)
         } catch (e: Exception) {
-            // Warm-up (allowRecovery=false) is best-effort: the first real read/write will run
-            // through the same path with allowRecovery=true and log + recover then. Skipping the
-            // warning here keeps test stderr (Robolectric has no AndroidKeyStore) and the
-            // never-used-voice install case quiet.
-            if (!allowRecovery) return null
+            // Transient AndroidKeyStore failures (e.g. user has not unlocked the device yet,
+            // OS update mid-flight) used to trigger an automatic destructive recovery here that
+            // wiped the user's stored API keys. That made one-shot transient hiccups permanent.
+            // Now we just surface the failure: callers see "no API key" and can retry, or the
+            // user can hit `clearSecureStorage()` from settings if the prefs file really is
+            // corrupted. Cause chain is logged for diagnosis.
             Log.w(TAG, "Failed to open encrypted prefs", e)
-            // Recovery wipes only the encrypted prefs storage. The AndroidKeyStore master key is
-            // shared by EncryptedSharedPreferences users and must not be deleted on a transient
-            // open failure, because that would make otherwise recoverable data unreadable.
-            if (recoveryAttempted) return null
-            recoveryAttempted = true
-            Log.w(TAG, "Attempting one-shot recovery of encrypted prefs storage")
-            attemptRecovery(context)
-            try {
-                EncryptedPrefsFactory.create(context, ENCRYPTED_FILE)
-            } catch (e2: Exception) {
-                Log.w(TAG, "Encrypted prefs still unavailable after recovery", e2)
-                null
-            }
+            null
         }
     }
 
-    private fun attemptRecovery(context: Context) {
+    /**
+     * Explicit user-initiated reset of the encrypted prefs file. **This destroys all stored API
+     * keys.** Wire from a settings screen, never from automatic recovery — the encrypted prefs
+     * file is sometimes unreadable for transient reasons (locked keystore, OS update mid-flight)
+     * that resolve on their own.
+     */
+    fun clearSecureStorage(context: Context) {
         try {
             context.getSharedPreferences(ENCRYPTED_FILE, Context.MODE_PRIVATE).edit(commit = true) {
                 clear()
@@ -104,7 +93,7 @@ object SecretStore {
                 context.deleteSharedPreferences(ENCRYPTED_FILE)
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to clear encrypted prefs file during recovery", e)
+            Log.w(TAG, "Failed to clear encrypted prefs file", e)
         }
     }
 }
