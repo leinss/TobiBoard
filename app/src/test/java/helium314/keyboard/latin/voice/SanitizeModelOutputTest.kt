@@ -94,10 +94,6 @@ class SanitizeModelOutputTest {
         val family = "\uD83D\uDC68\u200D\uD83D\uDC69" // man + ZWJ + woman
         val input = prefix + family + "TAIL"
         val result = sanitizeModelOutput(input, 10)
-        assertFalse("result must not end on ZWJ", result.endsWith('\u200D'))
-        assertFalse(
-            "result must not end on a high surrogate",
-            result.isNotEmpty() && Character.isHighSurrogate(result.last())
-        )
+        assertEquals(prefix, result)
     }
 }

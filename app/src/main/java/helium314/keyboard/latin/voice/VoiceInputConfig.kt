@@ -22,12 +22,31 @@ internal fun sanitizeModelOutput(raw: String, maxLength: Int): String {
     val cleaned = raw.replace(SANITIZE_OUTPUT_REGEX, "").trim()
     if (cleaned.length <= maxLength) return cleaned
     // Truncate at a grapheme cluster boundary so we never split a surrogate pair, a ZWJ emoji
-    // sequence, or a base+combining-mark cluster — any of which would render as broken glyphs.
+    // sequence, or a base+combining-mark cluster - any of which would render as broken glyphs.
+    // BreakIterator handles surrogate/combining boundaries, but Java/Android implementations can
+    // still stop between emoji that are joined by U+200D, so we repair that boundary explicitly.
     val breaker = BreakIterator.getCharacterInstance()
     breaker.setText(cleaned)
     val boundary = breaker.preceding(maxLength + 1)
-    val end = if (boundary == BreakIterator.DONE) 0 else boundary
+    val end = avoidPartialZwjSequence(cleaned, if (boundary == BreakIterator.DONE) 0 else boundary)
     return cleaned.substring(0, end.coerceAtMost(maxLength))
+}
+
+private fun avoidPartialZwjSequence(text: String, end: Int): Int {
+    if (end <= 0 || end >= text.length) return end
+    return when {
+        text[end] == '\u200D' -> startOfZwjSequenceBefore(text, end)
+        text[end - 1] == '\u200D' -> startOfZwjSequenceBefore(text, end - 1)
+        else -> end
+    }
+}
+
+private fun startOfZwjSequenceBefore(text: String, zwjIndex: Int): Int {
+    var start = Character.offsetByCodePoints(text, zwjIndex, -1)
+    while (start >= 2 && text[start - 1] == '\u200D') {
+        start = Character.offsetByCodePoints(text, start - 1, -1)
+    }
+    return start
 }
 
 /**
