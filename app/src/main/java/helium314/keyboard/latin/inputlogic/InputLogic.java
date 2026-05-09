@@ -91,20 +91,30 @@ public final class InputLogic {
     private int mSpaceState;
     // Never null
     public SuggestedWords mSuggestedWords = SuggestedWords.getEmptyInstance();
-    // volatile because LatinIME swaps these on the main thread (gesture data gathering) while
-    // the suggestion worker reads them on its own thread; without happens-before another thread
-    // can see a partially-constructed Suggest or a stale facilitator and crash native code.
-    // Fields stay non-final for the duration of the gesture data gathering phase (end of 2026).
+    // Kept public/non-final for the duration of the gesture data gathering phase (end of 2026).
+    // Suggestion workers use mSuggestState below so they observe a single published pair.
     public volatile Suggest mSuggest;
     public volatile DictionaryFacilitator mDictionaryFacilitator;
+    private volatile SuggestState mSuggestState;
     private SingleDictionaryFacilitator mEmojiDictionaryFacilitator;
+
+    private static final class SuggestState {
+        final Suggest mSuggest;
+        final DictionaryFacilitator mDictionaryFacilitator;
+
+        SuggestState(final DictionaryFacilitator facilitator) {
+            mDictionaryFacilitator = facilitator;
+            mSuggest = new Suggest(facilitator);
+        }
+    }
+
     public synchronized void setFacilitator(DictionaryFacilitator facilitator) {
-        if (mDictionaryFacilitator == facilitator) return;
-        // Construct the new Suggest before publishing the new facilitator, so any reader that
-        // sees the new mDictionaryFacilitator also sees a Suggest backed by it.
-        final Suggest newSuggest = new Suggest(facilitator);
-        mDictionaryFacilitator = facilitator;
-        mSuggest = newSuggest;
+        final SuggestState current = mSuggestState;
+        if (current != null && current.mDictionaryFacilitator == facilitator) return;
+        final SuggestState newState = new SuggestState(facilitator);
+        mSuggestState = newState;
+        mSuggest = newState.mSuggest;
+        mDictionaryFacilitator = newState.mDictionaryFacilitator;
     }
 
     public LastComposedWord mLastComposedWord = LastComposedWord.NOT_A_COMPOSED_WORD;
@@ -148,8 +158,7 @@ public final class InputLogic {
         mWordComposer = new WordComposer();
         mConnection = new RichInputConnection(latinIME);
         mInputLogicHandler = new InputLogicHandler(mLatinIME.mHandler, this);
-        mSuggest = new Suggest(dictionaryFacilitator);
-        mDictionaryFacilitator = dictionaryFacilitator;
+        setFacilitator(dictionaryFacilitator);
     }
 
     /**
@@ -2597,7 +2606,7 @@ public final class InputLogic {
         mWordComposer.adviseCapitalizedModeBeforeFetchingSuggestions(
                 getActualCapsMode(settingsValues, KeyboardSwitcher.getInstance().getKeyboardShiftMode()));
         try {
-            final SuggestedWords suggestedWords = mSuggest.getSuggestedWords(mWordComposer,
+            final SuggestedWords suggestedWords = mSuggestState.mSuggest.getSuggestedWords(mWordComposer,
                     getNgramContextFromNthPreviousWordForSuggestion(
                     settingsValues.mSpacingAndPunctuations,
                     // Get the word on which we should search the bigrams. If we are composing
