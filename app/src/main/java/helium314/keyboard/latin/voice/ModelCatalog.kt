@@ -58,10 +58,21 @@ internal object ModelCatalog {
     )
 
     // PayPerQ uses its own model namespace (api.ppq.ai/v1/models) and doesn't honor OpenRouter's
-    // ZDR or prompt-cache contracts, so capability flags are stripped. Some OpenRouter slugs —
+    // ZDR, prompt-cache, or `:free` tier contracts, so capability flags are stripped and free
+    // OpenRouter slugs are swapped for their paid PayPerQ equivalents. Some OpenRouter slugs —
     // notably `~author/...-latest` floating aliases — won't resolve on PayPerQ; users on those
     // entries should fall back to Custom Model ID with a slug from PayPerQ's own model list.
-    val PAYPERQ_VOICE: List<ModelEntry> = OPENROUTER_VOICE.map { it.copy(zdr = false, cache = false) }
+    val PAYPERQ_VOICE: List<ModelEntry> = OPENROUTER_VOICE.map { entry ->
+        when (entry.slug) {
+            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free" -> entry.copy(
+                slug = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                tier = PricingTier.CHEAP,
+                zdr = false,
+                cache = false,
+            )
+            else -> entry.copy(zdr = false, cache = false)
+        }
+    }
     val PAYPERQ_TEXT_FIX: List<ModelEntry> = OPENROUTER_TEXT_FIX.map { it.copy(zdr = false, cache = false) }
 
     private val ALL_OPENROUTER_BY_SLUG: Map<String, ModelEntry> =
