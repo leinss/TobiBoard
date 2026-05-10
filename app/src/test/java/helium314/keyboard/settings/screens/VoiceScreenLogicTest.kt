@@ -4,6 +4,7 @@ package helium314.keyboard.settings.screens
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.voice.AiProvider
+import helium314.keyboard.latin.voice.defaultModelSlug
 import helium314.keyboard.latin.voice.supportsOpenRouterSttSlug
 import helium314.keyboard.latin.voice.supportsTextFixSlug
 import helium314.keyboard.latin.voice.supportsVoiceSlug
@@ -120,18 +121,19 @@ class VoiceScreenLogicTest {
     }
 
     @Test
-    fun defaultModelsAreValidSlugsForBothProviders() {
-        // Guard against the regression where Defaults.PREF_VOICE_MODEL was a text-fix slug
-        // that the voice picker didn't actually offer, leaving fresh installs and the
-        // provider-switch fallback writing a value the rest of the app considered unsupported.
+    fun providerSwitchFallbackWritesValidSlugs() {
+        // The provider-switch fallback in VoiceScreen writes provider.defaultModelSlug(global)
+        // when the user's saved selection isn't valid for the new provider — guard that the
+        // value it writes is in fact accepted by supportsVoiceSlug / supportsTextFixSlug,
+        // otherwise we'd loop right back to "unsupported" on the next read.
         for (provider in AiProvider.values()) {
             assertTrue(
-                provider.supportsVoiceSlug(Defaults.PREF_VOICE_MODEL),
-                "Defaults.PREF_VOICE_MODEL must be a voice slug supported by $provider"
+                provider.supportsVoiceSlug(provider.defaultModelSlug(Defaults.PREF_VOICE_MODEL)),
+                "provider.defaultModelSlug must yield a voice slug supported by $provider"
             )
             assertTrue(
-                provider.supportsTextFixSlug(Defaults.PREF_TEXT_FIX_MODEL),
-                "Defaults.PREF_TEXT_FIX_MODEL must be a text-fix slug supported by $provider"
+                provider.supportsTextFixSlug(provider.defaultModelSlug(Defaults.PREF_TEXT_FIX_MODEL)),
+                "provider.defaultModelSlug must yield a text-fix slug supported by $provider"
             )
         }
         assertTrue(

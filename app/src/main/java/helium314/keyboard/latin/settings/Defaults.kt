@@ -187,11 +187,11 @@ object Defaults {
     // default ("google/gemini-3-flash-preview") is a text-fix model that the OpenRouter and
     // PayPerQ voice pickers don't expose, so it would silently leave the picker without a
     // valid selection on fresh installs.
-    const val PREF_VOICE_MODEL = "mistralai/voxtral-small-24b-2507"
+    const val PREF_VOICE_MODEL = "~google/gemini-flash-latest"
     const val PREF_VOICE_MODEL_CUSTOM = ""
     const val PREF_VOICE_TRADITIONAL_BUTTON_ENABLED = true
     const val PREF_VOICE_STT_ENABLED = false
-    const val PREF_VOICE_STT_MODEL = "openai/whisper-large-v3-turbo"
+    const val PREF_VOICE_STT_MODEL = "google/chirp-3"
     const val PREF_VOICE_STT_MODEL_CUSTOM = ""
     const val PREF_VOICE_STT_PROMPT = "Transcribe this audio exactly as spoken. Output only the transcription, nothing else."
     const val PREF_VOICE_STT_DICTIONARY = ""
@@ -206,7 +206,7 @@ object Defaults {
     const val PREF_VOICE_SPACE_HEURISTIC = true
     const val PREF_VOICE_HAPTIC_FEEDBACK = true
     const val PREF_TEXT_FIX_ENABLED = false
-    const val PREF_TEXT_FIX_MODEL = "openai/gpt-5.4-mini"
+    const val PREF_TEXT_FIX_MODEL = "~openai/gpt-mini-latest"
     const val PREF_TEXT_FIX_MODEL_CUSTOM = ""
     const val PREF_TEXT_FIX_PROMPT = "You are a writing assistant. Improve the following text: fix typos, grammar, and punctuation while preserving the original meaning, tone, and language. Output only the improved text, with no preamble, quotes, or explanation."
     const val PREF_TEXT_FIX_2_ENABLED = false

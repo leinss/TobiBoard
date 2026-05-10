@@ -1110,7 +1110,7 @@ New dictionary:
     <string name="payperq_api_key">PayPerQ API Key</string>
     <string name="payperq_api_key_summary">Required before using voice input or Text Fix with your PayPerQ account</string>
     <string name="openrouter_zdr_enabled">Use zero data retention</string>
-    <string name="openrouter_zdr_enabled_summary">Require OpenRouter to use zero data retention endpoints. If the selected model has no ZDR route, voice and Text Fix requests fail instead of retrying normally.</string>
+    <string name="openrouter_zdr_enabled_summary">Prefer OpenRouter zero data retention endpoints. ZDR is enforced for models that support it (look for the ZDR pill in the picker); other models still work, but the request may use non-ZDR routing.</string>
     <string name="voice_model">Voice Model</string>
     <string name="voice_model_custom">Custom Model ID</string>
     <string name="voice_model_custom_summary">Only used when Voice Model is set to Custom</string>

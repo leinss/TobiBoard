@@ -161,11 +161,6 @@ internal fun parseVoiceDictionaryTerms(raw: String): List<String> =
         .filter { it.isNotEmpty() }
         .distinctBy { it.lowercase(Locale.ROOT) }
 
-internal fun shouldAttachPromptCacheHint(model: String): Boolean {
-    val normalized = model.lowercase(Locale.ROOT)
-    return normalized.startsWith("google/gemini") || normalized.startsWith("anthropic/")
-}
-
 private fun expectedLanguagesInstruction(languages: List<String>): String? {
     if (languages.isEmpty()) return null
     val joined = languages.joinToString(", ")

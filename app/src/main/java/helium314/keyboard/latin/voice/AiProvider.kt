@@ -29,47 +29,24 @@ internal fun resolveProviderModel(selectedModel: String, customModel: String): S
 internal const val MODEL_CUSTOM = "custom"
 
 /**
- * Slugs (other than [MODEL_CUSTOM]) that the voice screen offers for each provider. Used to
- * decide whether the user's saved selection is still valid after switching provider — if it
- * is, we leave it alone instead of silently overwriting a deliberate choice.
+ * Slugs (other than [MODEL_CUSTOM]) that each picker offers, derived from [ModelCatalog].
+ * Used to decide whether the user's saved selection is still valid after switching provider
+ * — if it is, we leave it alone instead of silently overwriting a deliberate choice.
+ *
+ * Note: OpenRouter "latest" floating aliases are catalogued literally as `~author/model-latest`
+ * (e.g. `~google/gemini-flash-latest`). The leading tilde is part of the slug — requests using
+ * the bare form return 400 "not a valid model ID". Pinned slugs use the bare form.
  */
-private val OPENROUTER_VOICE_SLUGS = setOf(
-    "mistralai/voxtral-small-24b-2507",
-    "google/gemini-2.5-flash-lite",
-    "google/gemini-2.5-flash",
-    "openai/gpt-4o-audio-preview",
-    "openai/gpt-audio",
-)
-private val OPENROUTER_STT_SLUGS = setOf(
-    "openai/gpt-4o-mini-transcribe",
-    "openai/whisper-large-v3-turbo",
-    "openai/whisper-large-v3",
-    "openai/whisper-1",
-    "openai/gpt-4o-transcribe",
-)
-private val PAYPERQ_VOICE_SLUGS = setOf(
-    "mistralai/voxtral-small-24b-2507",
-    "openai/gpt-audio-mini",
-    "xiaomi/mimo-v2-omni",
-    "openai/gpt-4o-audio-preview",
-    "openai/gpt-audio",
-)
-// Text-fix list happens to be identical across providers today; kept per-provider so
-// updates to either side don't require a refactor here.
-private val OPENROUTER_TEXT_FIX_SLUGS = setOf(
-    "openai/gpt-5.4-mini",
-    "openai/gpt-5.4-nano",
-    "google/gemini-3-flash-preview",
-    "deepseek/deepseek-v4-pro",
-    "anthropic/claude-haiku-4.5",
-)
-private val PAYPERQ_TEXT_FIX_SLUGS = OPENROUTER_TEXT_FIX_SLUGS
+private val OPENROUTER_VOICE_SLUGS = ModelCatalog.OPENROUTER_VOICE.mapTo(mutableSetOf()) { it.slug }
+private val OPENROUTER_STT_SLUGS = ModelCatalog.OPENROUTER_STT.mapTo(mutableSetOf()) { it.slug }
+private val OPENROUTER_TEXT_FIX_SLUGS = ModelCatalog.OPENROUTER_TEXT_FIX.mapTo(mutableSetOf()) { it.slug }
 
 internal fun AiProvider.supportsVoiceSlug(slug: String): Boolean {
     if (slug == MODEL_CUSTOM) return true
-    return slug in when (this) {
-        AiProvider.OPENROUTER -> OPENROUTER_VOICE_SLUGS
-        AiProvider.PAYPERQ -> PAYPERQ_VOICE_SLUGS
+    return when (this) {
+        AiProvider.OPENROUTER -> slug in OPENROUTER_VOICE_SLUGS
+        // PayPerQ has no bundled catalog — only Custom Model ID is accepted.
+        AiProvider.PAYPERQ -> false
     }
 }
 
@@ -80,8 +57,18 @@ internal fun supportsOpenRouterSttSlug(slug: String): Boolean {
 
 internal fun AiProvider.supportsTextFixSlug(slug: String): Boolean {
     if (slug == MODEL_CUSTOM) return true
-    return slug in when (this) {
-        AiProvider.OPENROUTER -> OPENROUTER_TEXT_FIX_SLUGS
-        AiProvider.PAYPERQ -> PAYPERQ_TEXT_FIX_SLUGS
+    return when (this) {
+        AiProvider.OPENROUTER -> slug in OPENROUTER_TEXT_FIX_SLUGS
+        AiProvider.PAYPERQ -> false
     }
+}
+
+/**
+ * Default voice/text-fix model slug to use when switching to [provider]. OpenRouter has
+ * a bundled catalog so we use the global default; PayPerQ ships no catalog, so the
+ * picker resolves to "Custom" and the user is prompted to enter their own slug.
+ */
+internal fun AiProvider.defaultModelSlug(globalDefault: String): String = when (this) {
+    AiProvider.OPENROUTER -> globalDefault
+    AiProvider.PAYPERQ -> MODEL_CUSTOM
 }
