@@ -241,17 +241,20 @@ class OpenRouterClient(
 
     private fun putProviderPreferences(body: JSONObject, enforceZdr: Boolean) {
         if (!enforceZdr || provider != AiProvider.OPENROUTER) return
-        // `zdr: true` is stricter, but it currently rejects the default Voxtral chat-audio
-        // route. Keep the existing no-data-collection routing so the legacy voice path stays
-        // usable while still avoiding data-collection endpoints.
-        body.put("provider", JSONObject().apply { put("data_collection", "deny") })
+        // Best-effort enforcement: emit `provider.zdr: true` only for catalog models we've
+        // verified have ZDR-eligible endpoints. For models without a known ZDR route (or
+        // custom slugs we can't classify) we skip enforcement so the request still succeeds —
+        // the goal is "use ZDR where possible", not "fail closed". The missing ZDR pill in
+        // the picker is the user-visible signal that strict ZDR isn't in effect.
+        if (!ModelCatalog.openRouterSupportsZdr(model)) return
+        body.put("provider", JSONObject().apply { put("zdr", true) })
     }
 
     private fun buildSystemMessage(): JSONObject {
         val textContent = JSONObject().apply {
             put("type", "text")
             put("text", systemPrompt)
-            if (provider == AiProvider.OPENROUTER && shouldAttachPromptCacheHint(model)) {
+            if (provider == AiProvider.OPENROUTER && ModelCatalog.openRouterSupportsCache(model)) {
                 put("cache_control", JSONObject().apply { put("type", "ephemeral") })
             }
         }

@@ -1,0 +1,7 @@
+* Refresh recommended models across Voice, STT, and Text Fix; new defaults: Gemini Flash (voice), Chirp 3 (STT), GPT Mini (text fix)
+* Voice list now only contains models with native audio input (Gemini Flash/Pro, Voxtral, MiMo V2.5, free Nemotron Nano Omni)
+* Model picker now shows colored pills for pricing tier, ZDR support, and prompt-cache support — pick the right trade-off at a glance
+* Smart ZDR routing: ZDR is enforced strictly for models that support it (ZDR pill in the picker); selecting a non-ZDR model with the toggle on still works but uses non-ZDR routing
+* Use OpenRouter's floating "latest" aliases (e.g. ~google/gemini-flash-latest) so the keyboard tracks the newest model without a release
+* PayPerQ users no longer see the dedicated STT subsection (PayPerQ has no transcription endpoint); chat-audio voice still works
+* PayPerQ now uses Custom Model ID for voice and Text Fix — the bundled OpenRouter slugs (e.g. ~google/gemini-flash-latest) aren't accepted by api.ppq.ai, so users enter the slug they want from PayPerQ's own model list

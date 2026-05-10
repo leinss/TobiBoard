@@ -67,9 +67,14 @@ class VoiceInputConfigTest {
     }
 
     @Test
-    fun shouldAttachPromptCacheHintMatchesGeminiAndClaudeModels() {
-        assertTrue(shouldAttachPromptCacheHint("google/gemini-3-flash-preview"))
-        assertTrue(shouldAttachPromptCacheHint("anthropic/claude-sonnet-4"))
-        assertFalse(shouldAttachPromptCacheHint("openai/gpt-4o-mini"))
+    fun modelCatalogReportsCacheSupportForCatalogedModels() {
+        // Cache support is now driven by ModelCatalog, not a substring heuristic, so the
+        // request pipeline only attaches `cache_control` for slugs we've verified support
+        // prompt caching against OpenRouter's per-model endpoints data.
+        assertTrue(ModelCatalog.openRouterSupportsCache("~google/gemini-flash-latest"))
+        assertTrue(ModelCatalog.openRouterSupportsCache("~anthropic/claude-haiku-latest"))
+        assertTrue(ModelCatalog.openRouterSupportsCache("deepseek/deepseek-v4-flash"))
+        assertFalse(ModelCatalog.openRouterSupportsCache("openai/whisper-1"))
+        assertFalse(ModelCatalog.openRouterSupportsCache("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"))
     }
 }

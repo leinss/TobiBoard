@@ -31,6 +31,7 @@ import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.latin.voice.AiProvider
+import helium314.keyboard.latin.voice.ModelCatalog
 import helium314.keyboard.latin.voice.OpenRouterClient
 import helium314.keyboard.latin.voice.parseVoiceDictionaryTerms
 import helium314.keyboard.latin.voice.parseExpectedLanguages
@@ -38,6 +39,7 @@ import helium314.keyboard.latin.voice.resolveVoiceModel
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
 import helium314.keyboard.latin.voice.defaultApiKey
+import helium314.keyboard.latin.voice.defaultModelSlug
 import helium314.keyboard.latin.voice.supportsOpenRouterSttSlug
 import helium314.keyboard.latin.voice.supportsTextFixSlug
 import helium314.keyboard.latin.voice.supportsVoiceSlug
@@ -48,6 +50,7 @@ import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.dialogs.TextInputDialog
 import helium314.keyboard.settings.initPreview
 import helium314.keyboard.settings.preferences.ListPreference
+import helium314.keyboard.settings.preferences.ModelListPreference
 import helium314.keyboard.settings.preferences.Preference
 import helium314.keyboard.settings.preferences.SliderPreference
 import helium314.keyboard.settings.preferences.SwitchPreference
@@ -240,13 +243,13 @@ fun createVoiceSettings(context: Context) = listOf(
                 ?: Defaults.PREF_TEXT_FIX_MODEL
             prefs.edit {
                 if (!provider.supportsVoiceSlug(currentVoice)) {
-                    putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
+                    putString(Settings.PREF_VOICE_MODEL, provider.defaultModelSlug(Defaults.PREF_VOICE_MODEL))
                 }
                 if (provider != AiProvider.OPENROUTER || !supportsOpenRouterSttSlug(currentStt)) {
                     putString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
                 }
                 if (!provider.supportsTextFixSlug(currentTextFix)) {
-                    putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
+                    putString(Settings.PREF_TEXT_FIX_MODEL, provider.defaultModelSlug(Defaults.PREF_TEXT_FIX_MODEL))
                 }
             }
         }
@@ -255,27 +258,12 @@ fun createVoiceSettings(context: Context) = listOf(
         SwitchPreference(it, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
     },
     Setting(context, Settings.PREF_VOICE_MODEL, R.string.voice_model) { setting ->
-        val ctx = LocalContext.current
         val providerPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
-        val items = when (AiProvider.fromPref(providerPref)) {
-            AiProvider.OPENROUTER -> listOf(
-                "Voxtral Small 24B (Recommended, Cheap)" to "mistralai/voxtral-small-24b-2507",
-                "Gemini 2.5 Flash Lite (Cheap)" to "google/gemini-2.5-flash-lite",
-                "Gemini 2.5 Flash (Medium)" to "google/gemini-2.5-flash",
-                "GPT-4o Audio Preview (Expensive)" to "openai/gpt-4o-audio-preview",
-                "GPT Audio (Expensive)" to "openai/gpt-audio",
-                ctx.getString(R.string.voice_custom_model) to "custom",
-            )
-            AiProvider.PAYPERQ -> listOf(
-                "Voxtral Small 24B (Default, Cheap)" to "mistralai/voxtral-small-24b-2507",
-                "GPT Audio Mini (Medium)" to "openai/gpt-audio-mini",
-                "MiMo V2 Omni (Medium)" to "xiaomi/mimo-v2-omni",
-                "GPT-4o Audio Preview (Expensive)" to "openai/gpt-4o-audio-preview",
-                "GPT Audio (Expensive)" to "openai/gpt-audio",
-                ctx.getString(R.string.voice_custom_model) to "custom",
-            )
+        val entries = when (AiProvider.fromPref(providerPref)) {
+            AiProvider.OPENROUTER -> ModelCatalog.OPENROUTER_VOICE
+            AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_VOICE
         }
-        ListPreference(setting, items, Defaults.PREF_VOICE_MODEL)
+        ModelListPreference(setting, entries, Defaults.PREF_VOICE_MODEL)
     },
     Setting(context, Settings.PREF_VOICE_MODEL_CUSTOM, R.string.voice_model_custom, R.string.voice_model_custom_summary) {
         TextInputPreference(it, Defaults.PREF_VOICE_MODEL_CUSTOM)
@@ -296,16 +284,7 @@ fun createVoiceSettings(context: Context) = listOf(
         }
     },
     Setting(context, Settings.PREF_VOICE_STT_MODEL, R.string.voice_stt_model) { setting ->
-        val ctx = LocalContext.current
-        val items = listOf(
-            "OpenAI Whisper Large V3 Turbo (Default, Fast)" to "openai/whisper-large-v3-turbo",
-            "OpenAI Whisper Large V3 (High Accuracy)" to "openai/whisper-large-v3",
-            "OpenAI Whisper 1" to "openai/whisper-1",
-            "OpenAI GPT-4o Mini Transcribe" to "openai/gpt-4o-mini-transcribe",
-            "OpenAI GPT-4o Transcribe" to "openai/gpt-4o-transcribe",
-            ctx.getString(R.string.voice_custom_model) to "custom",
-        )
-        ListPreference(setting, items, Defaults.PREF_VOICE_STT_MODEL)
+        ModelListPreference(setting, ModelCatalog.OPENROUTER_STT, Defaults.PREF_VOICE_STT_MODEL)
     },
     Setting(context, Settings.PREF_VOICE_STT_MODEL_CUSTOM, R.string.voice_stt_model_custom, R.string.voice_stt_model_custom_summary) {
         TextInputPreference(it, Defaults.PREF_VOICE_STT_MODEL_CUSTOM)
