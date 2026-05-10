@@ -84,7 +84,10 @@ private fun ModelPickerDialog(
     var selected by remember { mutableStateOf(items.firstOrNull { it.slug == selectedSlug }) }
     val state = rememberLazyListState()
     LaunchedEffect(selectedSlug) {
-        val index = items.indexOfFirst { it.slug == selectedSlug }
+        // Custom is pinned to the bottom of the list; if it's currently selected, scroll to
+        // the top so the user can see (and re-pick) the bundled presets — otherwise reopening
+        // the picker lands on Custom and the presets above sit above the viewport.
+        val index = if (selectedSlug == "custom") 0 else items.indexOfFirst { it.slug == selectedSlug }
         if (index != -1) state.scrollToItem(index, -state.layoutInfo.viewportSize.height / 3)
     }
     ThreeButtonAlertDialog(

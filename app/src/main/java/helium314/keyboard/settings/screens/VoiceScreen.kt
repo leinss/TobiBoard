@@ -39,7 +39,6 @@ import helium314.keyboard.latin.voice.resolveVoiceModel
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
 import helium314.keyboard.latin.voice.defaultApiKey
-import helium314.keyboard.latin.voice.defaultModelSlug
 import helium314.keyboard.latin.voice.supportsOpenRouterSttSlug
 import helium314.keyboard.latin.voice.supportsTextFixSlug
 import helium314.keyboard.latin.voice.supportsVoiceSlug
@@ -243,13 +242,13 @@ fun createVoiceSettings(context: Context) = listOf(
                 ?: Defaults.PREF_TEXT_FIX_MODEL
             prefs.edit {
                 if (!provider.supportsVoiceSlug(currentVoice)) {
-                    putString(Settings.PREF_VOICE_MODEL, provider.defaultModelSlug(Defaults.PREF_VOICE_MODEL))
+                    putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
                 }
                 if (provider != AiProvider.OPENROUTER || !supportsOpenRouterSttSlug(currentStt)) {
                     putString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
                 }
                 if (!provider.supportsTextFixSlug(currentTextFix)) {
-                    putString(Settings.PREF_TEXT_FIX_MODEL, provider.defaultModelSlug(Defaults.PREF_TEXT_FIX_MODEL))
+                    putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
                 }
             }
         }

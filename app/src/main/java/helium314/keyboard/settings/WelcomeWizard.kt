@@ -77,7 +77,6 @@ import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.latin.voice.AiProvider
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
-import helium314.keyboard.latin.voice.MODEL_CUSTOM
 import helium314.keyboard.latin.voice.defaultApiKey
 import helium314.keyboard.latin.voice.parseExpectedLanguages
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
@@ -500,10 +499,8 @@ private fun AiProviderSetupStep(
                     putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
                 }
                 AiProvider.PAYPERQ -> {
-                    // PayPerQ has no bundled catalog, so steer the picker to "Custom" — the user
-                    // must enter a slug they've confirmed PayPerQ accepts (api.ppq.ai/v1/models).
-                    putString(Settings.PREF_VOICE_MODEL, MODEL_CUSTOM)
-                    putString(Settings.PREF_TEXT_FIX_MODEL, MODEL_CUSTOM)
+                    putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
+                    putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
                 }
             }
         }

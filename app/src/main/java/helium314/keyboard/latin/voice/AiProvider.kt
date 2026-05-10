@@ -39,14 +39,15 @@ internal const val MODEL_CUSTOM = "custom"
  */
 private val OPENROUTER_VOICE_SLUGS = ModelCatalog.OPENROUTER_VOICE.mapTo(mutableSetOf()) { it.slug }
 private val OPENROUTER_STT_SLUGS = ModelCatalog.OPENROUTER_STT.mapTo(mutableSetOf()) { it.slug }
+private val PAYPERQ_VOICE_SLUGS = ModelCatalog.PAYPERQ_VOICE.mapTo(mutableSetOf()) { it.slug }
 private val OPENROUTER_TEXT_FIX_SLUGS = ModelCatalog.OPENROUTER_TEXT_FIX.mapTo(mutableSetOf()) { it.slug }
+private val PAYPERQ_TEXT_FIX_SLUGS = ModelCatalog.PAYPERQ_TEXT_FIX.mapTo(mutableSetOf()) { it.slug }
 
 internal fun AiProvider.supportsVoiceSlug(slug: String): Boolean {
     if (slug == MODEL_CUSTOM) return true
-    return when (this) {
-        AiProvider.OPENROUTER -> slug in OPENROUTER_VOICE_SLUGS
-        // PayPerQ has no bundled catalog — only Custom Model ID is accepted.
-        AiProvider.PAYPERQ -> false
+    return slug in when (this) {
+        AiProvider.OPENROUTER -> OPENROUTER_VOICE_SLUGS
+        AiProvider.PAYPERQ -> PAYPERQ_VOICE_SLUGS
     }
 }
 
@@ -57,18 +58,8 @@ internal fun supportsOpenRouterSttSlug(slug: String): Boolean {
 
 internal fun AiProvider.supportsTextFixSlug(slug: String): Boolean {
     if (slug == MODEL_CUSTOM) return true
-    return when (this) {
-        AiProvider.OPENROUTER -> slug in OPENROUTER_TEXT_FIX_SLUGS
-        AiProvider.PAYPERQ -> false
+    return slug in when (this) {
+        AiProvider.OPENROUTER -> OPENROUTER_TEXT_FIX_SLUGS
+        AiProvider.PAYPERQ -> PAYPERQ_TEXT_FIX_SLUGS
     }
-}
-
-/**
- * Default voice/text-fix model slug to use when switching to [provider]. OpenRouter has
- * a bundled catalog so we use the global default; PayPerQ ships no catalog, so the
- * picker resolves to "Custom" and the user is prompted to enter their own slug.
- */
-internal fun AiProvider.defaultModelSlug(globalDefault: String): String = when (this) {
-    AiProvider.OPENROUTER -> globalDefault
-    AiProvider.PAYPERQ -> MODEL_CUSTOM
 }

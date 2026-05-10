@@ -57,12 +57,12 @@ internal object ModelCatalog {
         ModelEntry("deepseek/deepseek-v4-flash", "DeepSeek V4 Flash", PricingTier.CHEAP, zdr = true, cache = true),
     )
 
-    // PayPerQ uses its own model namespace (api.ppq.ai/v1/models) which doesn't overlap with
-    // OpenRouter's slugs — in particular PayPerQ doesn't accept OpenRouter's `~author/...-latest`
-    // floating aliases. Rather than ship a list that may go stale, we force PayPerQ users to
-    // enter a slug via the Custom Model ID field.
-    val PAYPERQ_VOICE: List<ModelEntry> = emptyList()
-    val PAYPERQ_TEXT_FIX: List<ModelEntry> = emptyList()
+    // PayPerQ uses its own model namespace (api.ppq.ai/v1/models) and doesn't honor OpenRouter's
+    // ZDR or prompt-cache contracts, so capability flags are stripped. Some OpenRouter slugs —
+    // notably `~author/...-latest` floating aliases — won't resolve on PayPerQ; users on those
+    // entries should fall back to Custom Model ID with a slug from PayPerQ's own model list.
+    val PAYPERQ_VOICE: List<ModelEntry> = OPENROUTER_VOICE.map { it.copy(zdr = false, cache = false) }
+    val PAYPERQ_TEXT_FIX: List<ModelEntry> = OPENROUTER_TEXT_FIX.map { it.copy(zdr = false, cache = false) }
 
     private val ALL_OPENROUTER_BY_SLUG: Map<String, ModelEntry> =
         (OPENROUTER_VOICE + OPENROUTER_STT + OPENROUTER_TEXT_FIX).associateBy { it.slug }

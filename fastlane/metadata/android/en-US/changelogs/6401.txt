@@ -1,0 +1,2 @@
+* Model picker now scrolls to the top when "Custom" is the current selection, so the bundled presets are visible and you can switch back to one without scrolling up
+* PayPerQ picker shows the bundled presets again (Voice and Text Fix); some entries — notably OpenRouter "latest" aliases — won't resolve on PayPerQ, so use Custom Model ID with a slug from api.ppq.ai/v1/models if a preset rejects
