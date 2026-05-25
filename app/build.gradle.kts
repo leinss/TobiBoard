@@ -178,6 +178,9 @@ dependencies {
     // gitignored (~54 MB). See docs/EMULATOR.md.
     implementation(files("libs/sherpa-onnx-1.13.2.aar"))
 
+    // on-device text-fix — MediaPipe LLM Inference loads Gemma .task bundles
+    implementation("com.google.mediapipe:tasks-genai:0.10.35")
+
     // kotlin
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
