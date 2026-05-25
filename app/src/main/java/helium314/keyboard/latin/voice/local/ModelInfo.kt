@@ -12,6 +12,8 @@ internal interface ModelInfo {
     val files: List<ModelFile>
     val requiresLicense: Boolean get() = false
     val licenseSummary: String? get() = null
+    /** True when downloads need an `Authorization: Bearer <hf-token>` header. */
+    val requiresAuth: Boolean get() = false
     val totalBytes: Long get() = files.sumOf { it.sizeBytes }
 }
 
@@ -77,6 +79,7 @@ internal sealed interface TextFixModelInfo : ModelInfo {
         override val id = "gemma3-1b-it-int4"
         override val displayName = "Gemma 3 1B IT (INT4)"
         override val requiresLicense = true
+        override val requiresAuth = true
         override val licenseSummary =
             "Use is governed by the Gemma Terms of Use. The model is downloaded directly " +
             "from HuggingFace; this app does not host it."
