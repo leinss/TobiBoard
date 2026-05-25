@@ -260,8 +260,10 @@ install-wifi: build-debug-fast ## Connect over WiFi (auto-discover via mDNS) the
 	fi; \
 	echo "→ installing to $$SERIAL"; \
 	$(ADB) -s "$$SERIAL" install -r $(APK_DEBUG_NO_MINIFY); \
-	echo "→ force-stopping IME so the new APK loads on next text-field focus"; \
-	$(ADB) -s "$$SERIAL" shell am force-stop $(PKG_DEBUG)
+	echo ""; \
+	echo "Installed. The new APK loads the next time the IME is re-bound:"; \
+	echo "  - Close + re-focus any text field (cheapest), OR"; \
+	echo "  - 'make phone-restart-ime' (force-stop; small risk of a benign Dialog NPE on teardown)."
 
 .PHONY: wifi-bootstrap-via-usb
 wifi-bootstrap-via-usb: ## One-time setup: phone plugged in via USB, switch it into WiFi-debug mode on port 5555.
