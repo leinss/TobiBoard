@@ -11,6 +11,7 @@ import helium314.keyboard.latin.utils.LayoutUtilsCustom
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.voice.SecretStore
+import helium314.keyboard.latin.voice.local.ModelDownloadRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,6 +30,7 @@ class App : Application() {
             // Warm up EncryptedSharedPreferences + AndroidKeyStore master key so the first
             // voice/text-fix request doesn't pay the cold-decrypt cost on the IME main thread.
             SecretStore.warmUp(this@App)
+            ModelDownloadRepository.rehydrate(this@App)
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
             @Suppress("DEPRECATION")
             Log.i(
