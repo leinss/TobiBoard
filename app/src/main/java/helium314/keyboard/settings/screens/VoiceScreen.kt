@@ -157,7 +157,8 @@ internal fun buildVoiceScreenItems(
     if (voiceInputEnabled && cloud && autoPolishEnabled && polishModel == "custom") Settings.PREF_VOICE_POLISH_MODEL_CUSTOM else null,
     // Shared playback / capture options apply to both flows.
     if (voiceInputEnabled) R.string.voice_shared_category else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_LANGUAGE_HINT else null,
+    // Language hint only feeds cloud STT — Parakeet v3-int8 auto-detects en/de/es/fr.
+    if (voiceInputEnabled && cloud) Settings.PREF_VOICE_LANGUAGE_HINT else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_SPACE_HEURISTIC else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_HAPTIC_FEEDBACK else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,

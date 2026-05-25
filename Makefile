@@ -135,6 +135,35 @@ install: build-debug-fast ## Install the unminified debug APK on the connected d
 install-release: build-release ## Install the signed release APK on the connected device
 	$(ADB) install -r $(APK_RELEASE)
 
+## --- wifi pairing --------------------------------------------------------
+# Pair once per device (the 6-digit code is one-shot, valid for ~30 s); after that
+# `make wifi-connect` re-attaches and `make install-wifi` builds + installs.
+# Phone: Settings → System → Developer options → Wireless debugging → ON.
+
+.PHONY: wifi-pair
+wifi-pair: ## One-time pair via WiFi. Open "Pair device with pairing code" on phone, then pass PAIR_ADDR=ip:port CODE=123456
+	@if [ -z "$(PAIR_ADDR)" ] || [ -z "$(CODE)" ]; then \
+		echo "Usage: make wifi-pair PAIR_ADDR=192.168.x.y:PORT CODE=123456"; \
+		echo "       (both shown on phone's 'Pair device with pairing code' screen)"; \
+		exit 1; \
+	fi
+	$(ADB) pair $(PAIR_ADDR) $(CODE)
+
+.PHONY: wifi-connect
+wifi-connect: ## Re-attach to a previously paired phone. CONNECT_ADDR=ip:port from the main Wireless Debugging screen.
+	@if [ -z "$(CONNECT_ADDR)" ]; then \
+		echo "Usage: make wifi-connect CONNECT_ADDR=192.168.x.y:PORT"; \
+		echo "       (IP:PORT shown on phone's main Wireless Debugging screen)"; \
+		exit 1; \
+	fi
+	$(ADB) connect $(CONNECT_ADDR)
+	$(ADB) devices
+
+.PHONY: install-wifi
+install-wifi: build-debug-fast ## Connect over WiFi then install. CONNECT_ADDR=ip:port (or run `make wifi-connect` first).
+	@if [ -n "$(CONNECT_ADDR)" ]; then $(ADB) connect $(CONNECT_ADDR); fi
+	$(ADB) install -r $(APK_DEBUG_NO_MINIFY)
+
 .PHONY: ime-enable
 ime-enable: ## Enable + activate TobiBoard as the current IME
 	$(ADB) shell ime enable $(IME_COMPONENT)
