@@ -6,7 +6,7 @@ package helium314.keyboard.latin.voice.local
  * a public HuggingFace `resolve/main/<file>` URL, verified against a pinned SHA-256, and
  * stored under [ModelStorage.dirFor].
  */
-internal sealed interface ModelInfo {
+internal interface ModelInfo {
     val id: String
     val displayName: String
     val files: List<ModelFile>
