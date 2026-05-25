@@ -101,7 +101,7 @@ class TextFixManager(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    @Volatile private var activeClient: OpenRouterClient? = null
+    @Volatile private var activeClient: TextFixEngine? = null
     @Volatile private var activeJob: Job? = null
     @Volatile private var activeToken = 0L
     @Volatile private var state = State.IDLE
@@ -162,7 +162,7 @@ class TextFixManager(
         state = State.WORKING
         callbacks.onWorking()
 
-        val client = OpenRouterClient(
+        val client: TextFixEngine = OpenRouterClient(
             apiKey = apiKey,
             model = model,
             systemPrompt = prompt,

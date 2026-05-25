@@ -70,7 +70,7 @@ class VoiceInputManager(
     @Volatile private var state = State.IDLE
     private var currentAudioFile: File? = null
     @Volatile private var transcriptionJob: Job? = null
-    @Volatile private var transcriptionClient: OpenRouterClient? = null
+    @Volatile private var transcriptionClient: Cancellable? = null
     private val activeTranscriptionToken = AtomicLong(0L)
     @Volatile private var stopFinalizeJob: Job? = null
     @Volatile private var isStopFinalizing = false
@@ -288,7 +288,7 @@ class VoiceInputManager(
         val prompt = resolveVoicePrompt(savedPrompt, localeHint, transcriptionDictionary, expectedLanguages)
         val spacingContext = if (spaceHeuristicEnabled) callbacks.getSpacingContext() else null
 
-        val client = OpenRouterClient(
+        val client: SttEngine = OpenRouterClient(
             apiKey = apiKey,
             model = model,
             systemPrompt = prompt.systemPrompt,
@@ -316,7 +316,7 @@ class VoiceInputManager(
                 // is non-fatal: we keep the raw transcription rather than dropping the user's
                 // recording on the floor.
                 val polished = if (polishEnabled && polishSystemPrompt != null && polishModel != null) {
-                    val polishClient = OpenRouterClient(
+                    val polishClient: TextFixEngine = OpenRouterClient(
                         apiKey = apiKey,
                         model = polishModel,
                         systemPrompt = polishSystemPrompt,
