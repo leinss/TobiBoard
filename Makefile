@@ -141,28 +141,59 @@ install-release: build-release ## Install the signed release APK on the connecte
 # Phone: Settings → System → Developer options → Wireless debugging → ON.
 
 .PHONY: wifi-pair
-wifi-pair: ## One-time pair via WiFi. Open "Pair device with pairing code" on phone, then pass PAIR_ADDR=ip:port CODE=123456
-	@if [ -z "$(PAIR_ADDR)" ] || [ -z "$(CODE)" ]; then \
-		echo "Usage: make wifi-pair PAIR_ADDR=192.168.x.y:PORT CODE=123456"; \
-		echo "       (both shown on phone's 'Pair device with pairing code' screen)"; \
+wifi-pair: ## One-time pair via WiFi. Open "Pair device with pairing code" on phone, then `make wifi-pair CODE=NNNNNN` — pair port auto-discovered via mDNS.
+	@if [ -z "$(CODE)" ]; then \
+		echo "Usage: make wifi-pair CODE=NNNNNN"; \
+		echo "       (open 'Pair device with pairing code' on phone, copy the 6-digit code)"; \
 		exit 1; \
 	fi
-	$(ADB) pair $(PAIR_ADDR) $(CODE)
+	@PAIR_ADDR="$(PAIR_ADDR)"; \
+	if [ -z "$$PAIR_ADDR" ]; then \
+		echo "Discovering pair port via mDNS (Wireless debugging must be ON)..."; \
+		PAIR_ADDR=$$($(ADB) mdns services 2>/dev/null | awk '/_adb-tls-pairing\._tcp/ {print $$NF; exit}'); \
+		if [ -z "$$PAIR_ADDR" ]; then \
+			echo "✗ No _adb-tls-pairing._tcp service found via mDNS."; \
+			echo "  Make sure 'Pair device with pairing code' is open on the phone,"; \
+			echo "  or pass PAIR_ADDR=ip:port manually (use the port from the PAIR dialog,"; \
+			echo "  NOT the port from the main Wireless Debugging screen)."; \
+			exit 1; \
+		fi; \
+		echo "✓ Found pair port: $$PAIR_ADDR"; \
+	fi; \
+	$(ADB) pair $$PAIR_ADDR $(CODE)
 
 .PHONY: wifi-connect
-wifi-connect: ## Re-attach to a previously paired phone. CONNECT_ADDR=ip:port from the main Wireless Debugging screen.
-	@if [ -z "$(CONNECT_ADDR)" ]; then \
-		echo "Usage: make wifi-connect CONNECT_ADDR=192.168.x.y:PORT"; \
-		echo "       (IP:PORT shown on phone's main Wireless Debugging screen)"; \
-		exit 1; \
-	fi
-	$(ADB) connect $(CONNECT_ADDR)
+wifi-connect: ## Re-attach to a previously paired phone. Connect port auto-discovered via mDNS, or pass CONNECT_ADDR=ip:port.
+	@CONNECT_ADDR="$(CONNECT_ADDR)"; \
+	if [ -z "$$CONNECT_ADDR" ]; then \
+		CONNECT_ADDR=$$($(ADB) mdns services 2>/dev/null | awk '/_adb-tls-connect\._tcp/ {print $$NF; exit}'); \
+		if [ -z "$$CONNECT_ADDR" ]; then \
+			echo "✗ No _adb-tls-connect._tcp service found via mDNS."; \
+			echo "  Make sure Wireless Debugging is ON, or pass CONNECT_ADDR=ip:port manually."; \
+			exit 1; \
+		fi; \
+		echo "✓ Found connect port: $$CONNECT_ADDR"; \
+	fi; \
+	$(ADB) connect $$CONNECT_ADDR
 	$(ADB) devices
 
 .PHONY: install-wifi
-install-wifi: build-debug-fast ## Connect over WiFi then install. CONNECT_ADDR=ip:port (or run `make wifi-connect` first).
-	@if [ -n "$(CONNECT_ADDR)" ]; then $(ADB) connect $(CONNECT_ADDR); fi
+install-wifi: build-debug-fast ## Connect over WiFi (auto-discover via mDNS) then install. Override with CONNECT_ADDR=ip:port if needed.
+	@CONNECT_ADDR="$(CONNECT_ADDR)"; \
+	if [ -z "$$CONNECT_ADDR" ]; then \
+		CONNECT_ADDR=$$($(ADB) mdns services 2>/dev/null | awk '/_adb-tls-connect\._tcp/ {print $$NF; exit}'); \
+	fi; \
+	if [ -n "$$CONNECT_ADDR" ]; then $(ADB) connect $$CONNECT_ADDR; fi
 	$(ADB) install -r $(APK_DEBUG_NO_MINIFY)
+
+.PHONY: wifi-bootstrap-via-usb
+wifi-bootstrap-via-usb: ## One-time setup: phone plugged in via USB, switch it into WiFi-debug mode on port 5555.
+	@$(ADB) devices | grep -E "device$$" >/dev/null || { echo "No USB-attached device. Plug in S25 + accept the USB-debug prompt."; exit 1; }
+	$(ADB) tcpip 5555
+	@PHONE_IP=$$($(ADB) shell ip route 2>/dev/null | awk '/wlan0|wlan1/ {print $$9; exit}'); \
+	echo ""; \
+	echo "Phone IP on WiFi: $$PHONE_IP"; \
+	echo "Unplug USB now. To install: make install-wifi CONNECT_ADDR=$$PHONE_IP:5555"
 
 .PHONY: ime-enable
 ime-enable: ## Enable + activate TobiBoard as the current IME
