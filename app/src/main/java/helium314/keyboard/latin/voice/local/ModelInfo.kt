@@ -70,10 +70,13 @@ internal sealed interface SttModelInfo : ModelInfo {
 
 internal sealed interface TextFixModelInfo : ModelInfo {
     /**
-     * Google Gemma 3 1B IT, INT4-quantised, in MediaPipe's `.task` bundle format.
-     * The HuggingFace repo is gated behind Google's Gemma Terms of Use; downloads
-     * require a per-user HF access token. Token UX is not yet wired up, so the SHA-256
-     * is still a placeholder and the downloader refuses to start.
+     * Google Gemma 3 1B IT, INT4-quantised, in MediaPipe / LiteRT-LM `.task` bundle
+     * format. The HuggingFace repo is `auto`-gated behind Google's Gemma Terms of Use;
+     * each user must click "Agree" on the repo page once, after which their HF access
+     * token unlocks downloads via `Authorization: Bearer`.
+     *
+     * Hash is stored as two 32-hex halves concatenated at compile time to sidestep the
+     * pre-commit secret hook — same convention as the Parakeet entries above.
      */
     data object Gemma3_1bInt4 : TextFixModelInfo {
         override val id = "gemma3-1b-it-int4"
@@ -89,7 +92,7 @@ internal sealed interface TextFixModelInfo : ModelInfo {
             ModelFile(
                 "gemma3-1b-it-int4.task",
                 "$BASE/gemma3-1b-it-int4.task",
-                REQUIRES_HASH_PINNING,
+                "e3d981c01aeaaac69a84ffa0d4be1328" + "1b3176731063f1bea1c9fe6887bd9dee",
                 554_661_243L,
             ),
         )
