@@ -47,17 +47,14 @@ internal class LocalLiteRtEngine(
     }
 }
 
-/** Gemma-IT single-turn chat template: system + user folded into one user turn. */
+/**
+ * The Gemma `.task` bundle applies its own chat template inside MediaPipe at runtime — passing
+ * a pre-wrapped `<start_of_turn>user…<end_of_turn>` string double-templates and (on ARM64
+ * Gemma 3 1B INT4) makes the model emit only the EOS token, returning 0 chars. So we pass
+ * the system prompt + user text as plain text and let MediaPipe handle the templating.
+ */
 private fun formatGemmaChat(systemPrompt: String, userText: String): String =
-    buildString {
-        append("<start_of_turn>user\n")
-        if (systemPrompt.isNotBlank()) {
-            append(systemPrompt.trim())
-            append("\n\n")
-        }
-        append(userText)
-        append("<end_of_turn>\n<start_of_turn>model\n")
-    }
+    if (systemPrompt.isBlank()) userText else "${systemPrompt.trim()}\n\n$userText"
 
 private object SharedLlm {
     private const val TAG = "LocalLiteRtEngine"
