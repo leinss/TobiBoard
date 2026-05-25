@@ -27,9 +27,10 @@ EMULATOR := $(ANDROID_SDK_ROOT)/emulator/emulator
 ADB := $(ANDROID_SDK_ROOT)/platform-tools/adb
 
 # When both emulator and a wifi-paired phone are attached, `adb install` errors
-# with "more than one device". Pick the wifi phone for the wifi-* targets so the
-# phone's APK doesn't silently land on the emulator.
-ADB_WIFI_SERIAL = $$($(ADB) devices | awk '/_adb-tls-connect|adb-.*-.* / && !/emulator-/ {print $$1; exit}')
+# with "more than one device". Pick the right serial per make target so the APK
+# never lands on the wrong device.
+ADB_PHONE_SERIAL = $$($(ADB) devices | awk '/_adb-tls-connect|adb-.*-.* / && !/emulator-/ {print $$1; exit}')
+ADB_SIM_SERIAL   = $$($(ADB) devices | awk '/^emulator-/ {print $$1; exit}')
 
 .PHONY: help
 help:
@@ -133,12 +134,75 @@ emulator-stop: ## Power off the running emulator
 ## --- install / IME wiring -------------------------------------------------
 
 .PHONY: install
-install: build-debug-fast ## Install the unminified debug APK on the connected device (emulator or USB-connected phone)
+install: build-debug-fast ## Install on whatever single device is attached; fails loudly if both phone + emulator are attached.
+	@DEVICES=$$($(ADB) devices | awk 'NR>1 && $$2=="device" {print $$1}' | wc -l | tr -d ' '); \
+	if [ "$$DEVICES" -gt 1 ]; then \
+		echo "✗ Multiple devices attached. Use 'make sim-install' or 'make phone-install' (or 'make install-wifi') to disambiguate."; \
+		$(ADB) devices; \
+		exit 1; \
+	fi
 	$(ADB) install -r $(APK_DEBUG_NO_MINIFY)
 
 .PHONY: install-release
 install-release: build-release ## Install the signed release APK on the connected device
 	$(ADB) install -r $(APK_RELEASE)
+
+## --- per-device targets (sim vs phone) -----------------------------------
+
+.PHONY: sim-install
+sim-install: build-debug-fast ## Install on the running emulator only.
+	@SERIAL=$(ADB_SIM_SERIAL); \
+	if [ -z "$$SERIAL" ]; then echo "✗ No emulator running. Try 'make emulator-up' first."; exit 1; fi; \
+	echo "→ installing to $$SERIAL"; \
+	$(ADB) -s "$$SERIAL" install -r $(APK_DEBUG_NO_MINIFY); \
+	$(ADB) -s "$$SERIAL" shell am force-stop $(PKG_DEBUG)
+
+.PHONY: phone-install
+phone-install: install-wifi ## Alias for install-wifi — install on the WiFi-paired phone.
+
+.PHONY: sim-restart-ime
+sim-restart-ime: ## Force-stop the IME on the emulator so a freshly installed APK loads.
+	@SERIAL=$(ADB_SIM_SERIAL); \
+	if [ -z "$$SERIAL" ]; then echo "✗ No emulator running."; exit 1; fi; \
+	$(ADB) -s "$$SERIAL" shell am force-stop $(PKG_DEBUG) && echo "✓ IME restarted on $$SERIAL"
+
+.PHONY: phone-restart-ime
+phone-restart-ime: ## Force-stop the IME on the WiFi phone so a freshly installed APK loads.
+	@SERIAL=$(ADB_PHONE_SERIAL); \
+	if [ -z "$$SERIAL" ]; then echo "✗ No WiFi phone connected. 'make wifi-connect' first."; exit 1; fi; \
+	$(ADB) -s "$$SERIAL" shell am force-stop $(PKG_DEBUG) && echo "✓ IME restarted on $$SERIAL"
+
+.PHONY: sim-logcat
+sim-logcat: ## Tail TobiBoard logs from the emulator
+	@SERIAL=$(ADB_SIM_SERIAL); \
+	if [ -z "$$SERIAL" ]; then echo "✗ No emulator running."; exit 1; fi; \
+	$(ADB) -s "$$SERIAL" logcat -v color LatinIME:V VoiceInputManager:V TextFixManager:V OpenRouterClient:V LocalSherpaEngine:V LocalLiteRtEngine:V ModelDownloader:V AndroidRuntime:E '*:S'
+
+.PHONY: phone-logcat
+phone-logcat: ## Tail TobiBoard logs from the WiFi phone
+	@SERIAL=$(ADB_PHONE_SERIAL); \
+	if [ -z "$$SERIAL" ]; then echo "✗ No WiFi phone connected."; exit 1; fi; \
+	$(ADB) -s "$$SERIAL" logcat -v color LatinIME:V VoiceInputManager:V TextFixManager:V OpenRouterClient:V LocalSherpaEngine:V LocalLiteRtEngine:V ModelDownloader:V AndroidRuntime:E '*:S'
+
+.PHONY: phone-status
+phone-status: ## Show package version + permissions on the WiFi phone
+	@SERIAL=$(ADB_PHONE_SERIAL); \
+	if [ -z "$$SERIAL" ]; then echo "✗ No WiFi phone connected."; exit 1; fi; \
+	echo "--- version ---"; \
+	$(ADB) -s "$$SERIAL" shell dumpsys package $(PKG_DEBUG) | grep -E "versionName|lastUpdateTime" | head -2; \
+	echo "--- runtime permissions ---"; \
+	$(ADB) -s "$$SERIAL" shell dumpsys package $(PKG_DEBUG) | grep -E "RECORD_AUDIO|VIBRATE" | head -5; \
+	echo "--- IME state ---"; \
+	$(ADB) -s "$$SERIAL" shell settings get secure default_input_method
+
+.PHONY: sim-status
+sim-status: ## Show package version + permissions on the emulator
+	@SERIAL=$(ADB_SIM_SERIAL); \
+	if [ -z "$$SERIAL" ]; then echo "✗ No emulator running."; exit 1; fi; \
+	echo "--- version ---"; \
+	$(ADB) -s "$$SERIAL" shell dumpsys package $(PKG_DEBUG) | grep -E "versionName|lastUpdateTime" | head -2; \
+	echo "--- IME state ---"; \
+	$(ADB) -s "$$SERIAL" shell settings get secure default_input_method
 
 ## --- wifi pairing --------------------------------------------------------
 # Pair once per device (the 6-digit code is one-shot, valid for ~30 s); after that
@@ -189,7 +253,7 @@ install-wifi: build-debug-fast ## Connect over WiFi (auto-discover via mDNS) the
 		CONNECT_ADDR=$$($(ADB) mdns services 2>/dev/null | awk '/_adb-tls-connect\._tcp/ {print $$NF; exit}'); \
 	fi; \
 	if [ -n "$$CONNECT_ADDR" ]; then $(ADB) connect $$CONNECT_ADDR; fi
-	@SERIAL=$(ADB_WIFI_SERIAL); \
+	@SERIAL=$(ADB_PHONE_SERIAL); \
 	if [ -z "$$SERIAL" ]; then \
 		echo "✗ No WiFi-attached phone found via adb devices (saw only emulator/USB)."; \
 		exit 1; \
