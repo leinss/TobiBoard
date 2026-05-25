@@ -79,6 +79,14 @@ apk-release: build-release ## Build the signed release APK and print its path
 clean: ## Wipe build outputs
 	./gradlew clean
 
+.PHONY: update-fork
+update-fork: ## Rebase TobiBoard onto upstream (WisprBoard) via the global update-forks binary; tail the result
+	@command -v update-forks >/dev/null 2>&1 || { echo "update-forks not on PATH (expected ~/.local/bin/update-forks)"; exit 1; }
+	update-forks
+	@echo ""
+	@echo "--- TobiBoard log entries (last run) ---"
+	@grep -A0 -B0 "TobiBoard" ~/.local/log/update-forks.log | tail -30 || true
+
 ## --- emulator lifecycle ---------------------------------------------------
 
 .PHONY: emulator-system-image
