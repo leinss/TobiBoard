@@ -1206,6 +1206,12 @@ New dictionary:
     <string name="voice_prompt_preset_translate_en_text">Transcribe this audio and translate it into natural English. Output only the English translation, nothing else.</string>
     <string name="voice_prompt_preset_overwrite_title">Replace prompt?</string>
     <string name="voice_prompt_preset_overwrite_message">This will overwrite your customized prompt with the selected preset.</string>
+    <!-- Local-model downloader -->
+    <string name="local_model_download_channel_name">Local model downloads</string>
+    <string name="local_model_download_channel_description">Progress notifications for downloading on-device speech and text models.</string>
+    <string name="local_model_download_title">Downloading <xliff:g id="model">%1$s</xliff:g></string>
+    <string name="local_model_download_in_progress">Fetching model files…</string>
+    <string name="local_model_verifying">Verifying…</string>
     <string name="setup_ai_provider_title">Set up AI voice</string>
     <string name="setup_ai_provider_instruction">Choose OpenRouter or PayPerQ, add the matching API key, and allow microphone access now. You can skip and configure this later from Voice settings.</string>
     <string name="setup_ai_provider_status">Provider: %1$s\nAPI key: %2$s\nMicrophone: %3$s\nVoice input: %4$s</string>
