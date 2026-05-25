@@ -1207,11 +1207,26 @@ New dictionary:
     <string name="voice_prompt_preset_overwrite_title">Replace prompt?</string>
     <string name="voice_prompt_preset_overwrite_message">This will overwrite your customized prompt with the selected preset.</string>
     <!-- Local-model downloader -->
+    <string name="local_models_title">On-device models</string>
     <string name="local_model_download_channel_name">Local model downloads</string>
     <string name="local_model_download_channel_description">Progress notifications for downloading on-device speech and text models.</string>
     <string name="local_model_download_title">Downloading <xliff:g id="model">%1$s</xliff:g></string>
     <string name="local_model_download_in_progress">Fetching model files…</string>
     <string name="local_model_verifying">Verifying…</string>
+    <string name="local_model_size">Size: <xliff:g id="bytes">%1$s</xliff:g></string>
+    <string name="local_model_size_unknown">size pending</string>
+    <string name="local_model_low_space">Not enough free space to download safely.</string>
+    <string name="local_model_download">Download</string>
+    <string name="local_model_delete">Delete</string>
+    <string name="local_model_state_not_downloaded">Not downloaded</string>
+    <string name="local_model_state_queued">Queued…</string>
+    <string name="local_model_state_downloading">File <xliff:g id="index">%1$d</xliff:g>/<xliff:g id="count">%2$d</xliff:g>: <xliff:g id="file">%3$s</xliff:g> · <xliff:g id="percent">%4$d</xliff:g>%%</string>
+    <string name="local_model_state_verifying">Verifying <xliff:g id="file">%1$s</xliff:g>…</string>
+    <string name="local_model_state_ready">Ready</string>
+    <string name="local_model_state_cancelled">Cancelled</string>
+    <string name="local_model_state_failed">Failed: <xliff:g id="reason">%1$s</xliff:g></string>
+    <string name="local_model_license_title">Accept license for <xliff:g id="model">%1$s</xliff:g>?</string>
+    <string name="local_model_license_accept">Accept &amp; download</string>
     <string name="setup_ai_provider_title">Set up AI voice</string>
     <string name="setup_ai_provider_instruction">Choose OpenRouter or PayPerQ, add the matching API key, and allow microphone access now. You can skip and configure this later from Voice settings.</string>
     <string name="setup_ai_provider_status">Provider: %1$s\nAPI key: %2$s\nMicrophone: %3$s\nVoice input: %4$s</string>
