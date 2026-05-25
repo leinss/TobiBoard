@@ -104,7 +104,9 @@ fun WelcomeWizard(
     fun isAiProviderReady(): Boolean {
         val prefs = ctx.prefs()
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
-        return SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).isNotBlank()
+        val credentialReady = !provider.isCloud ||
+            SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).isNotBlank()
+        return credentialReady
                 && prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)
                 && PermissionsUtil.checkAllPermissionsGranted(ctx, Manifest.permission.RECORD_AUDIO)
     }
@@ -363,7 +365,13 @@ fun WelcomeWizard(
                         progressHeader = { ProgressHeader(it) },
                         primaryAction = { actionText, icon, action -> PrimaryAction(actionText, icon, action) },
                         secondaryAction = { actionText, icon, action -> SecondaryAction(actionText, icon, action) },
-                        onProviderConfigured = { step = apiKeyStep },
+                        onProviderConfigured = {
+                            // LOCAL has no API key; skip step 4 entirely.
+                            val picked = AiProvider.fromPref(
+                                ctx.prefs().getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
+                            )
+                            step = if (picked.isCloud) apiKeyStep else languageStep
+                        },
                         onApiKeyConfigured = { step = languageStep },
                         onLanguageConfigured = { step = voiceStep },
                         onVoiceConfigured = { step = doneStep },
@@ -545,7 +553,7 @@ private fun AiProviderSetupStep(
     if (showProviderDialog) {
         ListPickerDialog(
             onDismissRequest = { showProviderDialog = false },
-            items = listOf(AiProvider.OPENROUTER, AiProvider.PAYPERQ),
+            items = listOf(AiProvider.OPENROUTER, AiProvider.PAYPERQ, AiProvider.LOCAL),
             onItemSelected = {
                 selectProvider(it)
                 showProviderDialog = false
