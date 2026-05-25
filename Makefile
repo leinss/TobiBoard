@@ -10,7 +10,10 @@ APK_DEBUG := app/build/outputs/apk/debug/TobiBoard_6.6.0-debug.apk
 APK_RELEASE := app/build/outputs/apk/release/TobiBoard_6.6.0-release.apk
 
 AVD_NAME ?= tobiboard_pixel6_api34
-SYSTEM_IMAGE := system-images;android-34;aosp_atd;arm64-v8a
+# google_apis (vs aosp_atd) gives us a properly rendering framebuffer on macOS:
+# the prior aosp_atd image had services + activities running, but `screencap -p`
+# returned all-black under both swiftshader and host-GPU.
+SYSTEM_IMAGE := system-images;android-34;google_apis;arm64-v8a
 DEVICE_PROFILE := pixel_6
 
 ANDROID_SDK_ROOT ?= /opt/homebrew/share/android-commandlinetools
