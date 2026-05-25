@@ -52,9 +52,24 @@ internal class LocalLiteRtEngine(
  * a pre-wrapped `<start_of_turn>user…<end_of_turn>` string double-templates and (on ARM64
  * Gemma 3 1B INT4) makes the model emit only the EOS token, returning 0 chars. So we pass
  * the system prompt + user text as plain text and let MediaPipe handle the templating.
+ *
+ * Gemma 3 1B INT4 is a 1B-parameter model and routinely ignores "no commentary" instructions
+ * that appear once near the top of the prompt — it likes to append a chatty "I've corrected
+ * the errors and improved grammar…" summary after the corrected text. Wrapping the input with
+ * an Input/Output block and repeating the strict "reply with only…" rule immediately before
+ * generation suppresses that behavior far more reliably (small models weight the trailing
+ * tokens of the prompt highest).
  */
-private fun formatGemmaChat(systemPrompt: String, userText: String): String =
-    if (systemPrompt.isBlank()) userText else "${systemPrompt.trim()}\n\n$userText"
+private fun formatGemmaChat(systemPrompt: String, userText: String): String = buildString {
+    val sp = systemPrompt.trim()
+    if (sp.isNotEmpty()) {
+        append(sp)
+        append("\n\n")
+    }
+    append("Input:\n")
+    append(userText)
+    append("\n\nReply with ONLY the result. No preamble, no quotes, no explanation, no summary, no commentary. Output nothing else.\nOutput:\n")
+}
 
 private object SharedLlm {
     private const val TAG = "LocalLiteRtEngine"
