@@ -61,12 +61,15 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
             }
         }
         // Icon-only square button signalling that the truncated result can be expanded into a
-        // popup. Pure glyph ("⛶") so we don't need a new drawable resource.
+        // popup. ⛶ is a typographic glyph whose default font metrics include extra top/bottom
+        // padding (and its visual center sits below the baseline), so disable font padding and
+        // bias the vertical padding upward to make it sit visually centered.
         expandButton = TextView(context).apply {
             text = "⛶"
-            textSize = 18f
+            textSize = 20f
             gravity = Gravity.CENTER
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            includeFontPadding = false
+            setPadding(dp(10), dp(4), dp(10), dp(10))
             isClickable = true
             isFocusable = true
             minHeight = dp(36)
