@@ -26,6 +26,11 @@ AVDMANAGER := $(ANDROID_SDK_ROOT)/cmdline-tools/latest/bin/avdmanager
 EMULATOR := $(ANDROID_SDK_ROOT)/emulator/emulator
 ADB := $(ANDROID_SDK_ROOT)/platform-tools/adb
 
+# When both emulator and a wifi-paired phone are attached, `adb install` errors
+# with "more than one device". Pick the wifi phone for the wifi-* targets so the
+# phone's APK doesn't silently land on the emulator.
+ADB_WIFI_SERIAL = $$($(ADB) devices | awk '/_adb-tls-connect|adb-.*-.* / && !/emulator-/ {print $$1; exit}')
+
 .PHONY: help
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ { printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -178,13 +183,21 @@ wifi-connect: ## Re-attach to a previously paired phone. Connect port auto-disco
 	$(ADB) devices
 
 .PHONY: install-wifi
-install-wifi: build-debug-fast ## Connect over WiFi (auto-discover via mDNS) then install. Override with CONNECT_ADDR=ip:port if needed.
+install-wifi: build-debug-fast ## Connect over WiFi (auto-discover via mDNS) then install on the WiFi-paired phone (not the emulator).
 	@CONNECT_ADDR="$(CONNECT_ADDR)"; \
 	if [ -z "$$CONNECT_ADDR" ]; then \
 		CONNECT_ADDR=$$($(ADB) mdns services 2>/dev/null | awk '/_adb-tls-connect\._tcp/ {print $$NF; exit}'); \
 	fi; \
 	if [ -n "$$CONNECT_ADDR" ]; then $(ADB) connect $$CONNECT_ADDR; fi
-	$(ADB) install -r $(APK_DEBUG_NO_MINIFY)
+	@SERIAL=$(ADB_WIFI_SERIAL); \
+	if [ -z "$$SERIAL" ]; then \
+		echo "✗ No WiFi-attached phone found via adb devices (saw only emulator/USB)."; \
+		exit 1; \
+	fi; \
+	echo "→ installing to $$SERIAL"; \
+	$(ADB) -s "$$SERIAL" install -r $(APK_DEBUG_NO_MINIFY); \
+	echo "→ force-stopping IME so the new APK loads on next text-field focus"; \
+	$(ADB) -s "$$SERIAL" shell am force-stop $(PKG_DEBUG)
 
 .PHONY: wifi-bootstrap-via-usb
 wifi-bootstrap-via-usb: ## One-time setup: phone plugged in via USB, switch it into WiFi-debug mode on port 5555.
