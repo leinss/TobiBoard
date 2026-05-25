@@ -25,6 +25,7 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
@@ -60,6 +61,7 @@ import helium314.keyboard.latin.utils.removeFirst
 import helium314.keyboard.latin.utils.removePinnedKey
 import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
 import helium314.keyboard.latin.voice.RecordingOverlayView
+import helium314.keyboard.latin.voice.TextFixExpandedPopup
 import helium314.keyboard.latin.voice.TextFixOverlayView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
@@ -308,6 +310,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun showRecordingOverlay() {
+        // The overlay is hosted inside `suggestionsStrip`. If the user opened the toolbar (the
+        // chevron), `suggestionsStrip` is hidden behind `toolbarContainer` — and the overlay
+        // would render into an invisible parent. Force the strip back into view so the overlay
+        // is always seen, regardless of which mic button triggered the recording.
+        setToolbarVisibility(false)
         val overlay = RecordingOverlayView(context)
         overlay.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
         overlay.onStopClick = { onStopRecording?.run() }
@@ -334,6 +341,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var textFixOverlay: TextFixOverlayView? = null
     private var onReplaceTextFix: Runnable? = null
     private var onDiscardTextFix: Runnable? = null
+    private var textFixProposedText: String? = null
+    private var textFixExpandedPopup: PopupWindow? = null
 
     fun setOnReplaceTextFix(callback: Runnable?) {
         onReplaceTextFix = callback
@@ -344,10 +353,14 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun showTextFixWorking() {
+        // Same reason as showRecordingOverlay(): if the toolbar is open the strip is hidden and
+        // our overlay would be invisible. Force the strip back to make the working state visible.
+        setToolbarVisibility(false)
         val overlay = textFixOverlay ?: TextFixOverlayView(context).also {
             it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
             it.onReplaceClick = { onReplaceTextFix?.run() }
             it.onDiscardClick = { onDiscardTextFix?.run() }
+            it.onExpandClick = { showTextFixExpandedPopup() }
         }
         overlay.showWorking()
         if (textFixOverlay == null) {
@@ -357,6 +370,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun showTextFixResult(proposed: String) {
+        textFixProposedText = proposed
         textFixOverlay?.showResult(proposed)
     }
 
@@ -365,9 +379,24 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun hideTextFixOverlay() {
+        textFixExpandedPopup?.dismiss()
+        textFixExpandedPopup = null
+        textFixProposedText = null
         textFixOverlay = null
         clear()
         isExternalSuggestionVisible = false
+    }
+
+    private fun showTextFixExpandedPopup() {
+        val proposed = textFixProposedText ?: return
+        textFixExpandedPopup?.dismiss()
+        textFixExpandedPopup = TextFixExpandedPopup.show(
+            anchor = this,
+            proposed = proposed,
+            textColor = Settings.getValues().mColors.get(ColorType.KEY_TEXT),
+            onReplace = { onReplaceTextFix?.run() },
+            onDiscard = { onDiscardTextFix?.run() },
+        )
     }
 
     fun setMoreSuggestionsHeight(remainingHeight: Int) {
