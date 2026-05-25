@@ -33,9 +33,13 @@ internal class LocalLiteRtEngine(
         val prompt = formatGemmaChat(systemPrompt, userText)
         if (cancelled) return ""
         val started = System.currentTimeMillis()
-        val out = inference.generateResponse(prompt)
-        Log.i(TAG, "generated ${out.length} chars in ${System.currentTimeMillis() - started} ms")
-        return out
+        val raw = inference.generateResponse(prompt)
+        val cleaned = stripTrailingCommentary(raw)
+        Log.i(
+            TAG,
+            "generated ${raw.length} chars in ${System.currentTimeMillis() - started} ms (after commentary strip: ${cleaned.length})"
+        )
+        return cleaned
     }
 
     companion object {
@@ -53,22 +57,77 @@ internal class LocalLiteRtEngine(
  * Gemma 3 1B INT4) makes the model emit only the EOS token, returning 0 chars. So we pass
  * the system prompt + user text as plain text and let MediaPipe handle the templating.
  *
- * Gemma 3 1B INT4 is a 1B-parameter model and routinely ignores "no commentary" instructions
- * that appear once near the top of the prompt — it likes to append a chatty "I've corrected
- * the errors and improved grammar…" summary after the corrected text. Wrapping the input with
- * an Input/Output block and repeating the strict "reply with only…" rule immediately before
- * generation suppresses that behavior far more reliably (small models weight the trailing
- * tokens of the prompt highest).
+ * Prompt envelope history (Gemma 3 1B INT4 is finicky):
+ *  - Plain `{system}\n\n{user}` → produced the corrected text *plus* a chatty meta-summary
+ *    ("I've corrected the errors and improved grammar…") that leaked into the replacement.
+ *  - Strict envelope with "Reply with ONLY…" and `Input:`/`Output:` markers → model
+ *    over-corrected: it decided the safest "result" was to echo the input unchanged.
+ *  - Current: minimal envelope (no over-restrictive language). Trailing commentary is
+ *    stripped deterministically in [stripTrailingCommentary] — far more reliable than
+ *    asking a 1B model to suppress itself.
  */
-private fun formatGemmaChat(systemPrompt: String, userText: String): String = buildString {
-    val sp = systemPrompt.trim()
-    if (sp.isNotEmpty()) {
-        append(sp)
-        append("\n\n")
+private fun formatGemmaChat(systemPrompt: String, userText: String): String =
+    if (systemPrompt.isBlank()) userText else "${systemPrompt.trim()}\n\n$userText"
+
+/**
+ * Pattern of phrases small models append after the corrected text to narrate what they did.
+ * Match against trimmed-left line content; first hit cuts the output at the prior paragraph.
+ * The phrases are intentionally common-suffix-like — false positives would only fire when a
+ * legitimate result starts with one of these openings, which fix/translate/rewrite tasks
+ * essentially never do.
+ */
+private val COMMENTARY_TRIGGERS = listOf(
+    "I've corrected",
+    "I have corrected",
+    "I corrected",
+    "I've fixed",
+    "I have fixed",
+    "I fixed",
+    "I've improved",
+    "I have improved",
+    "I improved",
+    "I've made",
+    "I've rewritten",
+    "I rewrote",
+    "I've added",
+    "Here's the corrected",
+    "Here is the corrected",
+    "Here's the fixed",
+    "Here is the fixed",
+    "Here's the improved",
+    "The corrected text",
+    "The corrected sentence",
+    "The corrected version",
+    "The fixed text",
+    "The fixed version",
+    "The edited text",
+    "The improved text",
+    "The improved version",
+    "The rewritten text",
+    "This text requires",
+    "This sentence",
+    "Note:",
+    "Note that",
+    "Explanation:",
+    "Changes made",
+    "Changes:",
+    "Corrections:",
+)
+
+internal fun stripTrailingCommentary(raw: String): String {
+    if (raw.isBlank()) return raw
+    val lines = raw.lines()
+    val kept = mutableListOf<String>()
+    for (line in lines) {
+        val head = line.trimStart()
+        if (COMMENTARY_TRIGGERS.any { head.startsWith(it, ignoreCase = true) }) break
+        kept += line
     }
-    append("Input:\n")
-    append(userText)
-    append("\n\nReply with ONLY the result. No preamble, no quotes, no explanation, no summary, no commentary. Output nothing else.\nOutput:\n")
+    // If the very first line trips a trigger we'd return empty — fall back to the raw text
+    // rather than discarding the model's whole reply. This protects against a customised user
+    // prompt that legitimately asks for a "Here is…" style answer.
+    if (kept.all { it.isBlank() }) return raw.trim()
+    return kept.joinToString("\n").trimEnd()
 }
 
 private object SharedLlm {
