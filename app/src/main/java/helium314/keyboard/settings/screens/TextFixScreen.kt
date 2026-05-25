@@ -57,10 +57,10 @@ fun TextFixScreen(
         settings = listOf(
             Settings.PREF_TEXT_FIX_ENABLED,
             if (enabled) Settings.PREF_AI_PROVIDER else null,
-            if (enabled) provider.apiKeyPrefKey() else null,
+            if (enabled && provider.isCloud) provider.apiKeyPrefKey() else null,
             if (enabled && provider == AiProvider.OPENROUTER) Settings.PREF_OPENROUTER_ZDR_ENABLED else null,
-            if (enabled) Settings.PREF_TEXT_FIX_MODEL else null,
-            if (enabled && model == "custom") Settings.PREF_TEXT_FIX_MODEL_CUSTOM else null,
+            if (enabled && provider.isCloud) Settings.PREF_TEXT_FIX_MODEL else null,
+            if (enabled && provider.isCloud && model == "custom") Settings.PREF_TEXT_FIX_MODEL_CUSTOM else null,
             if (enabled) Settings.PREF_TEXT_FIX_PROMPT else null,
             Settings.PREF_TEXT_FIX_2_ENABLED,
             if (secondEnabled) Settings.PREF_TEXT_FIX_2_PROMPT else null,
