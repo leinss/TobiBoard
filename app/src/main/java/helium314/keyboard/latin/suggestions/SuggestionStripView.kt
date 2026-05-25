@@ -389,6 +389,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
 
     private fun showTextFixExpandedPopup() {
         val proposed = textFixProposedText ?: return
+        // Diagnostic: a user report claims the popup renders the originally-selected text
+        // instead of the model's proposed replacement. The code path here clearly reads from
+        // `textFixProposedText`, which is only ever set in `showTextFixResult(proposed)`. Log
+        // the prefix so we can correlate with the strip's contents from a real reproduction.
+        Log.i(TAG, "showTextFixExpandedPopup proposed.len=${proposed.length} head=\"${proposed.take(60)}\"")
         textFixExpandedPopup?.dismiss()
         textFixExpandedPopup = TextFixExpandedPopup.show(
             anchor = this,

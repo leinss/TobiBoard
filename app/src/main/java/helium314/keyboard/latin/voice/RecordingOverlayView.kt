@@ -6,6 +6,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
@@ -16,6 +17,7 @@ import android.view.animation.LinearInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import helium314.keyboard.latin.R
 
 /**
@@ -74,21 +76,19 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
 
     // 32dp keeps the buttons inside the ~44dp suggestion strip with comfortable vertical
     // breathing room; the 6dp sibling gap preserves separation without crowding the timer.
+    //
+    // Iconography: cancel uses an X (universal "discard"), stop uses a checkmark ("submit").
+    // The earlier square-vs-dot pair was ambiguous — users couldn't tell which one threw the
+    // recording away vs which one sent it for transcription.
     private fun makeRoundButton(isCancel: Boolean, descRes: Int, onClick: () -> Unit): ImageView {
         val size = dp(32)
+        val iconRes = if (isCancel) R.drawable.ic_close else R.drawable.ic_setup_check
         return ImageView(context).apply {
             layoutParams = LayoutParams(size, size).apply { marginStart = dp(6) }
-            val bg = GradientDrawable().apply { shape = GradientDrawable.OVAL }
-            background = bg
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-            val innerSize = dp(11)
-            val icon = GradientDrawable().apply {
-                shape = if (isCancel) GradientDrawable.OVAL else GradientDrawable.RECTANGLE
-                if (!isCancel) cornerRadius = dp(2).toFloat()
-                setSize(innerSize, innerSize)
-            }
-            setImageDrawable(icon)
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setImageDrawable(ContextCompat.getDrawable(context, iconRes)?.mutate())
+            setPadding(dp(7), dp(7), dp(7), dp(7))
             isClickable = true
             isFocusable = true
             contentDescription = context.getString(descRes)
@@ -100,13 +100,17 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         statusText.setTextColor(textColor)
         timerText.setTextColor((textColor and 0x00FFFFFF) or 0xAA000000.toInt())
         meterView.meterColor = textColor
-        // Stop button gets normal text color; cancel gets a muted hue so users can tell them apart.
+        // Stop button (✓ submit) is the primary action: stronger ring + full-opacity glyph.
         (stopButton.background as? GradientDrawable)
             ?.setColor((textColor and 0x00FFFFFF) or 0x22000000)
-        (stopButton.drawable as? GradientDrawable)?.setColor(textColor)
+        stopButton.drawable?.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
+        // Cancel button (✕ discard) is secondary: subtler ring + muted glyph.
         (cancelButton.background as? GradientDrawable)
             ?.setColor((textColor and 0x00FFFFFF) or 0x11000000)
-        (cancelButton.drawable as? GradientDrawable)?.setColor((textColor and 0x00FFFFFF) or 0x99000000.toInt())
+        cancelButton.drawable?.setColorFilter(
+            (textColor and 0x00FFFFFF) or 0x99000000.toInt(),
+            PorterDuff.Mode.SRC_IN,
+        )
     }
 
     fun showRecording() {
