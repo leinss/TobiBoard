@@ -34,6 +34,8 @@ internal class ModelDownloader(
         private const val BUFFER_SIZE = 64 * 1024
         private const val PROGRESS_BYTE_INTERVAL = 256L * 1024L
         private const val PROGRESS_TIME_INTERVAL_MS = 200L
+        private const val MAX_REDIRECTS = 5
+        private val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
     }
 
     /**
@@ -145,9 +147,10 @@ internal class ModelDownloader(
         resumeFrom: Long,
         authToken: String?,
     ): Pair<HttpURLConnection, Boolean> {
-        val connection = newConnection(url, authToken).apply {
-            if (resumeFrom > 0) setRequestProperty("Range", "bytes=$resumeFrom-")
+        val configure: (HttpURLConnection) -> Unit = {
+            if (resumeFrom > 0) it.setRequestProperty("Range", "bytes=$resumeFrom-")
         }
+        val connection = newConnection(url, authToken, configure)
         val code = connection.responseCode
         return when {
             code == HttpURLConnection.HTTP_PARTIAL -> connection to true
@@ -155,7 +158,7 @@ internal class ModelDownloader(
             code == 416 && resumeFrom > 0 -> {
                 connection.disconnect()
                 // Range exceeded — server thinks we already have everything. Restart from 0.
-                val fresh = newConnection(url, authToken)
+                val fresh = newConnection(url, authToken) {}
                 val freshCode = fresh.responseCode
                 if (freshCode != HttpURLConnection.HTTP_OK) {
                     fresh.disconnect()
@@ -170,14 +173,38 @@ internal class ModelDownloader(
         }
     }
 
-    private fun newConnection(url: String, authToken: String?): HttpURLConnection =
-        (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = connectTimeoutMs
-            readTimeout = readTimeoutMs
-            requestMethod = "GET"
-            instanceFollowRedirects = true
-            if (authToken != null) setRequestProperty("Authorization", "Bearer $authToken")
+    private fun newConnection(
+        url: String,
+        authToken: String?,
+        configure: (HttpURLConnection) -> Unit,
+    ): HttpURLConnection {
+        // Follow redirects manually so the Authorization header is dropped on the second
+        // hop. HF returns 302 to a presigned CDN URL on cas-bridge.xethub.hf.co; that
+        // URL carries its own AWS signature and rejects extra auth headers with HTTP 401.
+        var current = url
+        var hopsTaken = 0
+        repeat(MAX_REDIRECTS) {
+            val conn = (URL(current).openConnection() as HttpURLConnection).apply {
+                connectTimeout = connectTimeoutMs
+                readTimeout = readTimeoutMs
+                requestMethod = "GET"
+                instanceFollowRedirects = false
+                if (authToken != null && hopsTaken == 0) {
+                    setRequestProperty("Authorization", "Bearer $authToken")
+                }
+                configure(this)
+            }
+            val code = conn.responseCode
+            if (code !in REDIRECT_CODES) return conn
+            val location = conn.getHeaderField("Location") ?: run {
+                conn.disconnect(); throw IOException("HTTP $code without Location for $current")
+            }
+            conn.disconnect()
+            current = URL(URL(current), location).toString()
+            hopsTaken++
         }
+        throw IOException("Too many redirects starting at $url")
+    }
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
