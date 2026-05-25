@@ -1227,6 +1227,15 @@ New dictionary:
     <string name="local_model_state_failed">Failed: <xliff:g id="reason">%1$s</xliff:g></string>
     <string name="local_model_license_title">Accept license for <xliff:g id="model">%1$s</xliff:g>?</string>
     <string name="local_model_license_accept">Accept &amp; download</string>
+    <string name="local_model_auth_required">Hugging Face access token required. Open On-device models settings to add yours.</string>
+    <string name="local_model_hf_token_title">Hugging Face access token</string>
+    <string name="local_model_hf_token_status_set">Saved · tap to update or clear</string>
+    <string name="local_model_hf_token_status_unset">Not set · required for gated models</string>
+    <string name="local_model_hf_token_dialog_title">Hugging Face access token</string>
+    <string name="local_model_hf_token_dialog_help">Generate a read-only token at huggingface.co/settings/tokens and paste it below. Some models also require accepting their terms once on the model page.</string>
+    <string name="local_model_hf_token_field_label">Access token</string>
+    <string name="local_model_hf_token_save">Save token</string>
+    <string name="local_model_hf_token_clear">Clear</string>
     <string name="setup_ai_provider_title">Set up AI voice</string>
     <string name="setup_ai_provider_instruction">Choose OpenRouter or PayPerQ, add the matching API key, and allow microphone access now. You can skip and configure this later from Voice settings.</string>
     <string name="setup_ai_provider_status">Provider: %1$s\nAPI key: %2$s\nMicrophone: %3$s\nVoice input: %4$s</string>

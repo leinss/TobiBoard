@@ -41,8 +41,18 @@ internal class ModelDownloader(
      * transition; the final state is either [DownloadState.Ready] or
      * [DownloadState.Failed]. Cancellation throws [CancellationException] — the
      * caller's `try/catch` should treat that as [DownloadState.Cancelled].
+     *
+     * When [authToken] is non-null it is sent as `Authorization: Bearer <token>` on every
+     * request. The caller is responsible for refusing the download up front if
+     * [ModelInfo.requiresAuth] is set but no token is available — the downloader does
+     * not inspect that flag.
      */
-    suspend fun download(targetDir: File, model: ModelInfo, onUpdate: (DownloadState) -> Unit) {
+    suspend fun download(
+        targetDir: File,
+        model: ModelInfo,
+        authToken: String? = null,
+        onUpdate: (DownloadState) -> Unit,
+    ) {
         if (model.files.any { it.sha256 == REQUIRES_HASH_PINNING || it.sha256.length != 64 }) {
             onUpdate(DownloadState.Failed("Model ${model.id} has un-pinned SHA-256; refusing to download."))
             return
@@ -52,7 +62,7 @@ internal class ModelDownloader(
         withContext(Dispatchers.IO) {
             try {
                 model.files.forEachIndexed { index, file ->
-                    downloadFile(targetDir, file, index, model.files.size, onUpdate)
+                    downloadFile(targetDir, file, index, model.files.size, authToken, onUpdate)
                 }
                 onUpdate(DownloadState.Ready)
             } catch (e: CancellationException) {
@@ -69,6 +79,7 @@ internal class ModelDownloader(
         file: ModelFile,
         index: Int,
         count: Int,
+        authToken: String?,
         onUpdate: (DownloadState) -> Unit,
     ) {
         val finalFile = File(targetDir, file.relativePath)
@@ -79,7 +90,7 @@ internal class ModelDownloader(
         partFile.parentFile?.mkdirs()
         val resumeFrom = if (partFile.isFile) partFile.length() else 0L
 
-        val (connection, partial) = openConnection(file.url, resumeFrom)
+        val (connection, partial) = openConnection(file.url, resumeFrom, authToken)
         try {
             val streamLength = connection.contentLengthLong.takeIf { it >= 0 } ?: -1L
             val totalBytes = if (streamLength >= 0) {
@@ -129,12 +140,12 @@ internal class ModelDownloader(
         }
     }
 
-    private fun openConnection(url: String, resumeFrom: Long): Pair<HttpURLConnection, Boolean> {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = connectTimeoutMs
-            readTimeout = readTimeoutMs
-            requestMethod = "GET"
-            instanceFollowRedirects = true
+    private fun openConnection(
+        url: String,
+        resumeFrom: Long,
+        authToken: String?,
+    ): Pair<HttpURLConnection, Boolean> {
+        val connection = newConnection(url, authToken).apply {
             if (resumeFrom > 0) setRequestProperty("Range", "bytes=$resumeFrom-")
         }
         val code = connection.responseCode
@@ -144,12 +155,7 @@ internal class ModelDownloader(
             code == 416 && resumeFrom > 0 -> {
                 connection.disconnect()
                 // Range exceeded — server thinks we already have everything. Restart from 0.
-                val fresh = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = connectTimeoutMs
-                    readTimeout = readTimeoutMs
-                    requestMethod = "GET"
-                    instanceFollowRedirects = true
-                }
+                val fresh = newConnection(url, authToken)
                 val freshCode = fresh.responseCode
                 if (freshCode != HttpURLConnection.HTTP_OK) {
                     fresh.disconnect()
@@ -163,6 +169,15 @@ internal class ModelDownloader(
             }
         }
     }
+
+    private fun newConnection(url: String, authToken: String?): HttpURLConnection =
+        (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = connectTimeoutMs
+            readTimeout = readTimeoutMs
+            requestMethod = "GET"
+            instanceFollowRedirects = true
+            if (authToken != null) setRequestProperty("Authorization", "Bearer $authToken")
+        }
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")

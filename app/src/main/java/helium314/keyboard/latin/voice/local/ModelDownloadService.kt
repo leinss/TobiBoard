@@ -69,12 +69,22 @@ internal class ModelDownloadService : Service() {
             return
         }
 
+        val authToken = if (model.requiresAuth) HfAuth.currentToken(this) else null
+        if (model.requiresAuth && authToken == null) {
+            ModelDownloadRepository.update(
+                modelId,
+                DownloadState.Failed(getString(R.string.local_model_auth_required)),
+            )
+            if (jobs.isEmpty()) stopForegroundAndService()
+            return
+        }
+
         promoteToForeground(model.displayName, percent = 0)
 
         val job = scope.launch {
             try {
                 val targetDir = ModelStorage.dirFor(applicationContext, model)
-                downloader.download(targetDir, model) { state ->
+                downloader.download(targetDir, model, authToken) { state ->
                     ModelDownloadRepository.update(modelId, state)
                     updateNotification(model.displayName, state)
                 }
