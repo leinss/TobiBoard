@@ -4,7 +4,7 @@ package helium314.keyboard.latin.voice
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
-import android.text.TextUtils
+import android.text.method.ScrollingMovementMethod
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -28,6 +28,8 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
 
     var onReplaceClick: (() -> Unit)? = null
     var onDiscardClick: (() -> Unit)? = null
+    /** Invoked when the user taps the proposed text to view it in a popup. Only fires in result state. */
+    var onExpandClick: (() -> Unit)? = null
     private var lastClickMs = 0L
 
     init {
@@ -45,8 +47,14 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         }
         resultText = TextView(context).apply {
             textSize = 13f
+            // Fits within the strip's row height. Long results overflow vertically and are
+            // touch-scrollable; the user can also tap the text to expand it into a popup.
             maxLines = 2
-            ellipsize = TextUtils.TruncateAt.END
+            isVerticalScrollBarEnabled = true
+            movementMethod = ScrollingMovementMethod()
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { debounceClick { onExpandClick?.invoke() } }
             layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply {
                 marginEnd = dp(12)
             }
@@ -111,6 +119,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
     fun showResult(proposed: String) {
         statusText.visibility = View.GONE
         resultText.text = proposed
+        resultText.scrollTo(0, 0)
         resultText.visibility = View.VISIBLE
         replaceButton.visibility = View.VISIBLE
         discardButton.visibility = View.VISIBLE
