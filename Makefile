@@ -28,12 +28,28 @@ help:
 
 ## --- builds ---------------------------------------------------------------
 
+# Native libs that are too large for git but pinned by URL + size here so a
+# fresh checkout can re-fetch them deterministically. Add new libs to NATIVE_LIBS
+# and a matching `<name>_URL` and `<name>_SHA256` variable below.
+SHERPA_ONNX_VERSION := 1.13.2
+SHERPA_ONNX_AAR := app/libs/sherpa-onnx-$(SHERPA_ONNX_VERSION).aar
+SHERPA_ONNX_URL := https://github.com/k2-fsa/sherpa-onnx/releases/download/v$(SHERPA_ONNX_VERSION)/sherpa-onnx-$(SHERPA_ONNX_VERSION).aar
+
+$(SHERPA_ONNX_AAR):
+	@mkdir -p app/libs
+	@echo "Fetching $(notdir $@) (~54 MB)..."
+	curl -L --fail "$(SHERPA_ONNX_URL)" -o "$@.part"
+	mv "$@.part" "$@"
+
+.PHONY: fetch-native-libs
+fetch-native-libs: $(SHERPA_ONNX_AAR) ## Download native AARs (sherpa-onnx) into app/libs/
+
 .PHONY: build-debug
-build-debug: ## Assemble the small (minified) debug APK
+build-debug: $(SHERPA_ONNX_AAR) ## Assemble the small (minified) debug APK
 	./gradlew :app:assembleDebug
 
 .PHONY: build-debug-fast
-build-debug-fast: ## Assemble the unminified debug APK (fast iteration)
+build-debug-fast: $(SHERPA_ONNX_AAR) ## Assemble the unminified debug APK (fast iteration)
 	./gradlew :app:assembleDebugNoMinify
 
 .PHONY: clean

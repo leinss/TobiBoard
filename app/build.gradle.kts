@@ -52,7 +52,13 @@ android {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    // Run instrumentation tests against the unminified variant — the minified debug build
+    // strips androidx.test transitive deps the R8 link expects, and instrumentation has no
+    // production size constraint.
+    @Suppress("UnstableApiUsage") testBuildType = "debugNoMinify"
 
     buildTypes {
         release {
@@ -168,6 +174,10 @@ dependencies {
     implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("androidx.security:security-crypto:1.0.0") // encrypted prefs for the API key
 
+    // on-device STT — sherpa-onnx AAR is fetched by `make fetch-native-libs`,
+    // gitignored (~54 MB). See docs/EMULATOR.md.
+    implementation(files("libs/sherpa-onnx-1.13.2.aar"))
+
     // kotlin
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
@@ -190,4 +200,9 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:runner:1.6.2")
     testImplementation("androidx.test:core:1.6.1")
+
+    // androidTest (instrumentation) — runs on emulator / connected device
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
