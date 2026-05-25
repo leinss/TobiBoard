@@ -5,7 +5,10 @@ import helium314.keyboard.latin.settings.Defaults
 
 enum class AiProvider(val prefValue: String) {
     OPENROUTER("openrouter"),
-    PAYPERQ("payperq");
+    PAYPERQ("payperq"),
+    LOCAL("local");
+
+    val isCloud: Boolean get() = this != LOCAL
 
     companion object {
         fun fromPref(value: String?): AiProvider =
@@ -16,11 +19,14 @@ enum class AiProvider(val prefValue: String) {
 internal fun AiProvider.apiKeyPrefKey(): String = when (this) {
     AiProvider.OPENROUTER -> helium314.keyboard.latin.settings.Settings.PREF_OPENROUTER_API_KEY
     AiProvider.PAYPERQ -> helium314.keyboard.latin.settings.Settings.PREF_PAYPERQ_API_KEY
+    // LOCAL has no API key; callers must gate on AiProvider.isCloud before reading SecretStore.
+    AiProvider.LOCAL -> helium314.keyboard.latin.settings.Settings.PREF_OPENROUTER_API_KEY
 }
 
 internal fun AiProvider.defaultApiKey(): String = when (this) {
     AiProvider.OPENROUTER -> Defaults.PREF_OPENROUTER_API_KEY
     AiProvider.PAYPERQ -> Defaults.PREF_PAYPERQ_API_KEY
+    AiProvider.LOCAL -> ""
 }
 
 internal fun resolveProviderModel(selectedModel: String, customModel: String): String? =
@@ -48,6 +54,8 @@ internal fun AiProvider.supportsVoiceSlug(slug: String): Boolean {
     return slug in when (this) {
         AiProvider.OPENROUTER -> OPENROUTER_VOICE_SLUGS
         AiProvider.PAYPERQ -> PAYPERQ_VOICE_SLUGS
+        // LOCAL doesn't offer a slug picker; managers bypass slug resolution for it.
+        AiProvider.LOCAL -> return true
     }
 }
 
@@ -61,6 +69,7 @@ internal fun AiProvider.supportsTextFixSlug(slug: String): Boolean {
     return slug in when (this) {
         AiProvider.OPENROUTER -> OPENROUTER_TEXT_FIX_SLUGS
         AiProvider.PAYPERQ -> PAYPERQ_TEXT_FIX_SLUGS
+        AiProvider.LOCAL -> return true
     }
 }
 

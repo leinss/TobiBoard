@@ -126,13 +126,21 @@ class TextFixManager(
             return
         }
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
-        val apiKey = SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
-        if (apiKey.isBlank()) {
+        val apiKey = if (provider.isCloud) {
+            SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
+        } else ""
+        if (provider.isCloud && apiKey.isBlank()) {
             Toast.makeText(context, R.string.voice_error_no_api_key, Toast.LENGTH_SHORT).show()
             return
         }
-        if (!isNetworkAvailable(context)) {
+        if (provider.isCloud && !isNetworkAvailable(context)) {
             Toast.makeText(context, R.string.voice_error_no_network, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (provider == AiProvider.LOCAL &&
+            !helium314.keyboard.latin.voice.local.ModelStorage.isReady(context, helium314.keyboard.latin.voice.local.TextFixModelInfo.Gemma3_1bInt4)
+        ) {
+            Toast.makeText(context, R.string.text_fix_error_local_not_ready, Toast.LENGTH_LONG).show()
             return
         }
 
@@ -149,11 +157,14 @@ class TextFixManager(
 
         val selectedModel = prefs.getString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL) ?: Defaults.PREF_TEXT_FIX_MODEL
         val customModel = prefs.getString(Settings.PREF_TEXT_FIX_MODEL_CUSTOM, Defaults.PREF_TEXT_FIX_MODEL_CUSTOM) ?: ""
-        val model = resolveProviderModel(selectedModel, customModel)
-        if (model == null) {
-            Toast.makeText(context, R.string.voice_error_no_model, Toast.LENGTH_SHORT).show()
-            return
-        }
+        val model = if (provider.isCloud) {
+            val resolved = resolveProviderModel(selectedModel, customModel)
+            if (resolved == null) {
+                Toast.makeText(context, R.string.voice_error_no_model, Toast.LENGTH_SHORT).show()
+                return
+            }
+            resolved
+        } else ""
         val prompt = (prefs.getString(variant.promptPref, variant.promptDefault) ?: variant.promptDefault)
             .trim().ifEmpty { variant.promptDefault }
         val useZdr = provider == AiProvider.OPENROUTER &&
@@ -162,14 +173,17 @@ class TextFixManager(
         state = State.WORKING
         callbacks.onWorking()
 
-        val client: TextFixEngine = OpenRouterClient(
-            apiKey = apiKey,
-            model = model,
-            systemPrompt = prompt,
-            runtimeInstruction = null,
-            provider = provider,
-            useZeroDataRetention = useZdr,
-        )
+        val client: TextFixEngine = when (provider) {
+            AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalLiteRtEngine(context, prompt)
+            AiProvider.OPENROUTER, AiProvider.PAYPERQ -> OpenRouterClient(
+                apiKey = apiKey,
+                model = model,
+                systemPrompt = prompt,
+                runtimeInstruction = null,
+                provider = provider,
+                useZeroDataRetention = useZdr,
+            )
+        }
         val token = activeToken + 1
         activeToken = token
         activeClient = client

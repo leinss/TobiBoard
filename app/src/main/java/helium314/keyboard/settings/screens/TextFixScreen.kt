@@ -105,6 +105,7 @@ fun createTextFixSettings(context: Context) = listOf(
         val entries = when (AiProvider.fromPref(providerPref)) {
             AiProvider.OPENROUTER -> ModelCatalog.OPENROUTER_TEXT_FIX
             AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_TEXT_FIX
+            AiProvider.LOCAL -> emptyList()
         }
         ModelListPreference(setting, entries, Defaults.PREF_TEXT_FIX_MODEL)
     },

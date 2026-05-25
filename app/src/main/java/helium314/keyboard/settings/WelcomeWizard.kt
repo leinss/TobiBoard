@@ -485,6 +485,7 @@ private fun AiProviderSetupStep(
     fun providerName(provider: AiProvider): String = when (provider) {
         AiProvider.OPENROUTER -> ctx.getString(R.string.ai_provider_openrouter)
         AiProvider.PAYPERQ -> ctx.getString(R.string.ai_provider_payperq)
+        AiProvider.LOCAL -> ctx.getString(R.string.ai_provider_local)
     }
     fun refreshApiKeyState(provider: AiProvider = selectedProvider) {
         apiKeySet = SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).isNotBlank()
@@ -494,14 +495,12 @@ private fun AiProviderSetupStep(
         prefs.edit {
             putString(Settings.PREF_AI_PROVIDER, provider.prefValue)
             when (provider) {
-                AiProvider.OPENROUTER -> {
+                AiProvider.OPENROUTER, AiProvider.PAYPERQ -> {
                     putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
                     putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
                 }
-                AiProvider.PAYPERQ -> {
-                    putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
-                    putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
-                }
+                // LOCAL has no slug picker; the manager bypasses model resolution for it.
+                AiProvider.LOCAL -> Unit
             }
         }
         refreshApiKeyState(provider)
