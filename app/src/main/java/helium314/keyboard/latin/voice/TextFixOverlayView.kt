@@ -23,6 +23,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
 
     private val statusText: TextView
     private val resultText: TextView
+    private val expandButton: TextView
     private val replaceButton: TextView
     private val discardButton: TextView
 
@@ -59,11 +60,33 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
                 marginEnd = dp(12)
             }
         }
+        // Icon-only square button signalling that the truncated result can be expanded into a
+        // popup. Pure glyph ("⛶") so we don't need a new drawable resource.
+        expandButton = TextView(context).apply {
+            text = "⛶"
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            isClickable = true
+            isFocusable = true
+            minHeight = dp(36)
+            minWidth = dp(36)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(20).toFloat()
+            }
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(4)
+            }
+            setOnClickListener { debounceClick { onExpandClick?.invoke() } }
+            visibility = View.GONE
+        }
         discardButton = makePillButton(R.string.text_fix_discard, isPrimary = false) { debounceClick { onDiscardClick?.invoke() } }
         replaceButton = makePillButton(R.string.text_fix_replace, isPrimary = true) { debounceClick { onReplaceClick?.invoke() } }
 
         addView(statusText)
         addView(resultText)
+        addView(expandButton)
         addView(discardButton)
         addView(replaceButton)
     }
@@ -105,12 +128,17 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         discardButton.setTextColor((textColor and 0x00FFFFFF) or 0xB0000000.toInt())
         (discardButton.background as? GradientDrawable)
             ?.setColor((textColor and 0x00FFFFFF) or 0x18000000)
+        // Expand: same secondary tone as Discard so it reads as an action affordance.
+        expandButton.setTextColor(textColor)
+        (expandButton.background as? GradientDrawable)
+            ?.setColor((textColor and 0x00FFFFFF) or 0x18000000)
     }
 
     fun showWorking() {
         statusText.text = context.getString(R.string.text_fix_working)
         statusText.visibility = View.VISIBLE
         resultText.visibility = View.GONE
+        expandButton.visibility = View.GONE
         replaceButton.visibility = View.GONE
         discardButton.visibility = View.VISIBLE
         announceForAccessibility(statusText.text)
@@ -121,6 +149,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         resultText.text = proposed
         resultText.scrollTo(0, 0)
         resultText.visibility = View.VISIBLE
+        expandButton.visibility = View.VISIBLE
         replaceButton.visibility = View.VISIBLE
         discardButton.visibility = View.VISIBLE
         announceForAccessibility(context.getString(R.string.text_fix_result_a11y, proposed))
@@ -130,6 +159,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         statusText.text = message
         statusText.visibility = View.VISIBLE
         resultText.visibility = View.GONE
+        expandButton.visibility = View.GONE
         replaceButton.visibility = View.GONE
         discardButton.visibility = View.VISIBLE
         announceForAccessibility(message)
