@@ -39,7 +39,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "helium314.keyboard.wisprboard"
+        applicationId = "helium314.keyboard.tobiboard"
         minSdk = 21
         targetSdk = 35
         versionCode = 6610
@@ -90,7 +90,7 @@ android {
             buildConfigField("boolean", "ENABLE_GESTURE_DATA_GATHERING", "true")
             manifestPlaceholders["gestureDataProviderEnabled"] = "true"
         }
-        base.archivesBaseName = "WisprBoard_" + defaultConfig.versionName
+        base.archivesBaseName = "TobiBoard_" + defaultConfig.versionName
         // got a little too big for GitHub after some dependency upgrades, so we remove the largest dictionary
         androidComponents.onVariants { variant: ApplicationVariant ->
             if (variant.buildType == "debug") {
