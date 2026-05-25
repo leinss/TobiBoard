@@ -7,6 +7,7 @@ PKG_DEBUG := helium314.keyboard.tobiboard.debug
 IME_COMPONENT := $(PKG_DEBUG)/helium314.keyboard.latin.LatinIME
 APK_DEBUG_NO_MINIFY := app/build/outputs/apk/debugNoMinify/TobiBoard_6.6.0-debugNoMinify.apk
 APK_DEBUG := app/build/outputs/apk/debug/TobiBoard_6.6.0-debug.apk
+APK_RELEASE := app/build/outputs/apk/release/TobiBoard_6.6.0-release.apk
 
 AVD_NAME ?= tobiboard_pixel6_api34
 SYSTEM_IMAGE := system-images;android-34;aosp_atd;arm64-v8a
@@ -51,6 +52,25 @@ build-debug: $(SHERPA_ONNX_AAR) ## Assemble the small (minified) debug APK
 .PHONY: build-debug-fast
 build-debug-fast: $(SHERPA_ONNX_AAR) ## Assemble the unminified debug APK (fast iteration)
 	./gradlew :app:assembleDebugNoMinify
+
+.PHONY: build-release
+build-release: $(SHERPA_ONNX_AAR) ## Assemble the signed release APK (requires KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD env vars)
+	./gradlew :app:assembleRelease
+
+.PHONY: apk
+apk: build-debug-fast ## Build the sideloadable debug APK and print its path
+	@echo ""
+	@echo "Sideload-ready APK:"
+	@echo "  $(abspath $(APK_DEBUG_NO_MINIFY))"
+	@echo ""
+	@echo "Transfer it to your phone (USB-MTP, Drive, Signal-to-self, ...) and"
+	@echo "tap to install, or run 'make install' with the device connected."
+
+.PHONY: apk-release
+apk-release: build-release ## Build the signed release APK and print its path
+	@echo ""
+	@echo "Signed release APK:"
+	@echo "  $(abspath $(APK_RELEASE))"
 
 .PHONY: clean
 clean: ## Wipe build outputs
@@ -97,8 +117,12 @@ emulator-stop: ## Power off the running emulator
 ## --- install / IME wiring -------------------------------------------------
 
 .PHONY: install
-install: build-debug-fast ## Install the unminified debug APK on the connected device
+install: build-debug-fast ## Install the unminified debug APK on the connected device (emulator or USB-connected phone)
 	$(ADB) install -r $(APK_DEBUG_NO_MINIFY)
+
+.PHONY: install-release
+install-release: build-release ## Install the signed release APK on the connected device
+	$(ADB) install -r $(APK_RELEASE)
 
 .PHONY: ime-enable
 ime-enable: ## Enable + activate TobiBoard as the current IME
