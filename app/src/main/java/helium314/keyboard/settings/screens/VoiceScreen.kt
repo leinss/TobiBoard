@@ -119,21 +119,24 @@ internal fun buildVoiceScreenItems(
     voiceAutoStop: Boolean = Defaults.PREF_VOICE_AUTO_STOP_SILENCE,
     autoPolishEnabled: Boolean = Defaults.PREF_VOICE_AUTO_POLISH_ENABLED,
     polishModel: String = Defaults.PREF_VOICE_POLISH_MODEL,
-): List<Any?> = listOf(
+): List<Any?> {
+    val cloud = provider.isCloud
+    return listOf(
     Settings.PREF_VOICE_INPUT_ENABLED,
     if (voiceInputEnabled) Settings.PREF_AI_PROVIDER else null,
-    if (voiceInputEnabled) provider.apiKeyPrefKey() else null,
+    if (voiceInputEnabled && cloud) provider.apiKeyPrefKey() else null,
     if (voiceInputEnabled && provider == AiProvider.OPENROUTER) Settings.PREF_OPENROUTER_ZDR_ENABLED else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_ACTION_TEST_KEY else null,
-    // Traditional voice (chat-audio) subsection — independent of STT below.
-    if (voiceInputEnabled) R.string.voice_traditional_category else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_MODEL else null,
-    if (voiceInputEnabled && traditionalEnabled && voiceModel == "custom") Settings.PREF_VOICE_MODEL_CUSTOM else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_ACTION_PROMPT_PRESET else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_PROMPT else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_DICTIONARY else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_EXPECTED_LANGUAGES else null,
+    if (voiceInputEnabled && cloud) Settings.PREF_VOICE_ACTION_TEST_KEY else null,
+    // Traditional voice (chat-audio) subsection — independent of STT below. LOCAL has no
+    // prompt / dictionary / language-hint surface; Parakeet ignores them.
+    if (voiceInputEnabled && cloud) R.string.voice_traditional_category else null,
+    if (voiceInputEnabled && cloud) Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_MODEL else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled && voiceModel == "custom") Settings.PREF_VOICE_MODEL_CUSTOM else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_ACTION_PROMPT_PRESET else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_PROMPT else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_DICTIONARY else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_EXPECTED_LANGUAGES else null,
     // Dedicated STT subsection — fully independent toggle and settings.
     if (voiceInputEnabled && provider == AiProvider.OPENROUTER) R.string.voice_stt_category else null,
     if (voiceInputEnabled && provider == AiProvider.OPENROUTER) Settings.PREF_VOICE_STT_ENABLED else null,
@@ -142,13 +145,13 @@ internal fun buildVoiceScreenItems(
     if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_PROMPT else null,
     if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_DICTIONARY else null,
     if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_EXPECTED_LANGUAGES else null,
-    // Auto-polish: a second LLM pass that cleans up the raw transcription. Applies to both the
-    // chat-audio and dedicated-STT flows, hence its placement above the shared section.
-    if (voiceInputEnabled) R.string.voice_polish_category else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_AUTO_POLISH_ENABLED else null,
-    if (voiceInputEnabled && autoPolishEnabled) Settings.PREF_VOICE_POLISH_LEVEL else null,
-    if (voiceInputEnabled && autoPolishEnabled) Settings.PREF_VOICE_POLISH_MODEL else null,
-    if (voiceInputEnabled && autoPolishEnabled && polishModel == "custom") Settings.PREF_VOICE_POLISH_MODEL_CUSTOM else null,
+    // Auto-polish is a cloud-only pass: needs a second model loaded alongside on-device STT,
+    // which we don't ship today.
+    if (voiceInputEnabled && cloud) R.string.voice_polish_category else null,
+    if (voiceInputEnabled && cloud) Settings.PREF_VOICE_AUTO_POLISH_ENABLED else null,
+    if (voiceInputEnabled && cloud && autoPolishEnabled) Settings.PREF_VOICE_POLISH_LEVEL else null,
+    if (voiceInputEnabled && cloud && autoPolishEnabled) Settings.PREF_VOICE_POLISH_MODEL else null,
+    if (voiceInputEnabled && cloud && autoPolishEnabled && polishModel == "custom") Settings.PREF_VOICE_POLISH_MODEL_CUSTOM else null,
     // Shared playback / capture options apply to both flows.
     if (voiceInputEnabled) R.string.voice_shared_category else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_LANGUAGE_HINT else null,
@@ -157,7 +160,8 @@ internal fun buildVoiceScreenItems(
     if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_AUTO_STOP_SILENCE else null,
     if (voiceInputEnabled && voiceAutoStop) Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS else null,
-)
+    )
+}
 
 fun createVoiceSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_VOICE_INPUT_ENABLED, R.string.voice_input_enabled, R.string.voice_input_enabled_summary) { setting ->
@@ -248,6 +252,7 @@ fun createVoiceSettings(context: Context) = listOf(
         val items = listOf(
             ctx.getString(R.string.ai_provider_openrouter) to AiProvider.OPENROUTER.prefValue,
             ctx.getString(R.string.ai_provider_payperq) to AiProvider.PAYPERQ.prefValue,
+            ctx.getString(R.string.ai_provider_local) to AiProvider.LOCAL.prefValue,
         )
         ListPreference(setting, items, Defaults.PREF_AI_PROVIDER) { value ->
             val provider = AiProvider.fromPref(value)
