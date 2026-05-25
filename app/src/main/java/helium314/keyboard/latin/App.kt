@@ -11,6 +11,7 @@ import helium314.keyboard.latin.utils.LayoutUtilsCustom
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.voice.SecretStore
+import helium314.keyboard.latin.voice.local.LocalSherpaEngine
 import helium314.keyboard.latin.voice.local.ModelDownloadRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,10 @@ class App : Application() {
             // voice/text-fix request doesn't pay the cold-decrypt cost on the IME main thread.
             SecretStore.warmUp(this@App)
             ModelDownloadRepository.rehydrate(this@App)
+            // Cold-init of the sherpa-onnx recognizer is ~2.7 s; doing it on first user
+            // utterance is felt as a hang. Building it here is a no-op if Parakeet is not
+            // on disk.
+            LocalSherpaEngine.warmUp(this@App)
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
             @Suppress("DEPRECATION")
             Log.i(
