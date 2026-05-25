@@ -51,6 +51,14 @@ internal class LocalSherpaEngine(private val context: Context) : SttEngine {
     companion object {
         /** Tear down the shared recognizer (e.g. after the model is deleted by the user). */
         fun releaseShared() = SharedRecognizer.release()
+
+        /**
+         * Force the recognizer to be built ahead of the first transcription request. Safe to
+         * call from any thread (spawns its own worker), no-op if the model isn't on disk.
+         */
+        fun warmUp(context: Context) {
+            Thread { SharedRecognizer.acquire(context) }.start()
+        }
     }
 }
 
