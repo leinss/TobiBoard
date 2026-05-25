@@ -313,6 +313,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var onStopRecording: Runnable? = null
     private var onCancelRecording: Runnable? = null
     private var voiceTelemetryProvider: (() -> Pair<Double, Long>)? = null
+    // The voice and text-fix overlays force the toolbar closed so the overlay (which lives
+    // inside `suggestionsStrip`) is actually visible. Capture the prior state so we can
+    // restore it when the overlay dismisses — users who had the toolbar pinned open expect
+    // it back after a voice round-trip.
+    private var toolbarVisibilityBeforeOverlay: Boolean? = null
 
     fun setOnStopRecording(callback: Runnable?) {
         onStopRecording = callback
@@ -331,6 +336,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         // chevron), `suggestionsStrip` is hidden behind `toolbarContainer` — and the overlay
         // would render into an invisible parent. Force the strip back into view so the overlay
         // is always seen, regardless of which mic button triggered the recording.
+        captureToolbarStateForOverlay()
         setToolbarVisibility(false)
         val overlay = RecordingOverlayView(context)
         overlay.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
@@ -351,6 +357,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         recordingOverlay = null
         clear()
         isExternalSuggestionVisible = false
+        restoreToolbarStateAfterOverlay()
     }
 
     // --- Text fix overlay ---
@@ -372,6 +379,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     fun showTextFixWorking() {
         // Same reason as showRecordingOverlay(): if the toolbar is open the strip is hidden and
         // our overlay would be invisible. Force the strip back to make the working state visible.
+        captureToolbarStateForOverlay()
         setToolbarVisibility(false)
         val overlay = textFixOverlay ?: TextFixOverlayView(context).also {
             it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
@@ -402,6 +410,20 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         textFixOverlay = null
         clear()
         isExternalSuggestionVisible = false
+        restoreToolbarStateAfterOverlay()
+    }
+
+    /** Snapshot the toolbar's visibility on first overlay open; nested re-opens preserve the original. */
+    private fun captureToolbarStateForOverlay() {
+        if (toolbarVisibilityBeforeOverlay == null) {
+            toolbarVisibilityBeforeOverlay = toolbarContainer.isVisible
+        }
+    }
+
+    private fun restoreToolbarStateAfterOverlay() {
+        val previous = toolbarVisibilityBeforeOverlay ?: return
+        toolbarVisibilityBeforeOverlay = null
+        setToolbarVisibility(previous)
     }
 
     private fun showTextFixExpandedPopup() {
