@@ -33,11 +33,13 @@ import androidx.compose.ui.unit.dp
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.voice.local.DownloadState
 import helium314.keyboard.latin.voice.local.HfAuth
+import helium314.keyboard.latin.voice.local.LocalSherpaEngine
 import helium314.keyboard.latin.voice.local.ModelDownloadRepository
 import helium314.keyboard.latin.voice.local.ModelDownloadService
 import helium314.keyboard.latin.voice.local.ModelInfo
 import helium314.keyboard.latin.voice.local.ModelRegistry
 import helium314.keyboard.latin.voice.local.ModelStorage
+import helium314.keyboard.latin.voice.local.SttModelInfo
 import helium314.keyboard.settings.SearchSettingsScreen
 
 @Composable
@@ -85,6 +87,7 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
                     onDownload = { startOrGate(model) },
                     onCancel = { ModelDownloadService.cancel(ctx, model.id) },
                     onDelete = {
+                        if (model is SttModelInfo.ParakeetTdt06b) LocalSherpaEngine.releaseShared()
                         ModelStorage.delete(ctx, model)
                         ModelDownloadRepository.update(model.id, DownloadState.NotDownloaded)
                     },

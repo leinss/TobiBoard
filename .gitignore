@@ -23,6 +23,10 @@ release-signing/
 *.keystore
 keystore.properties
 
+# Native libs pulled by `make fetch-native-libs` — too large for git.
+app/libs/*.aar
+app/libs/*.jar
+
 # Internal dev docs
 docs/superpowers/
 
