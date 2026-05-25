@@ -127,10 +127,13 @@ internal fun buildVoiceScreenItems(
     if (voiceInputEnabled && cloud) provider.apiKeyPrefKey() else null,
     if (voiceInputEnabled && provider == AiProvider.OPENROUTER) Settings.PREF_OPENROUTER_ZDR_ENABLED else null,
     if (voiceInputEnabled && cloud) Settings.PREF_VOICE_ACTION_TEST_KEY else null,
-    // Traditional voice (chat-audio) subsection — independent of STT below. LOCAL has no
-    // prompt / dictionary / language-hint surface; Parakeet ignores them.
-    if (voiceInputEnabled && cloud) R.string.voice_traditional_category else null,
-    if (voiceInputEnabled && cloud) Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED else null,
+    // Traditional voice (chat-audio) subsection. The "Show voice button" toggle stays
+    // visible for LOCAL too — it controls whether the mic appears in the long-press-Enter
+    // popup, which is the only voice trigger for either cloud or on-device. Only the
+    // cloud-specific knobs (model picker, prompt, dictionary, expected languages) hide
+    // for LOCAL; Parakeet has nothing to do with any of them.
+    if (voiceInputEnabled) R.string.voice_traditional_category else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED else null,
     if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_MODEL else null,
     if (voiceInputEnabled && cloud && traditionalEnabled && voiceModel == "custom") Settings.PREF_VOICE_MODEL_CUSTOM else null,
     if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_ACTION_PROMPT_PRESET else null,
