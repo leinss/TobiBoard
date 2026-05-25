@@ -36,7 +36,7 @@ class OpenRouterClient(
     private val transcriptionLanguage: String? = null,
     private val connectTimeoutMs: Int = DEFAULT_CONNECT_TIMEOUT_MS,
     private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
-) {
+) : SttEngine, TextFixEngine {
     @Volatile private var activeConnection: HttpURLConnection? = null
 
     companion object {
@@ -95,7 +95,7 @@ class OpenRouterClient(
      * regardless of recording length. Throws [OpenRouterException] on non-retryable failures
      * or after retries are exhausted. The caller owns the file and must delete it.
      */
-    fun transcribe(audioFile: File): String = withRetries("Transcription") {
+    override fun transcribe(audioFile: File): String = withRetries("Transcription") {
         if (provider == AiProvider.OPENROUTER && transcriptionMode == VoiceTranscriptionMode.OPENROUTER_STT) {
             performOpenRouterSttTranscription(audioFile, useZeroDataRetention)
         } else if (provider == AiProvider.PAYPERQ && "/" !in model) {
@@ -105,7 +105,7 @@ class OpenRouterClient(
         }
     }
 
-    fun cancel() {
+    override fun cancel() {
         activeConnection?.disconnect()
     }
 
@@ -114,7 +114,7 @@ class OpenRouterClient(
      * reply. Uses [systemPrompt] as the system message. Retries transient failures with the
      * same policy as [transcribe].
      */
-    fun fixText(userText: String): String = withRetries("Request") {
+    override fun fixText(userText: String): String = withRetries("Request") {
         performTextRequest(userText, useZeroDataRetention)
     }
 
