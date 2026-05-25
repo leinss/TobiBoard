@@ -333,6 +333,10 @@ class OpenRouterClient(
     private fun chatEndpoint(): String = when (provider) {
         AiProvider.OPENROUTER -> ENDPOINT
         AiProvider.PAYPERQ -> PAYPERQ_CHAT_ENDPOINT
+        // Defensive: managers never construct an OpenRouterClient with provider=LOCAL — they
+        // dispatch to LocalSherpaEngine / LocalLiteRtEngine instead. If this branch ever fires
+        // it means a future caller wired the providers wrong.
+        AiProvider.LOCAL -> error("OpenRouterClient must not be used with AiProvider.LOCAL")
     }
 
     private fun buildOpenRouterSttEnvelope(enforceZdr: Boolean): Pair<String, String> {

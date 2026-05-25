@@ -287,6 +287,9 @@ fun createVoiceSettings(context: Context) = listOf(
         val entries = when (AiProvider.fromPref(providerPref)) {
             AiProvider.OPENROUTER -> ModelCatalog.OPENROUTER_VOICE
             AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_VOICE
+            // LOCAL hides the model picker via buildVoiceScreenItems; this branch is unreachable
+            // in practice but keeps the when exhaustive.
+            AiProvider.LOCAL -> emptyList()
         }
         ModelListPreference(setting, entries, Defaults.PREF_VOICE_MODEL)
     },
@@ -422,6 +425,7 @@ fun createVoiceSettings(context: Context) = listOf(
         val entries = when (AiProvider.fromPref(providerPref)) {
             AiProvider.OPENROUTER -> ModelCatalog.OPENROUTER_TEXT_FIX
             AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_TEXT_FIX
+            AiProvider.LOCAL -> emptyList()
         }
         ModelListPreference(setting, entries, Defaults.PREF_VOICE_POLISH_MODEL)
     },

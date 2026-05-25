@@ -102,10 +102,12 @@ class VoiceInputManager(
         }
 
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
-        val apiKey = SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
-        if (apiKey.isBlank()) {
-            Toast.makeText(context, R.string.voice_error_no_api_key, Toast.LENGTH_SHORT).show()
-            return
+        if (provider.isCloud) {
+            val apiKey = SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
+            if (apiKey.isBlank()) {
+                Toast.makeText(context, R.string.voice_error_no_api_key, Toast.LENGTH_SHORT).show()
+                return
+            }
         }
 
         if (!PermissionsUtil.checkAllPermissionsGranted(context, Manifest.permission.RECORD_AUDIO)) {
@@ -113,8 +115,15 @@ class VoiceInputManager(
             return
         }
 
-        if (!isNetworkAvailable(context)) {
+        if (provider.isCloud && !isNetworkAvailable(context)) {
             Toast.makeText(context, R.string.voice_error_no_network, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (provider == AiProvider.LOCAL && !helium314.keyboard.latin.voice.local.ModelStorage.isReady(
+                context, helium314.keyboard.latin.voice.local.SttModelInfo.ParakeetTdt06b
+        )) {
+            Toast.makeText(context, R.string.voice_error_local_not_ready, Toast.LENGTH_LONG).show()
             return
         }
 
@@ -223,7 +232,9 @@ class VoiceInputManager(
 
         val prefs = context.prefs()
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
-        val apiKey = SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
+        val apiKey = if (provider.isCloud) {
+            SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
+        } else ""
         val selectedModel = prefs.getString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL) ?: Defaults.PREF_VOICE_MODEL
         val customModel = prefs.getString(Settings.PREF_VOICE_MODEL_CUSTOM, Defaults.PREF_VOICE_MODEL_CUSTOM) ?: ""
         val selectedSttModel = prefs.getString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL) ?: Defaults.PREF_VOICE_STT_MODEL
@@ -262,7 +273,10 @@ class VoiceInputManager(
         // Wispr-Flow-style auto-polish: after the raw transcription comes back, optionally pipe it
         // through a second, text-only LLM call that cleans it up to the chosen level. Resolved
         // here on the main thread so the background job receives plain values.
-        val polishEnabled = prefs.getBoolean(Settings.PREF_VOICE_AUTO_POLISH_ENABLED, Defaults.PREF_VOICE_AUTO_POLISH_ENABLED)
+        // Auto-polish runs through OpenRouter / PayPerQ only — it would need a second on-device
+        // model loaded simultaneously to work for LOCAL, which we don't ship today.
+        val polishEnabled = provider.isCloud &&
+            prefs.getBoolean(Settings.PREF_VOICE_AUTO_POLISH_ENABLED, Defaults.PREF_VOICE_AUTO_POLISH_ENABLED)
         val polishLevel = PolishLevel.fromPref(prefs.getString(Settings.PREF_VOICE_POLISH_LEVEL, Defaults.PREF_VOICE_POLISH_LEVEL))
         val polishSystemPrompt = polishPromptForLevel(polishLevel)
         val polishModelSelected = prefs.getString(Settings.PREF_VOICE_POLISH_MODEL, Defaults.PREF_VOICE_POLISH_MODEL) ?: Defaults.PREF_VOICE_POLISH_MODEL
@@ -271,33 +285,39 @@ class VoiceInputManager(
             resolveProviderModel(polishModelSelected, polishModelCustom)
         } else null
 
-        val model = if (useDedicatedStt) {
-            resolveVoiceSttModel(selectedSttModel, customSttModel)
-        } else {
-            resolveProviderModel(selectedModel, customModel)
-        }
-        if (model == null) {
-            wavFile.delete()
-            currentUseDedicatedStt = false
-            state = State.IDLE
-            callbacks.onFinished()
-            callbacks.onError(context.getString(R.string.voice_error_no_model))
-            return
-        }
+        val model = if (provider.isCloud) {
+            val resolved = if (useDedicatedStt) {
+                resolveVoiceSttModel(selectedSttModel, customSttModel)
+            } else {
+                resolveProviderModel(selectedModel, customModel)
+            }
+            if (resolved == null) {
+                wavFile.delete()
+                currentUseDedicatedStt = false
+                state = State.IDLE
+                callbacks.onFinished()
+                callbacks.onError(context.getString(R.string.voice_error_no_model))
+                return
+            }
+            resolved
+        } else ""
         val localeHint = if (languageHintEnabled) callbacks.getLocaleHint() else null
         val prompt = resolveVoicePrompt(savedPrompt, localeHint, transcriptionDictionary, expectedLanguages)
         val spacingContext = if (spaceHeuristicEnabled) callbacks.getSpacingContext() else null
 
-        val client: SttEngine = OpenRouterClient(
-            apiKey = apiKey,
-            model = model,
-            systemPrompt = prompt.systemPrompt,
-            runtimeInstruction = prompt.runtimeInstruction,
-            provider = provider,
-            useZeroDataRetention = useZdr,
-            transcriptionMode = if (useDedicatedStt) VoiceTranscriptionMode.OPENROUTER_STT else VoiceTranscriptionMode.CHAT_AUDIO,
-            transcriptionLanguage = localeHint?.toOpenRouterSttLanguage(),
-        )
+        val client: SttEngine = when (provider) {
+            AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalSherpaEngine(context)
+            AiProvider.OPENROUTER, AiProvider.PAYPERQ -> OpenRouterClient(
+                apiKey = apiKey,
+                model = model,
+                systemPrompt = prompt.systemPrompt,
+                runtimeInstruction = prompt.runtimeInstruction,
+                provider = provider,
+                useZeroDataRetention = useZdr,
+                transcriptionMode = if (useDedicatedStt) VoiceTranscriptionMode.OPENROUTER_STT else VoiceTranscriptionMode.CHAT_AUDIO,
+                transcriptionLanguage = localeHint?.toOpenRouterSttLanguage(),
+            )
+        }
         val requestToken = activeTranscriptionToken.incrementAndGet()
         transcriptionClient = client
 
