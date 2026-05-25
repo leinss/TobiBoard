@@ -2,14 +2,17 @@
 package helium314.keyboard.latin.voice
 
 import android.content.Context
+import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
 import android.text.method.ScrollingMovementMethod
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import helium314.keyboard.latin.R
 
 /**
@@ -23,7 +26,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
 
     private val statusText: TextView
     private val resultText: TextView
-    private val expandButton: TextView
+    private val expandButton: ImageView
     private val replaceButton: TextView
     private val discardButton: TextView
 
@@ -60,27 +63,22 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
                 marginEnd = dp(12)
             }
         }
-        // Icon-only square button signalling that the truncated result can be expanded into a
-        // popup. ⛶ is a typographic glyph whose default font metrics include extra top/bottom
-        // padding (and its visual center sits below the baseline), so disable font padding and
-        // bias the vertical padding upward to make it sit visually centered.
-        expandButton = TextView(context).apply {
-            text = "⛶"
-            textSize = 20f
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-            setPadding(dp(10), dp(4), dp(10), dp(10))
+        // Icon-only square button signalling that the truncated result can be expanded into
+        // a popup. Uses a vector drawable rather than a unicode glyph — typographic glyphs
+        // like ⛶ have inconsistent baseline metrics across system fonts and refuse to
+        // visually center inside a small pill no matter how the padding is tuned.
+        expandButton = ImageView(context).apply {
+            val size = dp(36)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_expand_overlay)?.mutate())
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             isClickable = true
             isFocusable = true
-            minHeight = dp(36)
-            minWidth = dp(36)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dp(20).toFloat()
             }
-            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
-                marginStart = dp(4)
-            }
+            layoutParams = LayoutParams(size, size).apply { marginStart = dp(4) }
             setOnClickListener { debounceClick { onExpandClick?.invoke() } }
             visibility = View.GONE
         }
@@ -132,7 +130,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         (discardButton.background as? GradientDrawable)
             ?.setColor((textColor and 0x00FFFFFF) or 0x18000000)
         // Expand: same secondary tone as Discard so it reads as an action affordance.
-        expandButton.setTextColor(textColor)
+        expandButton.drawable?.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         (expandButton.background as? GradientDrawable)
             ?.setColor((textColor and 0x00FFFFFF) or 0x18000000)
     }
