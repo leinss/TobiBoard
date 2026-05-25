@@ -80,6 +80,22 @@ class ModelDownloaderTest {
         assertEquals(resumeFrom.toLong(), server.lastRangeStart)
     }
 
+    @Test fun forwardsAuthorizationHeaderWhenTokenIsProvided() = runBlocking {
+        val model = testModel(payloadSha)
+        val states = mutableListOf<DownloadState>()
+        ModelDownloader().download(tmp.root, model, authToken = "test-token-xyz") { states.add(it) }
+
+        assertTrue("expected Ready, got $states", states.last() is DownloadState.Ready)
+        assertEquals("Bearer test-token-xyz", server.lastAuthorizationHeader)
+    }
+
+    @Test fun omitsAuthorizationHeaderWhenTokenIsNull() = runBlocking {
+        val model = testModel(payloadSha)
+        ModelDownloader().download(tmp.root, model) { }
+
+        assertEquals(null, server.lastAuthorizationHeader)
+    }
+
     @Test fun refusesUnpinnedHash() = runBlocking {
         val model = object : ModelInfo {
             override val id = "unpinned"
@@ -120,6 +136,8 @@ private class TinyRangeHttpServer(private val payload: ByteArray) {
     private val socket = ServerSocket(0)
     @Volatile var lastRangeStart: Long = -1L
         private set
+    @Volatile var lastAuthorizationHeader: String? = null
+        private set
     val port: Int get() = socket.localPort
     private var acceptor: Thread? = null
     @Volatile private var stopped = false
@@ -144,6 +162,7 @@ private class TinyRangeHttpServer(private val payload: ByteArray) {
             val requestLine = reader.readLine() ?: return
             var rangeStart = 0L
             var hasRange = false
+            var authHeader: String? = null
             while (true) {
                 val line = reader.readLine() ?: break
                 if (line.isEmpty()) break
@@ -152,7 +171,11 @@ private class TinyRangeHttpServer(private val payload: ByteArray) {
                     rangeStart = value.toLongOrNull() ?: 0L
                     hasRange = true
                 }
+                if (line.startsWith("Authorization:", ignoreCase = true)) {
+                    authHeader = line.substringAfter(":").trim()
+                }
             }
+            lastAuthorizationHeader = authHeader
             if (!requestLine.startsWith("GET")) {
                 writeStatus(sock, 405, "Method Not Allowed")
                 return

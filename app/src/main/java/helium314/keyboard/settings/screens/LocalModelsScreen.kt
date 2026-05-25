@@ -16,6 +16,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,9 +28,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.voice.local.DownloadState
+import helium314.keyboard.latin.voice.local.HfAuth
 import helium314.keyboard.latin.voice.local.ModelDownloadRepository
 import helium314.keyboard.latin.voice.local.ModelDownloadService
 import helium314.keyboard.latin.voice.local.ModelInfo
@@ -43,6 +46,22 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
     val states by ModelDownloadRepository.states.collectAsState()
     val freeBytes = remember(states) { ModelStorage.availableBytes(ctx) }
     var pendingLicenseModel by remember { mutableStateOf<ModelInfo?>(null) }
+    var tokenDialogOpen by remember { mutableStateOf(false) }
+    // Track when a model is waiting on the token dialog so we can advance to the next
+    // gating step (license, then service start) once the user saves.
+    var pendingAfterTokenModel by remember { mutableStateOf<ModelInfo?>(null) }
+    var hasToken by remember { mutableStateOf(HfAuth.currentToken(ctx) != null) }
+
+    fun startOrGate(model: ModelInfo) {
+        when {
+            model.requiresAuth && !hasToken -> {
+                pendingAfterTokenModel = model
+                tokenDialogOpen = true
+            }
+            model.requiresLicense -> pendingLicenseModel = model
+            else -> ModelDownloadService.start(ctx, model.id)
+        }
+    }
 
     SearchSettingsScreen(
         onClickBack = onClickBack,
@@ -50,19 +69,20 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
         settings = emptyList(),
     ) {
         LazyColumn(contentPadding = PaddingValues(12.dp)) {
+            item {
+                HfTokenRow(
+                    hasToken = hasToken,
+                    onTap = { tokenDialogOpen = true },
+                )
+                Spacer(Modifier.height(12.dp))
+            }
             items(ModelRegistry.ALL, key = { it.id }) { model ->
                 val state = states[model.id] ?: DownloadState.NotDownloaded
                 ModelCard(
                     model = model,
                     state = state,
                     freeBytes = freeBytes,
-                    onDownload = {
-                        if (model.requiresLicense && state is DownloadState.NotDownloaded) {
-                            pendingLicenseModel = model
-                        } else {
-                            ModelDownloadService.start(ctx, model.id)
-                        }
-                    },
+                    onDownload = { startOrGate(model) },
                     onCancel = { ModelDownloadService.cancel(ctx, model.id) },
                     onDelete = {
                         ModelStorage.delete(ctx, model)
@@ -72,6 +92,32 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
             }
         }
+    }
+
+    if (tokenDialogOpen) {
+        HfTokenDialog(
+            initialValue = "",
+            onDismiss = {
+                tokenDialogOpen = false
+                pendingAfterTokenModel = null
+            },
+            onSave = { value ->
+                HfAuth.setToken(ctx, value)
+                hasToken = HfAuth.currentToken(ctx) != null
+                tokenDialogOpen = false
+                pendingAfterTokenModel?.let { model ->
+                    pendingAfterTokenModel = null
+                    if (model.requiresLicense) pendingLicenseModel = model
+                    else ModelDownloadService.start(ctx, model.id)
+                }
+            },
+            onClear = {
+                HfAuth.clear(ctx)
+                hasToken = false
+                tokenDialogOpen = false
+                pendingAfterTokenModel = null
+            },
+        )
     }
 
     pendingLicenseModel?.let { model ->
@@ -92,6 +138,70 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
             },
         )
     }
+}
+
+@Composable
+private fun HfTokenRow(hasToken: Boolean, onTap: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.local_model_hf_token_title), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(
+                    if (hasToken) R.string.local_model_hf_token_status_set
+                    else R.string.local_model_hf_token_status_unset
+                ),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onTap) {
+                Text(stringResource(R.string.local_model_hf_token_dialog_title))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HfTokenDialog(
+    initialValue: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    var value by remember { mutableStateOf(initialValue) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.local_model_hf_token_dialog_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.local_model_hf_token_dialog_help), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    label = { Text(stringResource(R.string.local_model_hf_token_field_label)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(value) }, enabled = value.isNotBlank()) {
+                Text(stringResource(R.string.local_model_hf_token_save))
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onClear) {
+                    Text(stringResource(R.string.local_model_hf_token_clear))
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        },
+    )
 }
 
 @Composable
