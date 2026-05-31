@@ -10,6 +10,7 @@ import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.LayoutUtilsCustom
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.SubtypeSettings
+import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.local.LocalSherpaEngine
 import helium314.keyboard.latin.voice.local.ModelDownloadRepository
@@ -30,7 +31,14 @@ class App : Application() {
             LayoutUtilsCustom.removeMissingLayouts(this@App)
             // Warm up EncryptedSharedPreferences + AndroidKeyStore master key so the first
             // voice/text-fix request doesn't pay the cold-decrypt cost on the IME main thread.
-            SecretStore.warmUp(this@App)
+            // Gated on the features that actually read the API key: when neither voice input nor
+            // text-fix is enabled we never touch the keystore at startup.
+            val prefs = this@App.prefs()
+            if (prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)
+                || prefs.getBoolean(Settings.PREF_TEXT_FIX_ENABLED, Defaults.PREF_TEXT_FIX_ENABLED)
+            ) {
+                SecretStore.warmUp(this@App)
+            }
             ModelDownloadRepository.rehydrate(this@App)
             // Cold-init of the sherpa-onnx recognizer is ~2.7 s; doing it on first user
             // utterance is felt as a hang. Building it here is a no-op if Parakeet is not

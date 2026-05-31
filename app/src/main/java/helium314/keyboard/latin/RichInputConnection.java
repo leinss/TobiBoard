@@ -387,6 +387,22 @@ public final class RichInputConnection implements PrivateCommandPerformer {
         return isConnected() ?  mIC.getSelectedText(flags) : null;
     }
 
+    /**
+     * Returns the entire field content via {@link InputConnection#getExtractedText}, or null when the
+     * connection is gone or the editor returns nothing. Used by Text Fix to rewrite the whole field
+     * when no text is selected. Mirrors the proven request shape in {@link #copyText(boolean)}.
+     * Caveat: some editors cap the extracted length, so a very large field may come back truncated.
+     */
+    @Nullable
+    public CharSequence getWholeFieldText(final int flags) {
+        if (!isConnected()) return null;
+        final ExtractedTextRequest etr = new ExtractedTextRequest();
+        etr.flags = flags;
+        etr.hintMaxChars = Integer.MAX_VALUE;
+        final ExtractedText et = mIC.getExtractedText(etr, 0);
+        return et != null ? et.text : null;
+    }
+
     public boolean canDeleteCharacters() {
         return mExpectedSelStart > 0;
     }
