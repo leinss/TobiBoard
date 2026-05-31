@@ -42,8 +42,8 @@ android {
         applicationId = "helium314.keyboard.tobiboard"
         minSdk = 21
         targetSdk = 35
-        versionCode = 7001
-        versionName = "7.0.1"
+        versionCode = 6700
+        versionName = "6.7.0"
         buildConfigField("boolean", "ALLOW_USER_SUPPLIED_JNI", "false")
         buildConfigField("boolean", "ENABLE_GESTURE_DATA_GATHERING", "false")
         manifestPlaceholders["gestureDataProviderEnabled"] = "false"
