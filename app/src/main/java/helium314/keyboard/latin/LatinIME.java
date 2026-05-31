@@ -147,9 +147,18 @@ public class LatinIME extends InputMethodService implements
     private TextFixManager mTextFixManager;
     private String mPendingTextFixOriginal;
     private String mPendingTextFixProposed;
+    // True when the pending fix operates on the whole field (nothing was selected) rather than a
+    // selection. Set when the text to fix is read; consumed when the replacement is committed.
+    private boolean mPendingTextFixWholeField;
     private final android.os.Handler mTextFixOverlayHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable mTextFixErrorOverlayHideRunnable;
+    // Undo-last-AI-insertion state. mUndoInserted is the text now sitting before the cursor that an
+    // undo would remove; mUndoRestore is what to put back in its place ("" for voice = just delete).
+    private String mUndoInserted;
+    private String mUndoRestore;
+    private Runnable mUndoHideRunnable;
+    private static final long UNDO_BAR_HIDE_MS = 5000L;
 
     private RichInputMethodManager mRichImm;
     final KeyboardSwitcher mKeyboardSwitcher;
@@ -641,6 +650,7 @@ public class LatinIME extends InputMethodService implements
             @Override
             public void onTranscriptionResult(@NonNull final String text) {
                 onTextInput(text);
+                armUndo(text, "", getString(R.string.voice_undo_inserted));
             }
 
             @Override
@@ -650,8 +660,13 @@ public class LatinIME extends InputMethodService implements
 
             @Override
             public void onMaxDurationReached() {
-                AudioAndHapticFeedbackManager.getInstance().vibrate(50L);
+                if (isVoiceHapticEnabled()) AudioAndHapticFeedbackManager.getInstance().vibrate(50L);
                 Toast.makeText(LatinIME.this, R.string.voice_max_duration_reached, Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onWaitingForNetwork() {
+                Toast.makeText(LatinIME.this, R.string.voice_waiting_for_network, Toast.LENGTH_SHORT).show();
             }
 
             @Nullable
@@ -705,10 +720,20 @@ public class LatinIME extends InputMethodService implements
 
             @Nullable
             @Override
-            public CharSequence getSelectedText() {
+            public CharSequence getTextToFix() {
                 try {
-                    return mInputLogic.mConnection.getSelectedText(0);
+                    final CharSequence selected = mInputLogic.mConnection.getSelectedText(0);
+                    if (selected != null && selected.length() > 0) {
+                        mPendingTextFixWholeField = false;
+                        return selected;
+                    }
+                    // Nothing selected: fall back to the entire field so the user doesn't have to
+                    // select anything. The commit path replaces the whole field in this mode.
+                    final CharSequence whole = mInputLogic.mConnection.getWholeFieldText(0);
+                    mPendingTextFixWholeField = whole != null && whole.length() > 0;
+                    return whole;
                 } catch (Exception e) {
+                    mPendingTextFixWholeField = false;
                     return null;
                 }
             }
@@ -733,7 +758,7 @@ public class LatinIME extends InputMethodService implements
                 cancelPendingTextFixErrorOverlayHide();
                 mPendingTextFixOriginal = originalText;
                 mPendingTextFixProposed = proposedText;
-                if (mSuggestionStripView != null) mSuggestionStripView.showTextFixResult(proposedText);
+                if (mSuggestionStripView != null) mSuggestionStripView.showTextFixResult(originalText, proposedText);
             }
 
             @Override
@@ -775,24 +800,36 @@ public class LatinIME extends InputMethodService implements
         cancelPendingTextFixErrorOverlayHide();
         final String original = mPendingTextFixOriginal;
         final String proposed = mPendingTextFixProposed;
+        final boolean wholeField = mPendingTextFixWholeField;
         mPendingTextFixOriginal = null;
         mPendingTextFixProposed = null;
+        mPendingTextFixWholeField = false;
         if (mSuggestionStripView != null) mSuggestionStripView.hideTextFixOverlay();
-        if (proposed != null && original != null) {
-            final CharSequence selected;
-            try {
-                selected = mInputLogic.mConnection.getSelectedText(0);
-            } catch (Exception e) {
-                Toast.makeText(this, R.string.text_fix_error_selection_changed, Toast.LENGTH_LONG).show();
-                return;
-            }
-            if (selected == null || !original.contentEquals(selected)) {
-                Toast.makeText(this, R.string.text_fix_error_selection_changed, Toast.LENGTH_LONG).show();
-                return;
-            }
-            // Selection is still live at this point — commitText replaces it.
-            mInputLogic.mConnection.commitText(proposed, 1);
+        if (proposed == null || original == null) return;
+
+        // Re-read the source text and verify it still matches what we sent — the user may have
+        // typed or moved the cursor while the model was working. Bail with the same warning in
+        // both modes if it changed.
+        final CharSequence current;
+        try {
+            current = wholeField
+                    ? mInputLogic.mConnection.getWholeFieldText(0)
+                    : mInputLogic.mConnection.getSelectedText(0);
+        } catch (Exception e) {
+            Toast.makeText(this, R.string.text_fix_error_selection_changed, Toast.LENGTH_LONG).show();
+            return;
         }
+        if (current == null || !original.contentEquals(current)) {
+            Toast.makeText(this, R.string.text_fix_error_selection_changed, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (wholeField) {
+            // No selection was made: select the entire field, then commitText replaces it.
+            mInputLogic.mConnection.setSelection(0, current.length());
+        }
+        // Selection (real or just-applied whole-field) is live — commitText replaces it.
+        mInputLogic.mConnection.commitText(proposed, 1);
+        armUndo(proposed, original, getString(R.string.voice_undo_fixed));
     }
 
     private void discardTextFix() {
@@ -803,8 +840,66 @@ public class LatinIME extends InputMethodService implements
         cancelPendingTextFixErrorOverlayHide();
         mPendingTextFixOriginal = null;
         mPendingTextFixProposed = null;
+        mPendingTextFixWholeField = false;
         if (mTextFixManager != null) mTextFixManager.cancel();
         if (mSuggestionStripView != null) mSuggestionStripView.hideTextFixOverlay();
+        clearUndo();
+    }
+
+    /**
+     * Offer a one-tap undo of an AI insertion. [inserted] is the text now before the cursor;
+     * [restore] is what to put back ("" for a plain voice insertion — undo just deletes). The
+     * offer auto-expires after a few seconds and is cleared by any subsequent user input.
+     */
+    private void armUndo(final String inserted, final String restore, final String label) {
+        if (inserted == null || inserted.isEmpty()) return;
+        mUndoInserted = inserted;
+        mUndoRestore = restore != null ? restore : "";
+        if (mSuggestionStripView != null) mSuggestionStripView.showUndoBar(label, this::performUndo);
+        if (mUndoHideRunnable != null) mTextFixOverlayHandler.removeCallbacks(mUndoHideRunnable);
+        final Runnable hide = new Runnable() {
+            @Override
+            public void run() {
+                if (mUndoHideRunnable != this) return;
+                clearUndo();
+            }
+        };
+        mUndoHideRunnable = hide;
+        mTextFixOverlayHandler.postDelayed(hide, UNDO_BAR_HIDE_MS);
+    }
+
+    private void performUndo() {
+        final String inserted = mUndoInserted;
+        final String restore = mUndoRestore;
+        clearUndo();
+        if (inserted == null) return;
+        // Only undo if the field still ends with exactly what we inserted — the user may have typed
+        // or moved the cursor since. Mirrors the text-fix replacement guard.
+        final CharSequence before;
+        try {
+            before = mInputLogic.mConnection.getTextBeforeCursor(inserted.length(), 0);
+        } catch (Exception e) {
+            Toast.makeText(this, R.string.voice_undo_nothing, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (before == null || !inserted.contentEquals(before)) {
+            Toast.makeText(this, R.string.voice_undo_nothing, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        mInputLogic.mConnection.deleteTextBeforeCursor(inserted.length());
+        if (restore != null && !restore.isEmpty()) {
+            mInputLogic.mConnection.commitText(restore, 1);
+        }
+    }
+
+    private void clearUndo() {
+        mUndoInserted = null;
+        mUndoRestore = null;
+        if (mUndoHideRunnable != null) {
+            mTextFixOverlayHandler.removeCallbacks(mUndoHideRunnable);
+            mUndoHideRunnable = null;
+        }
+        if (mSuggestionStripView != null) mSuggestionStripView.hideUndoBar();
     }
 
     private boolean isVoiceHapticEnabled() {
@@ -1656,6 +1751,8 @@ public class LatinIME extends InputMethodService implements
     // This method is public for testability of LatinIME, but also in the future it should
     // completely replace #onCodeInput.
     public void onEvent(@NonNull final Event event) {
+        // Any real key event dismisses a pending "undo last insertion" offer.
+        clearUndo();
         if (KeyCode.VOICE_INPUT == event.getKeyCode() || KeyCode.VOICE_STT_INPUT == event.getKeyCode()) {
             if (mVoiceInputManager != null) {
                 if (mVoiceInputManager.getState() == VoiceInputManager.State.RECORDING) {
@@ -1687,6 +1784,8 @@ public class LatinIME extends InputMethodService implements
     }
 
     public void onTextInput(final String rawText) {
+        // Clears any pending undo offer before this insert; AI insertions re-arm it immediately after.
+        clearUndo();
         // TODO: have the keyboard pass the correct key code when we need it.
         final Event event = Event.createSoftwareTextEvent(rawText, KeyCode.MULTIPLE_CODE_POINTS, null);
         final InputTransaction completeInputTransaction =

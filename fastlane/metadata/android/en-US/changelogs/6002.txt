@@ -1,2 +1,2 @@
 * Fix opening Android personal dictionaries on devices without a user dictionary provider
-* Make Android launcher rendering match the bundled WisprBoard icon
+* Make Android launcher rendering match the bundled TobiBoard icon

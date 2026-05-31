@@ -9,11 +9,11 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2"
     tools:ignore="MissingTranslation">
     <!-- Name of Android spell checker service. The app name should not be translated. -->
-    <string name="spell_checker_service_name">WisprBoard Spell Checker</string>
+    <string name="spell_checker_service_name">TobiBoard Spell Checker</string>
     <!-- Title for IME settings screen. The app name should not be translated. -->
-    <string name="ime_settings">WisprBoard Settings</string>
+    <string name="ime_settings">TobiBoard Settings</string>
     <!-- Title for the spell checking service settings screen. The app name should not be translated. -->
-    <string name="android_spell_checker_settings">WisprBoard Spell Checker Settings</string>
+    <string name="android_spell_checker_settings">TobiBoard Spell Checker Settings</string>
     <!-- Option to provide vibrate/haptic feedback on keypress -->
     <string name="vibrate_on_keypress">Vibrate on keypress</string>
     <!-- Option to provide vibrate/haptic feedback on keypress even in do not disturb mode -->
@@ -973,7 +973,7 @@ New dictionary:
         Submitted data will be downloaded and deleted from the ProtonMail mailbox where it is stored at our earliest convenience.
         After the gesture data gathering phase has ended, the accumulated data set from all users will be published under the Creative Commons BY-SA 4.0 license.\n\n
 
-        As part of trying to protect your privacy, you won\'t be listed explicitly as an author. Your credit will be as \"The WisprBoard Gesture Data Project Contributors.\" It should not be possible to connect the data you generate in this screen to your identity. However, it might be possible to determine which gestures were made by the same person.
+        As part of trying to protect your privacy, you won\'t be listed explicitly as an author. Your credit will be as \"The HeliBoard Gesture Data Project Contributors.\" It should not be possible to connect the data you generate in this screen to your identity. However, it might be possible to determine which gestures were made by the same person.
         This can be done e.g. from a custom keyboard layout, keyboard dimensions, language, or individual gesturing style.\n\n
     </string>
     <!-- Button text for showing gesture_data_description_privacy
@@ -997,7 +997,7 @@ New dictionary:
     <!-- Text requesting the user to gesture a word
      string will probably be removed once data gathering is finished (end of 2026 latest) -->
     <string name="gesture_data_please_type">Please gesture type:</string>
-    <!-- Text requesting the user to switch to WisprBoard, in case a different keyboard app is active
+    <!-- Text requesting the user to switch to TobiBoard, in case a different keyboard app is active
      string will probably be removed once data gathering is finished (end of 2026 latest) -->
     <string name="gesture_data_please_switch_keyboard">Please switch to %s</string>
     <!-- Button for saving data and go to next word (now only shows up when the word %s is not in suggestions)
@@ -1080,7 +1080,7 @@ New dictionary:
      string will probably be removed once data gathering is finished (end of 2026 latest) -->
     <string name="gesture_data_promotion_message">
         Hey there!\n
-        Since you installed the gesture typing library, you might be interested in WisprBoard\'s project for creating a fully open gesture typing library.
+        Since you installed the gesture typing library, you might be interested in HeliBoard\'s project for creating a fully open gesture typing library.
         You can help by contributing gesture data. For more information visit the gesture data gathering screen.
     </string>
     <!-- Message asking the user to contribute to gesture data gathering again (dialog in main settings)
@@ -1152,7 +1152,7 @@ New dictionary:
     <string name="voice_max_duration_reached">Maximum recording length reached — transcribing&#8230;</string>
     <string name="voice_error_secure_storage_unavailable">Secure storage is unavailable on this device</string>
     <string name="voice_mic_rationale_title">Microphone access</string>
-    <string name="voice_mic_rationale_message">WisprBoard records audio only while you hold the voice button. The recording is sent over HTTPS to your selected AI provider for transcription using the API key you supply; it is not proxied by any WisprBoard server. You can revoke microphone access at any time from Android\'s app settings.</string>
+    <string name="voice_mic_rationale_message">TobiBoard records audio only while you hold the voice button. The recording is sent over HTTPS to your selected AI provider for transcription using the API key you supply; it is not proxied by any TobiBoard server. You can revoke microphone access at any time from Android\'s app settings.</string>
     <string name="voice_mic_rationale_confirm">Allow microphone</string>
     <string name="voice_enable_privacy_title">Enable Voice Input?</string>
     <string name="voice_enable_privacy_message">Voice Input sends your recorded audio over HTTPS to your selected AI provider using the API key you supply.</string>
@@ -1165,6 +1165,9 @@ New dictionary:
     <string name="voice_auto_stop_silence">Auto-stop on silence</string>
     <string name="voice_auto_stop_silence_summary">Stop recording after a short silence once you\'ve started speaking</string>
     <string name="voice_auto_stop_silence_seconds">Silence duration before auto-stop</string>
+    <string name="voice_offline_retry">Auto-retry on reconnect</string>
+    <string name="voice_offline_retry_summary">If the network drops during transcription, keep the recording and retry when it returns instead of failing. The audio is held only until it succeeds, is cancelled, or times out.</string>
+    <string name="voice_waiting_for_network">No network — will retry when reconnected</string>
     <string name="voice_language_hint">Send keyboard language as a hint</string>
     <string name="voice_language_hint_summary">Appends the active language to the transcription prompt for better accuracy</string>
     <string name="voice_space_heuristic">Smart spacing</string>
@@ -1194,6 +1197,15 @@ New dictionary:
     <string name="voice_test_key_invalid_model">Selected model is unavailable</string>
     <string name="voice_test_key_network_error">Network error while testing key</string>
     <string name="voice_test_key_testing">Testing…</string>
+    <string name="voice_usage_meter">Session usage</string>
+    <string name="voice_usage_meter_empty">No requests yet this session. Tap to reset.</string>
+    <!-- %1$s = formatted token count, %2$d = number of requests -->
+    <string name="voice_usage_meter_value"><xliff:g id="tokens">%1$s</xliff:g> tokens across <xliff:g id="requests">%2$d</xliff:g> requests · tap to reset</string>
+    <string name="voice_usage_meter_reset">Session usage reset</string>
+    <string name="voice_undo">Undo</string>
+    <string name="voice_undo_inserted">Inserted</string>
+    <string name="voice_undo_fixed">Text fixed</string>
+    <string name="voice_undo_nothing">Nothing to undo</string>
     <string name="voice_prompt_preset">Prompt preset</string>
     <string name="voice_prompt_preset_custom">Custom</string>
     <string name="voice_prompt_preset_verbatim">Verbatim</string>
@@ -1236,22 +1248,22 @@ New dictionary:
     <!-- Text Fix -->
     <string name="settings_screen_text_fix">Text Fix</string>
     <string name="text_fix_enabled">Enable Text Fix</string>
-    <string name="text_fix_enabled_summary">After adding a provider API key, enable this. Select text and long-press Return to fix it.</string>
+    <string name="text_fix_enabled_summary">After adding a provider API key, enable this. Long-press Return to fix the text in the field — or just your selection, if you made one.</string>
     <string name="text_fix_enable_privacy_title">Enable Text Fix?</string>
-    <string name="text_fix_enable_privacy_message">Text Fix sends the selected text over HTTPS to your selected AI provider using the API key you supply.</string>
+    <string name="text_fix_enable_privacy_message">Text Fix sends your text over HTTPS to your selected AI provider using the API key you supply.</string>
     <string name="text_fix_enable_privacy_confirm">Enable Text Fix</string>
     <string name="text_fix_model">Text Fix Model</string>
     <string name="text_fix_model_custom">Custom Model ID</string>
     <string name="text_fix_model_custom_summary">Only used when Text Fix Model is set to Custom</string>
     <string name="text_fix_prompt">Fix Prompt</string>
-    <string name="text_fix_prompt_summary">Instruction sent to the AI when improving your selected text</string>
+    <string name="text_fix_prompt_summary">Instruction sent to the AI when improving your text</string>
     <string name="text_fix_working">Fixing…</string>
     <string name="text_fix_result_a11y">Proposed text: <xliff:g id="text">%1$s</xliff:g>. Use Replace to accept or Discard to reject.</string>
     <string name="text_fix_replace">Replace</string>
     <string name="text_fix_discard">Discard</string>
-    <string name="text_fix_error_no_selection">Select text first, then long-press Return to fix</string>
-    <string name="text_fix_error_selection_changed">Selection changed; select the same text and try again</string>
-    <string name="text_fix_error_too_long">Selected text is too long</string>
+    <string name="text_fix_error_no_selection">No text to fix</string>
+    <string name="text_fix_error_selection_changed">Text changed while fixing; try again</string>
+    <string name="text_fix_error_too_long">Text is too long</string>
     <string name="text_fix_error_not_enabled">Enable Text Fix in settings</string>
     <string name="text_fix_error_sensitive_field">Text Fix is unavailable in sensitive fields</string>
     <string name="text_fix_error_unsupported_field">Text Fix is unavailable in this field</string>

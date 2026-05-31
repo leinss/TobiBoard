@@ -1,0 +1,7 @@
+* Text Fix no longer needs a selection: with nothing selected it fixes the whole text field; select a phrase to fix only that
+* Text Fix now shows an inline diff of what changed (additions underlined, removals struck through) before you accept
+* New "Undo" button appears briefly after a voice insertion or text fix to revert it in one tap
+* New "Session usage" row in Voice settings shows tokens used this session (tap to reset)
+* New opt-in "Auto-retry on reconnect": if the network drops mid-transcription, the recording is kept and retried when it returns instead of failing
+* Startup no longer initializes secure storage unless Voice or Text Fix is enabled
+* Fixed the recording-time-limit buzz ignoring the haptic-feedback toggle

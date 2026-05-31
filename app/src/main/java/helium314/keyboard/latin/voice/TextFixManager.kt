@@ -25,9 +25,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 
 /**
- * Orchestrates text-fix requests to the selected AI provider. Reads the user's selected text via a callback,
- * validates preconditions, runs the HTTP call on a background thread, and posts the proposed
- * replacement back on the main thread. Stateless across requests — a new fix starts fresh.
+ * Orchestrates text-fix requests to the selected AI provider. Reads the text to fix via a callback
+ * (the current selection, or the whole field when nothing is selected), validates preconditions,
+ * runs the HTTP call on a background thread, and posts the proposed replacement back on the main
+ * thread. Stateless across requests — a new fix starts fresh.
  */
 class TextFixManager(
     private val context: Context,
@@ -91,8 +92,11 @@ class TextFixManager(
     interface Callbacks {
         @StringRes
         fun getBlockedErrorResId(): Int?
-        /** Return the currently selected text, or null/empty if nothing is selected. */
-        fun getSelectedText(): CharSequence?
+        /**
+         * Return the text to fix: the current selection, or the whole field when nothing is
+         * selected. Null/empty only when the field has no text at all.
+         */
+        fun getTextToFix(): CharSequence?
         fun onWorking()
         fun onFinished()
         fun onResult(originalText: String, proposedText: String)
@@ -136,16 +140,16 @@ class TextFixManager(
             return
         }
 
-        val selected = callbacks.getSelectedText()?.toString().orEmpty()
-        if (selected.isBlank()) {
+        val textToFix = callbacks.getTextToFix()?.toString().orEmpty()
+        if (textToFix.isBlank()) {
             Toast.makeText(context, R.string.text_fix_error_no_selection, Toast.LENGTH_SHORT).show()
             return
         }
-        if (selected.length > MAX_INPUT_LENGTH) {
+        if (textToFix.length > MAX_INPUT_LENGTH) {
             Toast.makeText(context, R.string.text_fix_error_too_long, Toast.LENGTH_SHORT).show()
             return
         }
-        val input = selected
+        val input = textToFix
 
         val selectedModel = prefs.getString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL) ?: Defaults.PREF_TEXT_FIX_MODEL
         val customModel = prefs.getString(Settings.PREF_TEXT_FIX_MODEL_CUSTOM, Defaults.PREF_TEXT_FIX_MODEL_CUSTOM) ?: ""
@@ -177,6 +181,7 @@ class TextFixManager(
         activeJob = backgroundScope.launch(CoroutineName("TextFixRequest")) {
             try {
                 val proposed = sanitize(runInterruptible { client.fixText(input) })
+                UsageTracker.record(client.lastResponseTokens)
                 if (proposed.isBlank()) {
                     finish(token, error = context.getString(R.string.text_fix_error_empty))
                     return@launch
