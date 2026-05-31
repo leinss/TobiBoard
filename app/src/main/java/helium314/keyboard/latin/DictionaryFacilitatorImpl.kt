@@ -834,7 +834,7 @@ private class DictionaryGroup(
     // ConcurrentHashMap-backed set: isBlacklisted() runs on the suggestion worker while
     // addToBlacklist()/removeFromBlacklist() are invoked from other threads, so a plain HashSet
     // can throw ConcurrentModificationException or return inconsistent reads.
-    private val blacklist: MutableSet<String> = ConcurrentHashMap.newKeySet<String>().apply {
+    private val blacklist: MutableSet<String> = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>()).apply {
         if (blacklistFile?.isFile != true) return@apply
         scope.launch {
             try {
