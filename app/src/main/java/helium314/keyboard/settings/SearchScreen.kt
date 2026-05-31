@@ -192,7 +192,11 @@ fun <T: Any?> SearchScreen(
                         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
                     ) { innerPadding ->
                         LazyColumn(contentPadding = innerPadding) {
-                            items(items, key = { it ?: "__null_item__" }) {
+                            // LazySaveableStateHolder scopes each row's saveable state by this key,
+                            // so it must be storable in a Bundle. The raw item is a Setting object,
+                            // which is not — using it directly crashed search on any query. A stable
+                            // string (mirrors the blank-search list above) keeps rows distinct safely.
+                            items(items, key = { it?.toString() ?: "__null_item__" }) {
                                 itemContent(it)
                             }
                         }
