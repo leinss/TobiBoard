@@ -1,4 +1,4 @@
-WisprBoard is a privacy-first Android keyboard, forked from HeliBoard (which is based on AOSP / OpenBoard). Core typing runs locally on-device. Two optional AI features — Voice-to-Text and Text Fix — only run when you turn them on and supply your own API key.
+TobiBoard is a privacy-first Android keyboard, forked from HeliBoard (which is based on AOSP / OpenBoard). Core typing runs locally on-device. Two optional AI features — Voice-to-Text and Text Fix — only run when you turn them on and supply your own API key.
 
 No accounts. No subscription. No telemetry. No backend. Bring your own key.
 
@@ -19,7 +19,7 @@ Select rough text, long-press Return, hit Fix. Get back a clean message in the s
 </ul>
 
 <b>Zero Data Retention</b>
-WisprBoard requests OpenRouter zero-data-retention endpoints by default. When the model offers a ZDR route, your audio and text aren't logged, stored, or used for training. API keys are encrypted with the Android Keystore, excluded from cloud backups, and never written to logs.
+TobiBoard requests OpenRouter zero-data-retention endpoints by default. When the model offers a ZDR route, your audio and text aren't logged, stored, or used for training. API keys are encrypted with the Android Keystore, excluded from cloud backups, and never written to logs.
 
 <b>All the HeliBoard features you expect</b>
 <ul>
@@ -36,6 +36,6 @@ WisprBoard requests OpenRouter zero-data-retention endpoints by default. When th
 <b>Privacy footnote</b>
 Once your audio or selected text reaches OpenRouter, PayPerQ, or the underlying model provider, their policies apply. Read their privacy terms before pointing this at anything sensitive.
 
-WisprBoard installs side-by-side with HeliBoard, so you can keep both.
+TobiBoard installs side-by-side with HeliBoard, so you can keep both.
 
-Source: https://github.com/Turtlecute33/WisprBoard
+Source: https://github.com/leinss/TobiBoard

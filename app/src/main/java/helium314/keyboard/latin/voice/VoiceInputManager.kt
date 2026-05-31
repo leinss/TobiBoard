@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
@@ -41,6 +42,11 @@ class VoiceInputManager(
         private const val AUDIO_CACHE_SUBDIR = "voice_audio"
         private const val MIN_RECORDING_DURATION_MS = 500L
         private const val MIN_SPEECH_MEAN_AMPLITUDE = 80.0
+        // Offline auto-retry bounds: wait up to MAX_RECONNECT_ATTEMPTS windows of
+        // RECONNECT_WAIT_MS_PER_ATTEMPT each, polling connectivity every RECONNECT_POLL_MS.
+        private const val MAX_RECONNECT_ATTEMPTS = 3
+        private const val RECONNECT_WAIT_MS_PER_ATTEMPT = 30_000L
+        private const val RECONNECT_POLL_MS = 2_000L
     }
 
     enum class State { IDLE, RECORDING, TRANSCRIBING }
@@ -58,6 +64,8 @@ class VoiceInputManager(
         fun onTranscriptionResult(text: String)
         fun onError(message: String)
         fun onMaxDurationReached()
+        /** Called when a transcription is paused, waiting for the network to come back. */
+        fun onWaitingForNetwork() {}
         /** Optional IME subtype locale; used as a hint to the transcription model. */
         fun getLocaleHint(): Locale? = null
         /** Optional surrounding-text snapshot; used to decide whether to insert spaces. */
@@ -256,6 +264,7 @@ class VoiceInputManager(
         }
         val languageHintEnabled = prefs.getBoolean(Settings.PREF_VOICE_LANGUAGE_HINT, Defaults.PREF_VOICE_LANGUAGE_HINT)
         val spaceHeuristicEnabled = prefs.getBoolean(Settings.PREF_VOICE_SPACE_HEURISTIC, Defaults.PREF_VOICE_SPACE_HEURISTIC)
+        val offlineRetryEnabled = prefs.getBoolean(Settings.PREF_VOICE_OFFLINE_RETRY, Defaults.PREF_VOICE_OFFLINE_RETRY)
         val useZdr = provider == AiProvider.OPENROUTER &&
             prefs.getBoolean(Settings.PREF_OPENROUTER_ZDR_ENABLED, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
 
@@ -303,7 +312,8 @@ class VoiceInputManager(
 
         transcriptionJob = backgroundScope.launch(CoroutineName("VoiceTranscription")) {
             try {
-                val transcription = sanitizeTranscription(runInterruptible { client.transcribe(wavFile) })
+                val transcription = sanitizeTranscription(transcribeWithReconnect(client, wavFile, offlineRetryEnabled))
+                UsageTracker.record(client.lastResponseTokens)
                 if (transcription.isBlank()) {
                     finishTranscription(
                         requestToken = requestToken,
@@ -327,6 +337,7 @@ class VoiceInputManager(
                     transcriptionClient = polishClient
                     try {
                         val raw = runInterruptible { polishClient.fixText(transcription) }
+                        UsageTracker.record(polishClient.lastResponseTokens)
                         sanitizeTranscription(raw).takeIf { it.isNotBlank() } ?: transcription
                     } catch (ce: CancellationException) {
                         throw ce
@@ -414,6 +425,52 @@ class VoiceInputManager(
                 }
             }
         }
+    }
+
+    /**
+     * Runs the transcription, and — when [offlineRetryEnabled] — survives a network drop: if the
+     * request fails while the device has no connectivity, it waits (bounded) for the network to
+     * return and retries with the same retained audio, rather than discarding the recording. A
+     * failure while connected is a real error and is rethrown immediately. Fully cancellable: a
+     * back-out cancels the job, the awaited delay throws, and the caller's finally deletes the audio.
+     */
+    private suspend fun transcribeWithReconnect(
+        client: OpenRouterClient,
+        wavFile: File,
+        offlineRetryEnabled: Boolean,
+    ): String {
+        var reconnectAttempts = 0
+        while (true) {
+            try {
+                return runInterruptible { client.transcribe(wavFile) }
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (ie: InterruptedException) {
+                throw ie
+            } catch (e: Exception) {
+                val offline = offlineRetryEnabled &&
+                    reconnectAttempts < MAX_RECONNECT_ATTEMPTS &&
+                    !isNetworkAvailable(context)
+                if (!offline) throw e
+                reconnectAttempts++
+                if (BuildConfig.DEBUG) Log.i(TAG, "Offline; awaiting reconnect (attempt $reconnectAttempts)")
+                withContext(Dispatchers.Main) { callbacks.onWaitingForNetwork() }
+                if (!awaitNetwork(RECONNECT_WAIT_MS_PER_ATTEMPT)) throw e
+                // Back online — return the UI to the transcribing state and retry the request.
+                withContext(Dispatchers.Main) { callbacks.onTranscribing() }
+            }
+        }
+    }
+
+    /** Suspends until the device reports connectivity or [maxWaitMs] elapses; returns the final state. */
+    private suspend fun awaitNetwork(maxWaitMs: Long): Boolean {
+        var waited = 0L
+        while (waited < maxWaitMs) {
+            if (isNetworkAvailable(context)) return true
+            delay(RECONNECT_POLL_MS)
+            waited += RECONNECT_POLL_MS
+        }
+        return isNetworkAvailable(context)
     }
 
     private fun sanitizeTranscription(raw: String): String =
