@@ -331,3 +331,62 @@ dev-install: emulator-up install ime-enable launch-typing ## Full path: boot emu
 .PHONY: logcat
 logcat: ## Tail logcat filtered to TobiBoard + IME plumbing
 	$(ADB) logcat -v color LatinIME:V VoiceInputManager:V TextFixManager:V OpenRouterClient:V LocalSherpaEngine:V LocalMediaPipeEngine:V ModelDownloader:V AndroidRuntime:E *:S
+
+## --- versioning / release ---------------------------------------------------
+
+.PHONY: version
+version: ## Print current versionName / versionCode
+	@grep -E 'version(Name|Code) =' app/build.gradle.kts | sed 's/^[[:space:]]*//'
+
+.PHONY: devices
+devices: ## List connected adb devices
+	@$(ADB) devices -l
+
+.PHONY: bundle-release
+bundle-release: $(SHERPA_ONNX_AAR) ## Build the signed release AAB for Play Store
+	./gradlew :app:bundleRelease
+	@ls -1 app/build/outputs/bundle/release/*.aab
+
+.PHONY: lint
+lint: ## Run Android lint
+	./gradlew :app:lintDebug
+
+.PHONY: check
+check: test-unit lint ## Run unit tests + lint
+
+.PHONY: bump-patch
+bump-patch: ## Bump patch version (x.y.Z+1) + changelog stub
+	python3 tools/bump_version.py patch
+
+.PHONY: bump-minor
+bump-minor: ## Bump minor version (x.Y+1.0) + changelog stub
+	python3 tools/bump_version.py minor
+
+.PHONY: bump-major
+bump-major: ## Bump major version (X+1.0.0) + changelog stub
+	python3 tools/bump_version.py major
+
+.PHONY: tag
+tag: ## Create a local annotated git tag vX.Y.Z from the current version
+	@v=$$(grep -E 'versionName = ' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/'); \
+	  git tag -a "v$$v" -m "Release $$v" && echo "Created tag v$$v (push with: git push origin v$$v)"
+
+.PHONY: release
+release: build-release ## Build signed release + GitHub release. Dry-run unless CONFIRM=1
+	@v=$$(grep -E 'versionName = ' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/'); \
+	  code=$$(grep -oE 'versionCode = [0-9]+' app/build.gradle.kts | grep -oE '[0-9]+'); \
+	  apk=$$(ls -1 app/build/outputs/apk/release/*.apk | head -1); \
+	  notes="fastlane/metadata/android/en-US/changelogs/$$code.txt"; \
+	  cmd="gh release create v$$v $$apk --title \"TobiBoard $$v\" --notes-file $$notes"; \
+	  if [ "$(CONFIRM)" = "1" ]; then echo "+ $$cmd"; eval $$cmd; \
+	  else echo "DRY-RUN (re-run with CONFIRM=1 to publish):"; echo "  $$cmd"; fi
+
+.PHONY: publish-checklist
+publish-checklist: ## Print the pre-publish checklist (IzzyOnDroid / F-Droid)
+	@echo "Pre-publish:"; \
+	  echo "  1. make check               # tests + lint pass"; \
+	  echo "  2. make bump-<patch|minor>  # then edit the changelog stub"; \
+	  echo "  3. KEYSTORE_* env set (signing) -> make build-release"; \
+	  echo "  4. make tag && git push origin <tag>"; \
+	  echo "  5. make release CONFIRM=1   # GitHub release; IzzyOnDroid auto-picks it up"; \
+	  echo "  6. (once) request app inclusion at the IzzyOnDroid request tracker"
