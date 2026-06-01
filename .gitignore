@@ -23,6 +23,9 @@ release-signing/
 *.keystore
 keystore.properties
 
+# Local env (Keychain references + paths) — never commit
+.envrc
+
 # Internal dev docs
 docs/superpowers/
 
