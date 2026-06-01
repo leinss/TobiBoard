@@ -1176,7 +1176,7 @@ New dictionary:
     <string name="voice_haptic_feedback_summary">Vibrate when recording starts and stops</string>
     <string name="voice_polish_category">Auto-polish</string>
     <string name="voice_auto_polish_enabled">Auto-polish transcription</string>
-    <string name="voice_auto_polish_enabled_summary">After transcribing, run the text through a second AI pass to clean it up. Adds latency but matches Wispr Flow-style quality.</string>
+    <string name="voice_auto_polish_enabled_summary">After transcribing, run the text through a second AI pass to clean it up. Adds latency but noticeably improves quality.</string>
     <string name="voice_polish_level">Polish level</string>
     <string name="voice_polish_level_summary">How aggressively the AI should rewrite the raw transcription</string>
     <string name="voice_polish_level_natural">Natural (no polish)</string>

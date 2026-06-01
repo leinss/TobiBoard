@@ -1,3 +1,3 @@
-* Wispr-Flow-style auto-polish: an optional second pass cleans up the raw transcription, with graded levels from "natural" (leave it as spoken) to "polished" (tidy grammar and punctuation)
+* Auto-polish: an optional second pass cleans up the raw transcription, with graded levels from "natural" (leave it as spoken) to "polished" (tidy grammar and punctuation)
 * Per-level polish prompts so you can dial in exactly how much the model is allowed to rewrite
 * Fixed the API-key test falsely reporting "ZDR unavailable" for floating "latest" model aliases (e.g. ~google/gemini-flash-latest)
