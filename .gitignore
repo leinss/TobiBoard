@@ -27,6 +27,9 @@ keystore.properties
 app/libs/*.aar
 app/libs/*.jar
 
+# Local env (Keychain references + paths) — never commit
+.envrc
+
 # Internal dev docs
 docs/superpowers/
 
