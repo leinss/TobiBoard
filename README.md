@@ -6,7 +6,7 @@
 
 ### An open-source keyboard with AI superpowers, built for people who care about privacy.
 
-An open-source Android keyboard with **AI Voice-to-Text** and **AI Text Fix**. Bring your own [OpenRouter](https://openrouter.ai/) or [PayPerQ](https://ppq.ai/) key; OpenRouter users can keep **zero data retention on by default**.
+An open-source Android keyboard with **AI Voice-to-Text** and **AI Text Fix**. Everyday typing, glide and autocorrect stay **fully offline**; the two AI features run **in the cloud** via your own [OpenRouter](https://openrouter.ai/) or [PayPerQ](https://ppq.ai/) key — there is no local or on-device AI model. OpenRouter users can keep **zero data retention on by default**.
 
 [<img src="https://user-images.githubusercontent.com/663460/26973090-f8fdc986-4d14-11e7-995a-e7c5e79ed925.png" alt="Get APK from GitHub" height="64">](https://github.com/leinss/TobiBoard/releases/latest)
 
@@ -16,7 +16,7 @@ An open-source Android keyboard with **AI Voice-to-Text** and **AI Text Fix**. B
 
 ## Why I built this
 
-I tried Wispr Flow, the trendy dictation app everyone talks about. The Android version is rough: slow, account-locked, and with a very clunky and low-quality user experience. I wanted the same idea (talk, get clean text) but with a better UX and more customization.
+I tried the trendy dictation apps everyone talks about. On Android they're rough: slow, account-locked, and with a very clunky, low-quality user experience. I wanted the same idea — talk, get clean text — but with a better UX and more control.
 
 So I forked [HeliBoard](https://github.com/Helium314/HeliBoard) and added two AI buttons. You choose OpenRouter or PayPerQ, paste your own API key, and pick the speech or text model you want. TobiBoard asks OpenRouter for zero-data-retention endpoints by default, so nothing about you is logged or trained on when that route is available. I also polished and optimized other minor flaws and bugs of the HeliBoard codebase, offering a smoother experience and more secure and private backup and restore handling.
 
@@ -73,7 +73,7 @@ If you don't want AI features, stay on HeliBoard. It's wonderful as-is.
 
 ## Privacy footnote
 
-TobiBoard has no backend, no analytics, no tracking. Once your audio or selected text reaches OpenRouter, PayPerQ, or the underlying model provider, their policies apply. Read [OpenRouter's policy](https://openrouter.ai/privacy) and [PayPerQ's terms](https://ppq.ai/terms) before pointing this at anything sensitive.
+Typing, glide typing, autocorrect, and dictionaries run **fully on-device and offline**, exactly like HeliBoard. The AI Voice-to-Text and Text Fix features are **cloud-based** — there is no local or on-device speech/language model, so the audio or text you run through them is sent to the provider you pick (OpenRouter or PayPerQ). TobiBoard itself has no backend, no analytics, no tracking. Once your audio or selected text reaches OpenRouter, PayPerQ, or the underlying model provider, their policies apply. Read [OpenRouter's policy](https://openrouter.ai/privacy) and [PayPerQ's terms](https://ppq.ai/terms) before pointing this at anything sensitive.
 
 
 <br>
