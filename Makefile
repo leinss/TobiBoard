@@ -64,7 +64,7 @@ build-debug-fast: $(SHERPA_ONNX_AAR) ## Assemble the unminified debug APK (fast 
 
 .PHONY: build-release
 build-release: $(SHERPA_ONNX_AAR) ## Assemble the signed release APK (requires KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD env vars)
-	./gradlew :app:assembleRelease
+	REQUIRE_SIGNED_RELEASE=1 ./gradlew :app:assembleRelease
 
 .PHONY: apk
 apk: build-debug-fast ## Build the sideloadable debug APK and print its path
@@ -344,7 +344,7 @@ devices: ## List connected adb devices
 
 .PHONY: bundle-release
 bundle-release: $(SHERPA_ONNX_AAR) ## Build the signed release AAB for Play Store
-	./gradlew :app:bundleRelease
+	REQUIRE_SIGNED_RELEASE=1 ./gradlew :app:bundleRelease
 	@ls -1 app/build/outputs/bundle/release/*.aab
 
 .PHONY: lint
