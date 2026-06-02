@@ -4,9 +4,9 @@
 
 # TobiBoard
 
-### An open-source keyboard with AI superpowers, built for people who care about privacy.
+### A private, fully on-device keyboard — with optional AI when you want it.
 
-An open-source Android keyboard with **AI Voice-to-Text** and **AI Text Fix**. Everyday typing, glide and autocorrect stay **fully offline**; the two AI features run **in the cloud** via your own [OpenRouter](https://openrouter.ai/) or [PayPerQ](https://ppq.ai/) key — there is no local or on-device AI model. OpenRouter users can keep **zero data retention on by default**.
+TobiBoard is a fast, private keyboard that runs **entirely on your device** — a fork of [HeliBoard](https://github.com/Helium314/HeliBoard) with all of its offline typing, glide, autocorrect, suggestions and dictionaries. On top of that it adds **two optional AI helpers** — Voice-to-Text and Text Fix — that you switch on with your own [OpenRouter](https://openrouter.ai/) or [PayPerQ](https://ppq.ai/) key, or ignore completely. Nothing leaves your device until you opt in, and OpenRouter routes default to **zero data retention**.
 
 [<img src="https://user-images.githubusercontent.com/663460/26973090-f8fdc986-4d14-11e7-995a-e7c5e79ed925.png" alt="Get APK from GitHub" height="64">](https://github.com/leinss/TobiBoard/releases/latest)
 
