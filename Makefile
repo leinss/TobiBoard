@@ -396,7 +396,13 @@ publish-checklist: ## Print the release + store-publishing checklist
 	  echo "Stores (one-time setup; pull-based per release afterwards):"; \
 	  echo "  - IzzyOnDroid: RFP at codeberg.org/IzzyOnDroid/repodata  (submitted)"; \
 	  echo "  - F-Droid:     submit docs/fdroid/*.yml to gitlab.com/fdroid/fdroiddata"; \
-	  echo "  - Google Play: make bundle-release -> upload the .aab in Play Console (or fastlane supply)"
+	  echo "  - Google Play: make publish-play TRACK=internal  (needs a one-time \$$25 dev account)"
+
+.PHONY: publish-play
+publish-play: bundle-release ## Upload signed AAB + listing to Google Play (needs fastlane + PLAY_SERVICE_ACCOUNT_JSON; TRACK=internal|production)
+	@command -v fastlane >/dev/null || { echo "Install fastlane: brew install fastlane (or: gem install fastlane)"; exit 1; }
+	@test -n "$$PLAY_SERVICE_ACCOUNT_JSON" || { echo "Set PLAY_SERVICE_ACCOUNT_JSON=/path/to/play-service-account.json — see docs/PLAY_PUBLISHING.md"; exit 1; }
+	fastlane android play track:$(or $(TRACK),internal)
 
 # ---- Self-hosted F-Droid repo (local test) ----
 .PHONY: fdroid-repo-local
