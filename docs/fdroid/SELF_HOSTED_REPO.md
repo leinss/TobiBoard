@@ -8,7 +8,7 @@ The CI workflow [`.github/workflows/fdroid-repo.yml`](../../.github/workflows/fd
 rebuilds and publishes it to **GitHub Pages** on every published release.
 
 ```
-F-Droid client  ──►  https://leinss.github.io/TobiBoard/repo  (Pages)
+F-Droid client  ──►  https://leinss.xyz/TobiBoard/repo  (Pages)
                           ▲
                           │ deploy-pages (site/ = repo/ + index.html)
                   fdroid update  ──signs index with the REPO key──►  repo/index-v2.jar
@@ -64,9 +64,9 @@ gh workflow run "Self-hosted F-Droid repo" --ref dev --repo leinss/TobiBoard
 gh run watch --repo leinss/TobiBoard
 ```
 
-After a successful run, the landing page at `https://leinss.github.io/TobiBoard/`
+After a successful run, the landing page at `https://leinss.xyz/TobiBoard/`
 shows the **repo URL + fingerprint**. Share the one-tap link
-`https://leinss.github.io/TobiBoard/repo?fingerprint=<FP>` (or a QR of it).
+`https://leinss.xyz/TobiBoard/repo?fingerprint=<FP>` (or a QR of it).
 
 ## Local test (optional, before trusting CI)
 

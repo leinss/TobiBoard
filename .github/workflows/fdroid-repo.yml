@@ -97,7 +97,7 @@ jobs:
           mkdir -p site
           cp -r fdroid/repo site/repo
           FP="${FDROID_FP:-}"
-          URL="https://leinss.github.io/TobiBoard/repo"
+          URL="https://leinss.xyz/TobiBoard/repo"
           echo "Repo fingerprint: ${FP:-<unavailable>}"
           cat > site/index.html <<HTML
           <!doctype html><html lang="en"><head><meta charset="utf-8">

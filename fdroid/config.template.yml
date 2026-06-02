@@ -3,7 +3,7 @@
 # CI copies this to fdroid/config.yml and APPENDS keystorepass/keypass from
 # GitHub Actions secrets at build time. NEVER put passwords in this committed
 # template, and never commit the generated config.yml or the keystore.
-repo_url: "https://leinss.github.io/TobiBoard/repo"
+repo_url: "https://leinss.xyz/TobiBoard/repo"
 repo_name: "TobiBoard"
 repo_description: >-
   Self-hosted F-Droid repository for TobiBoard — a privacy-first, on-device
