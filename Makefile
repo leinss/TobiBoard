@@ -15,7 +15,7 @@ EMU   = $(shell adb devices | awk 'NR>1 && $$2=="device" && $$1 ~ /^emulator-/ {
 .PHONY: help version devices build apk build-fast build-release bundle-release \
         install install-phone install-emu run-phone uninstall logcat \
         test lint check clean bump-patch bump-minor bump-major tag release \
-        publish-checklist update-fork
+        publish-checklist update-fork fdroid-repo-local
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -115,3 +115,14 @@ publish-checklist: ## Print the pre-publish checklist (IzzyOnDroid / F-Droid)
 
 update-fork: ## Sync from the upstream WisprBoard fork
 	update-forks || git fetch upstream
+
+# ---- Self-hosted F-Droid repo (local test) ----
+fdroid-repo-local: ## Build the self-hosted F-Droid index locally (needs fdroidserver + local fdroid/config.yml, keystore.p12, repo/*.apk)
+	@command -v fdroid >/dev/null || { echo "Install fdroidserver: pipx install fdroidserver (or: uv tool install fdroidserver)"; exit 1; }
+	@test -f fdroid/config.yml || { echo "Missing fdroid/config.yml (cp fdroid/config.template.yml fdroid/config.yml and add keystorepass/keypass)"; exit 1; }
+	@test -f fdroid/keystore.p12 || { echo "Missing fdroid/keystore.p12 (generate per docs/fdroid/SELF_HOSTED_REPO.md)"; exit 1; }
+	@ls fdroid/repo/*.apk >/dev/null 2>&1 || { echo "Put at least one signed *-release.apk in fdroid/repo/"; exit 1; }
+	cd fdroid && fdroid update --create-metadata --verbose
+	@pass=$$(grep -E '^keystorepass:' fdroid/config.yml | sed -E 's/.*: *"?([^"]*)"?.*/\1/'); \
+	  fp=$$(keytool -exportcert -alias fdroidrepo -keystore fdroid/keystore.p12 -storepass "$$pass" 2>/dev/null | openssl dgst -sha256 | awk '{print $$NF}'); \
+	  echo "Repo fingerprint: $$fp"
