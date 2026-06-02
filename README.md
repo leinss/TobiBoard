@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="TobiBoard" width="140" />
+<img src="docs/assets/readme-icon.png" alt="TobiBoard" width="132" />
 
 # TobiBoard
 
@@ -18,7 +18,7 @@ An open-source Android keyboard with **AI Voice-to-Text** and **AI Text Fix**. E
 
 I tried the trendy dictation apps everyone talks about. On Android they're rough: slow, account-locked, and with a very clunky, low-quality user experience. I wanted the same idea — talk, get clean text — but with a better UX and more control.
 
-So I forked [HeliBoard](https://github.com/Helium314/HeliBoard) and added two AI buttons. You choose OpenRouter or PayPerQ, paste your own API key, and pick the speech or text model you want. TobiBoard asks OpenRouter for zero-data-retention endpoints by default, so nothing about you is logged or trained on when that route is available. I also polished and optimized other minor flaws and bugs of the HeliBoard codebase, offering a smoother experience and more secure and private backup and restore handling.
+So I forked [HeliBoard](https://github.com/Helium314/HeliBoard) and added two AI buttons. You choose OpenRouter or PayPerQ, paste your own API key, and pick the speech or text model you want. TobiBoard asks OpenRouter for zero-data-retention endpoints by default, so nothing about you is logged or trained on when that route is available. Along the way I smoothed over rough edges in the HeliBoard codebase and hardened the backup-and-restore flow, so it's faster to live with and keeps your data more private.
 
 No subscription. No account. No telemetry. Just a keyboard.
 
