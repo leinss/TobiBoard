@@ -37,11 +37,11 @@ build-fast: ## Build the debug-no-minify APK (faster, for iterating)
 	$(GRADLE) assembleDebugNoMinify
 
 build-release: ## Build the signed release APK (needs KEYSTORE_FILE/PASSWORD, KEY_ALIAS/PASSWORD)
-	$(GRADLE) assembleRelease
+	REQUIRE_SIGNED_RELEASE=1 $(GRADLE) assembleRelease
 	@ls -1 app/build/outputs/apk/release/*.apk
 
 bundle-release: ## Build the signed release AAB for Play Store
-	$(GRADLE) bundleRelease
+	REQUIRE_SIGNED_RELEASE=1 $(GRADLE) bundleRelease
 	@ls -1 app/build/outputs/bundle/release/*.aab
 
 # ---- Install / device ----
