@@ -24,6 +24,8 @@ release-signing/
 *.p12
 *.pkcs12
 keystore.properties
+*service-account*.json
+play-*.json
 
 # Local env (Keychain references + paths) — never commit
 .envrc

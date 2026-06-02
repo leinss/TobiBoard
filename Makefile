@@ -15,7 +15,7 @@ EMU   = $(shell adb devices | awk 'NR>1 && $$2=="device" && $$1 ~ /^emulator-/ {
 .PHONY: help version devices build apk build-fast build-release bundle-release \
         install install-phone install-emu run-phone uninstall logcat \
         test lint check clean bump-patch bump-minor bump-major tag release ship \
-        publish-checklist update-fork fdroid-repo-local
+        publish-checklist publish-play update-fork fdroid-repo-local
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -117,7 +117,12 @@ publish-checklist: ## Print the release + store-publishing checklist
 	  echo "Stores (one-time setup; pull-based per release afterwards):"; \
 	  echo "  - IzzyOnDroid: RFP at codeberg.org/IzzyOnDroid/repodata  (submitted)"; \
 	  echo "  - F-Droid:     submit docs/fdroid/*.yml to gitlab.com/fdroid/fdroiddata"; \
-	  echo "  - Google Play: make bundle-release -> upload the .aab in Play Console (or fastlane supply)"
+	  echo "  - Google Play: make publish-play TRACK=internal  (needs a one-time \$$25 dev account)"
+
+publish-play: bundle-release ## Upload signed AAB + listing to Google Play (needs fastlane + PLAY_SERVICE_ACCOUNT_JSON; TRACK=internal|production)
+	@command -v fastlane >/dev/null || { echo "Install fastlane: brew install fastlane (or: gem install fastlane)"; exit 1; }
+	@test -n "$$PLAY_SERVICE_ACCOUNT_JSON" || { echo "Set PLAY_SERVICE_ACCOUNT_JSON=/path/to/play-service-account.json — see docs/PLAY_PUBLISHING.md"; exit 1; }
+	fastlane android play track:$(or $(TRACK),internal)
 
 update-fork: ## Sync from the upstream WisprBoard fork
 	update-forks || git fetch upstream
