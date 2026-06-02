@@ -390,3 +390,15 @@ publish-checklist: ## Print the pre-publish checklist (IzzyOnDroid / F-Droid)
 	  echo "  4. make tag && git push origin <tag>"; \
 	  echo "  5. make release CONFIRM=1   # GitHub release; IzzyOnDroid auto-picks it up"; \
 	  echo "  6. (once) request app inclusion at the IzzyOnDroid request tracker"
+
+# ---- Self-hosted F-Droid repo (local test) ----
+.PHONY: fdroid-repo-local
+fdroid-repo-local: ## Build the self-hosted F-Droid index locally (needs fdroidserver + local fdroid/config.yml, keystore.p12, repo/*.apk)
+	@command -v fdroid >/dev/null || { echo "Install fdroidserver: pipx install fdroidserver (or: uv tool install fdroidserver)"; exit 1; }
+	@test -f fdroid/config.yml || { echo "Missing fdroid/config.yml (cp fdroid/config.template.yml fdroid/config.yml and add keystorepass/keypass)"; exit 1; }
+	@test -f fdroid/keystore.p12 || { echo "Missing fdroid/keystore.p12 (generate per docs/fdroid/SELF_HOSTED_REPO.md)"; exit 1; }
+	@ls fdroid/repo/*.apk >/dev/null 2>&1 || { echo "Put at least one signed *-release.apk in fdroid/repo/"; exit 1; }
+	cd fdroid && fdroid update --create-metadata --verbose
+	@pass=$$(grep -E '^keystorepass:' fdroid/config.yml | sed -E 's/.*: *"?([^"]*)"?.*/\1/'); \
+	  fp=$$(keytool -exportcert -alias fdroidrepo -keystore fdroid/keystore.p12 -storepass "$$pass" 2>/dev/null | openssl dgst -sha256 | awk '{print $$NF}'); \
+	  echo "Repo fingerprint: $$fp"

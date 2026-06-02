@@ -1,0 +1,6 @@
+# Everything in this folder is generated or secret EXCEPT the committed template.
+# Never commit the keystore, the runtime config (holds passwords), APKs or the
+# generated index.
+*
+!.gitignore
+!config.template.yml
