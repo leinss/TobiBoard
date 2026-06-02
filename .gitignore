@@ -24,6 +24,8 @@ release-signing/
 *.p12
 *.pkcs12
 keystore.properties
+*service-account*.json
+play-*.json
 
 # Native libs pulled by `make fetch-native-libs` — too large for git.
 app/libs/*.aar
