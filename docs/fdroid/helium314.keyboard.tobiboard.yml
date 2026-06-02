@@ -1,0 +1,43 @@
+# F-Droid build recipe for TobiBoard.
+#
+# This file is NOT consumed by this repository. To request inclusion in the
+# F-Droid main repo, submit its contents as a merge request to F-Droid's data repo:
+#
+#   https://gitlab.com/fdroid/fdroiddata
+#   ->  metadata/helium314.keyboard.tobiboard.yml
+#
+# Summary, description, icon, screenshots and per-version changelogs are read
+# automatically from the fastlane metadata already in this repo
+# (fastlane/metadata/android/en-US/...), so they are intentionally omitted here.
+
+Categories:
+  - System
+License: GPL-3.0-or-later
+AuthorName: leinss
+SourceCode: https://github.com/leinss/TobiBoard
+IssueTracker: https://github.com/leinss/TobiBoard/issues
+Changelog: https://github.com/leinss/TobiBoard/releases
+
+# Core typing (glide, autocorrect, suggestions, dictionaries) is fully on-device.
+# The optional Voice-to-Text and Text Fix features call a user-chosen cloud
+# provider (OpenRouter / PayPerQ) with the user's own API key, and are disabled
+# until a key is entered.
+AntiFeatures:
+  NonFreeNet:
+    en-US: The optional AI voice-to-text and text-fix features send audio or selected text to a user-chosen cloud provider (OpenRouter or PayPerQ) using the user's own API key. Both features are off by default; all core keyboard functions work fully offline.
+
+RepoType: git
+Repo: https://github.com/leinss/TobiBoard.git
+
+Builds:
+  - versionName: 6.7.0
+    versionCode: 6700
+    commit: v6.7.0
+    ndk: 28.0.13004108
+    gradle:
+      - yes
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags
+CurrentVersion: 6.7.0
+CurrentVersionCode: 6700
