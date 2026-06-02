@@ -14,7 +14,7 @@ EMU   = $(shell adb devices | awk 'NR>1 && $$2=="device" && $$1 ~ /^emulator-/ {
 .DEFAULT_GOAL := help
 .PHONY: help version devices build apk build-fast build-release bundle-release \
         install install-phone install-emu run-phone uninstall logcat \
-        test lint check clean bump-patch bump-minor bump-major tag release \
+        test lint check clean bump-patch bump-minor bump-major tag release ship \
         publish-checklist update-fork fdroid-repo-local
 
 help: ## Show this help
@@ -104,14 +104,20 @@ release: build-release ## Build signed release + GitHub release. Dry-run unless 
 	  if [ "$(CONFIRM)" = "1" ]; then echo "+ $$cmd"; eval $$cmd; \
 	  else echo "DRY-RUN (re-run with CONFIRM=1 to publish):"; echo "  $$cmd"; fi
 
-publish-checklist: ## Print the pre-publish checklist (IzzyOnDroid / F-Droid)
-	@echo "Pre-publish:"; \
-	  echo "  1. make check               # tests + lint pass"; \
-	  echo "  2. make bump-<patch|minor>  # then edit the changelog stub"; \
-	  echo "  3. KEYSTORE_* env set (signing) -> make build-release"; \
-	  echo "  4. make tag && git push origin <tag>"; \
-	  echo "  5. make release CONFIRM=1   # GitHub release; IzzyOnDroid auto-picks it up"; \
-	  echo "  6. (once) request app inclusion at the IzzyOnDroid request tracker"
+ship: ## One-shot release: tests + lint -> signed build -> tag + GitHub release (dry-run unless CONFIRM=1)
+	$(MAKE) check
+	$(MAKE) release CONFIRM=$(CONFIRM)
+
+publish-checklist: ## Print the release + store-publishing checklist
+	@echo "Per release (feeds IzzyOnDroid + F-Droid automatically once accepted):"; \
+	  echo "  1. make bump-<patch|minor>   # bump version + changelog stub, then edit the stub"; \
+	  echo "  2. KEYSTORE_* env set (signing) via direnv"; \
+	  echo "  3. make ship CONFIRM=1       # tests+lint, signed build, tag + GitHub release"; \
+	  echo ""; \
+	  echo "Stores (one-time setup; pull-based per release afterwards):"; \
+	  echo "  - IzzyOnDroid: RFP at codeberg.org/IzzyOnDroid/repodata  (submitted)"; \
+	  echo "  - F-Droid:     submit docs/fdroid/*.yml to gitlab.com/fdroid/fdroiddata"; \
+	  echo "  - Google Play: make bundle-release -> upload the .aab in Play Console (or fastlane supply)"
 
 update-fork: ## Sync from the upstream WisprBoard fork
 	update-forks || git fetch upstream
