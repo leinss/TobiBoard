@@ -21,6 +21,8 @@ tools/*.txt
 release-signing/
 *.jks
 *.keystore
+*.p12
+*.pkcs12
 keystore.properties
 
 # Local env (Keychain references + paths) — never commit
