@@ -29,15 +29,21 @@ AntiFeatures:
 RepoType: git
 Repo: https://github.com/leinss/TobiBoard.git
 
+# IMPORTANT: F-Droid builds the tagged commit FROM SOURCE. The keyless
+# (unsigned) release build only works from the commit that gates the signing
+# guard behind REQUIRE_SIGNED_RELEASE. The v6.7.0 tag predates that change, so
+# the first F-Droid build must target the NEXT tagged release that contains it.
+# Update versionName / versionCode / commit below to that release before
+# submitting this recipe (do not submit pinned to v6.7.0 — it would fail to build).
 Builds:
-  - versionName: 6.7.0
-    versionCode: 6700
-    commit: v6.7.0
+  - versionName: 6.7.1
+    versionCode: 6701
+    commit: v6.7.1
     ndk: 28.0.13004108
     gradle:
       - yes
 
 AutoUpdateMode: Version v%v
 UpdateCheckMode: Tags
-CurrentVersion: 6.7.0
-CurrentVersionCode: 6700
+CurrentVersion: 6.7.1
+CurrentVersionCode: 6701
