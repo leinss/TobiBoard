@@ -138,7 +138,7 @@ class TextFixManager(
             return
         }
         if (provider == AiProvider.LOCAL &&
-            !helium314.keyboard.latin.voice.local.ModelStorage.isReady(context, helium314.keyboard.latin.voice.local.TextFixModelInfo.Gemma3_1bInt4)
+            !helium314.keyboard.latin.voice.local.ModelStorage.isReady(context, helium314.keyboard.latin.voice.local.ModelRegistry.activeTextFix(context))
         ) {
             Toast.makeText(context, R.string.text_fix_error_local_not_ready, Toast.LENGTH_LONG).show()
             return

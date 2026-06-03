@@ -12,7 +12,7 @@ enum class AiProvider(val prefValue: String) {
 
     companion object {
         fun fromPref(value: String?): AiProvider =
-            values().firstOrNull { it.prefValue == value } ?: OPENROUTER
+            values().firstOrNull { it.prefValue == value } ?: LOCAL
     }
 }
 

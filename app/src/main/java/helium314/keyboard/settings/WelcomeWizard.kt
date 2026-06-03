@@ -553,7 +553,7 @@ private fun AiProviderSetupStep(
     if (showProviderDialog) {
         ListPickerDialog(
             onDismissRequest = { showProviderDialog = false },
-            items = listOf(AiProvider.OPENROUTER, AiProvider.PAYPERQ, AiProvider.LOCAL),
+            items = listOf(AiProvider.LOCAL, AiProvider.OPENROUTER, AiProvider.PAYPERQ),
             onItemSelected = {
                 selectProvider(it)
                 showProviderDialog = false
