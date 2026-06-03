@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.settings.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,6 +33,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import helium314.keyboard.latin.R
+import helium314.keyboard.latin.settings.Defaults
+import helium314.keyboard.latin.settings.Settings
+import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.voice.local.DownloadState
 import helium314.keyboard.latin.voice.local.HfAuth
 import helium314.keyboard.latin.voice.local.LocalLiteRtEngine
@@ -55,6 +60,10 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
     // gating step (license, then service start) once the user saves.
     var pendingAfterTokenModel by remember { mutableStateOf<ModelInfo?>(null) }
     var hasToken by remember { mutableStateOf(HfAuth.currentToken(ctx) != null) }
+    val prefs = remember { ctx.prefs() }
+    var activeTextFixId by remember {
+        mutableStateOf(prefs.getString(Settings.PREF_LOCAL_TEXT_FIX_MODEL, Defaults.PREF_LOCAL_TEXT_FIX_MODEL))
+    }
 
     fun startOrGate(model: ModelInfo) {
         when {
@@ -86,15 +95,28 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
                     model = model,
                     state = state,
                     freeBytes = freeBytes,
+                    isActiveTextFix = model is TextFixModelInfo && model.id == activeTextFixId,
+                    onUseForTextFix = if (model is TextFixModelInfo) {
+                        {
+                            prefs.edit().putString(Settings.PREF_LOCAL_TEXT_FIX_MODEL, model.id).apply()
+                            activeTextFixId = model.id
+                            LocalLiteRtEngine.releaseShared()
+                        }
+                    } else null,
                     onDownload = { startOrGate(model) },
                     onCancel = { ModelDownloadService.cancel(ctx, model.id) },
                     onDelete = {
                         when (model) {
-                            is SttModelInfo.ParakeetTdt06b -> LocalSherpaEngine.releaseShared()
-                            is TextFixModelInfo.Gemma3_1bInt4 -> LocalLiteRtEngine.releaseShared()
+                            is SttModelInfo -> LocalSherpaEngine.releaseShared()
+                            is TextFixModelInfo -> LocalLiteRtEngine.releaseShared()
                         }
                         ModelStorage.delete(ctx, model)
                         ModelDownloadRepository.update(model.id, DownloadState.NotDownloaded)
+                        // Deleting the active fixer falls back to the default selection.
+                        if (model is TextFixModelInfo && model.id == activeTextFixId) {
+                            prefs.edit().remove(Settings.PREF_LOCAL_TEXT_FIX_MODEL).apply()
+                            activeTextFixId = Defaults.PREF_LOCAL_TEXT_FIX_MODEL
+                        }
                     },
                 )
                 Spacer(Modifier.height(8.dp))
@@ -105,6 +127,7 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
     if (tokenDialogOpen) {
         HfTokenDialog(
             initialValue = "",
+            modelPageUrl = pendingAfterTokenModel?.licenseUrl,
             onDismiss = {
                 tokenDialogOpen = false
                 pendingAfterTokenModel = null
@@ -132,7 +155,18 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { pendingLicenseModel = null },
             title = { Text(stringResource(R.string.local_model_license_title, model.displayName)) },
-            text = { Text(model.licenseSummary.orEmpty()) },
+            text = {
+                Column {
+                    Text(model.licenseSummary.orEmpty())
+                    model.licenseUrl?.let { url ->
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                            contentPadding = PaddingValues(0.dp),
+                        ) { Text(stringResource(R.string.local_model_open_page)) }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     pendingLicenseModel = null
@@ -172,10 +206,12 @@ private fun HfTokenRow(hasToken: Boolean, onTap: () -> Unit) {
 @Composable
 private fun HfTokenDialog(
     initialValue: String,
+    modelPageUrl: String? = null,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
     onClear: () -> Unit,
 ) {
+    val ctx = LocalContext.current
     var value by remember { mutableStateOf(initialValue) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -183,6 +219,12 @@ private fun HfTokenDialog(
         text = {
             Column {
                 Text(stringResource(R.string.local_model_hf_token_dialog_help), style = MaterialTheme.typography.bodySmall)
+                modelPageUrl?.let { url ->
+                    TextButton(
+                        onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                        contentPadding = PaddingValues(0.dp),
+                    ) { Text(stringResource(R.string.local_model_open_page)) }
+                }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = value,
@@ -217,6 +259,8 @@ private fun ModelCard(
     model: ModelInfo,
     state: DownloadState,
     freeBytes: Long,
+    isActiveTextFix: Boolean = false,
+    onUseForTextFix: (() -> Unit)? = null,
     onDownload: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
@@ -246,8 +290,20 @@ private fun ModelCard(
                         OutlinedButton(onClick = onDownload) { Text(stringResource(R.string.local_model_download)) }
                     DownloadState.Queued, is DownloadState.Downloading, is DownloadState.Verifying ->
                         OutlinedButton(onClick = onCancel) { Text(stringResource(android.R.string.cancel)) }
-                    DownloadState.Ready ->
+                    DownloadState.Ready -> {
+                        if (onUseForTextFix != null) {
+                            if (isActiveTextFix) {
+                                OutlinedButton(onClick = {}, enabled = false) {
+                                    Text(stringResource(R.string.local_model_active))
+                                }
+                            } else {
+                                OutlinedButton(onClick = onUseForTextFix) {
+                                    Text(stringResource(R.string.local_model_use_for_textfix))
+                                }
+                            }
+                        }
                         OutlinedButton(onClick = onDelete) { Text(stringResource(R.string.local_model_delete)) }
+                    }
                 }
             }
         }

@@ -101,6 +101,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_TEXT_FIX_ENABLED = "text_fix_enabled";
     public static final String PREF_TEXT_FIX_MODEL = "text_fix_model";
     public static final String PREF_TEXT_FIX_MODEL_CUSTOM = "text_fix_model_custom";
+    public static final String PREF_LOCAL_TEXT_FIX_MODEL = "local_text_fix_model";
     public static final String PREF_TEXT_FIX_PROMPT = "text_fix_prompt";
     public static final String PREF_TEXT_FIX_2_ENABLED = "text_fix_2_enabled";
     public static final String PREF_TEXT_FIX_2_PROMPT = "text_fix_2_prompt";

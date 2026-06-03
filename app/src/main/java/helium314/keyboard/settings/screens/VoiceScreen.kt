@@ -254,9 +254,9 @@ fun createVoiceSettings(context: Context) = listOf(
         val ctx = LocalContext.current
         val prefs = ctx.prefs()
         val items = listOf(
+            ctx.getString(R.string.ai_provider_local) to AiProvider.LOCAL.prefValue,
             ctx.getString(R.string.ai_provider_openrouter) to AiProvider.OPENROUTER.prefValue,
             ctx.getString(R.string.ai_provider_payperq) to AiProvider.PAYPERQ.prefValue,
-            ctx.getString(R.string.ai_provider_local) to AiProvider.LOCAL.prefValue,
         )
         ListPreference(setting, items, Defaults.PREF_AI_PROVIDER) { value ->
             val provider = AiProvider.fromPref(value)

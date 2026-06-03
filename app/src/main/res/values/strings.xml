@@ -1176,7 +1176,7 @@ New dictionary:
     <string name="voice_haptic_feedback_summary">Vibrate when recording starts and stops</string>
     <string name="voice_polish_category">Auto-polish</string>
     <string name="voice_auto_polish_enabled">Auto-polish transcription</string>
-    <string name="voice_auto_polish_enabled_summary">After transcribing, run the text through a second AI pass to clean it up. Adds latency but matches Wispr Flow-style quality.</string>
+    <string name="voice_auto_polish_enabled_summary">After transcribing, run the text through a second AI pass to clean it up. Adds latency but improves output quality.</string>
     <string name="voice_polish_level">Polish level</string>
     <string name="voice_polish_level_summary">How aggressively the AI should rewrite the raw transcription</string>
     <string name="voice_polish_level_natural">Natural (no polish)</string>
@@ -1235,10 +1235,13 @@ New dictionary:
     <string name="local_model_hf_token_status_set">Saved · tap to update or clear</string>
     <string name="local_model_hf_token_status_unset">Not set · required for gated models</string>
     <string name="local_model_hf_token_dialog_title">Hugging Face access token</string>
-    <string name="local_model_hf_token_dialog_help">Generate a read-only token at huggingface.co/settings/tokens and paste it below. Some models also require accepting their terms once on the model page.</string>
+    <string name="local_model_hf_token_dialog_help">Only gated models (e.g. Gemma) need this. Steps: 1) open the model page and click \"Agree to access\", 2) create a read-only token at huggingface.co/settings/tokens, 3) paste it below.</string>
     <string name="local_model_hf_token_field_label">Access token</string>
     <string name="local_model_hf_token_save">Save token</string>
     <string name="local_model_hf_token_clear">Clear</string>
+    <string name="local_model_open_page">Open model page</string>
+    <string name="local_model_use_for_textfix">Use for Text-Fix</string>
+    <string name="local_model_active">Active</string>
     <string name="setup_ai_provider_title">Set up AI voice</string>
     <string name="setup_ai_provider_instruction">Choose OpenRouter or PayPerQ, add the matching API key, and allow microphone access now. You can skip and configure this later from Voice settings.</string>
     <string name="setup_ai_provider_status">Provider: %1$s\nAPI key: %2$s\nMicrophone: %3$s\nVoice input: %4$s</string>
