@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.latin.voice.local
 
+import android.content.Context
+import helium314.keyboard.latin.settings.Defaults
+import helium314.keyboard.latin.settings.Settings
+import helium314.keyboard.latin.utils.prefs
+
 /**
  * Describes one downloadable on-device model. A model is one or more files fetched from
  * a public HuggingFace `resolve/main/<file>` URL, verified against a pinned SHA-256, and
@@ -14,6 +19,8 @@ internal interface ModelInfo {
     val licenseSummary: String? get() = null
     /** True when downloads need an `Authorization: Bearer <hf-token>` header. */
     val requiresAuth: Boolean get() = false
+    /** Optional model page the user must visit (e.g. to accept a licence / "Agree to access"). */
+    val licenseUrl: String? get() = null
     val totalBytes: Long get() = files.sumOf { it.sizeBytes }
 }
 
@@ -70,6 +77,45 @@ internal sealed interface SttModelInfo : ModelInfo {
 
 internal sealed interface TextFixModelInfo : ModelInfo {
     /**
+     * Qwen2.5 1.5 B Instruct, INT8 (q8) MediaPipe / LiteRT `.task` bundle. Ungated and
+     * Apache-2.0: downloads anonymously, no HuggingFace token. The default on-device text-fix
+     * model. SHA-256 from the HuggingFace LFS `oid`, split into two 32-hex halves (see Parakeet).
+     */
+    data object Qwen25_15bInstruct : TextFixModelInfo {
+        override val id = "qwen2.5-1.5b-instruct-q8"
+        override val displayName = "Qwen2.5 1.5 B Instruct (INT8)"
+        private const val BASE =
+            "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main"
+        override val files = listOf(
+            ModelFile(
+                "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+                "$BASE/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+                "8d867a7c93a6acf2892f08e0174e2f6f" + "351ad256b7e3cfb6d6cd9c89794b42e0",
+                1_597_913_616L,
+            ),
+        )
+    }
+
+    /**
+     * Qwen2.5 0.5 B Instruct, INT8 `.task`. Ungated, Apache-2.0. Lighter (~547 MB) option for
+     * low-RAM / low-storage devices; lower quality than the 1.5 B on complex rewrites.
+     */
+    data object Qwen25_05bInstruct : TextFixModelInfo {
+        override val id = "qwen2.5-0.5b-instruct-q8"
+        override val displayName = "Qwen2.5 0.5 B Instruct (INT8)"
+        private const val BASE =
+            "https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main"
+        override val files = listOf(
+            ModelFile(
+                "Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+                "$BASE/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+                "e608953f169aeb1bd7b9155fec255982" + "5e08453fc209b84eda3a781ed0452fd2",
+                546_660_344L,
+            ),
+        )
+    }
+
+    /**
      * Google Gemma 3 1B IT, INT4-quantised, in MediaPipe / LiteRT-LM `.task` bundle
      * format. The HuggingFace repo is `auto`-gated behind Google's Gemma Terms of Use;
      * each user must click "Agree" on the repo page once, after which their HF access
@@ -83,9 +129,11 @@ internal sealed interface TextFixModelInfo : ModelInfo {
         override val displayName = "Gemma 3 1B IT (INT4)"
         override val requiresLicense = true
         override val requiresAuth = true
+        override val licenseUrl = "https://huggingface.co/litert-community/Gemma3-1B-IT"
         override val licenseSummary =
-            "Use is governed by the Gemma Terms of Use. The model is downloaded directly " +
-            "from HuggingFace; this app does not host it."
+            "Gemma is gated by Google. To enable it: (1) open the model page and click " +
+            "\"Agree to access\", (2) create a read-only token at huggingface.co/settings/tokens, " +
+            "(3) add that token above. The model is fetched from HuggingFace; this app does not host it."
         private const val BASE =
             "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main"
         override val files = listOf(
@@ -108,8 +156,20 @@ internal const val REQUIRES_HASH_PINNING: String = "PIN_BEFORE_RELEASE"
 
 internal object ModelRegistry {
     val STT: List<SttModelInfo> = listOf(SttModelInfo.ParakeetTdt06b)
-    val TEXT_FIX: List<TextFixModelInfo> = listOf(TextFixModelInfo.Gemma3_1bInt4)
+    // Ungated Qwen models first so the default on-device text-fix needs no HuggingFace token;
+    // Gemma stays available for users who accept Google's terms and add a token.
+    val TEXT_FIX: List<TextFixModelInfo> = listOf(
+        TextFixModelInfo.Qwen25_15bInstruct,
+        TextFixModelInfo.Qwen25_05bInstruct,
+        TextFixModelInfo.Gemma3_1bInt4,
+    )
     val ALL: List<ModelInfo> = STT + TEXT_FIX
 
     fun findById(id: String): ModelInfo? = ALL.firstOrNull { it.id == id }
+
+    /** The on-device text-fix model the user selected (default: the ungated Qwen 1.5 B). */
+    fun activeTextFix(context: Context): TextFixModelInfo {
+        val id = context.prefs().getString(Settings.PREF_LOCAL_TEXT_FIX_MODEL, Defaults.PREF_LOCAL_TEXT_FIX_MODEL)
+        return TEXT_FIX.firstOrNull { it.id == id } ?: TEXT_FIX.first()
+    }
 }

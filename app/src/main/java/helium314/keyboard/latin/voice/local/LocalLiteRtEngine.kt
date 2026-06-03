@@ -29,7 +29,7 @@ internal class LocalLiteRtEngine(
     override fun fixText(userText: String): String {
         if (cancelled) return ""
         val inference = SharedLlm.acquire(context)
-            ?: throw IOException("Gemma model not downloaded — open Settings → On-device models.")
+            ?: throw IOException("On-device text-fix model not downloaded — open Settings → On-device models.")
         val prompt = formatGemmaChat(systemPrompt, userText)
         if (cancelled) return ""
         val started = System.currentTimeMillis()
@@ -132,15 +132,22 @@ internal fun stripTrailingCommentary(raw: String): String {
 
 private object SharedLlm {
     private const val TAG = "LocalLiteRtEngine"
-    private val model = TextFixModelInfo.Gemma3_1bInt4
 
     @Volatile private var inference: LlmInference? = null
+    @Volatile private var loadedModelId: String? = null
     private val initLock = Any()
 
     fun acquire(context: Context): LlmInference? {
-        inference?.let { return it }
+        val model = ModelRegistry.activeTextFix(context)
+        inference?.let { if (loadedModelId == model.id) return it }
         synchronized(initLock) {
-            inference?.let { return it }
+            inference?.let {
+                if (loadedModelId == model.id) return it
+                // The user switched the active text-fix model: drop the stale handle and reload.
+                it.close()
+                inference = null
+                loadedModelId = null
+            }
             if (!ModelStorage.isReady(context, model)) return null
             val modelFile = ModelStorage.fileFor(context, model, model.files.first())
             return try {
@@ -150,8 +157,9 @@ private object SharedLlm {
                     .setMaxTokens(MAX_TOKENS)
                     .build()
                 val llm = LlmInference.createFromOptions(context, options)
-                Log.i(TAG, "Initialised LlmInference in ${System.currentTimeMillis() - started} ms")
+                Log.i(TAG, "Initialised LlmInference (${model.id}) in ${System.currentTimeMillis() - started} ms")
                 inference = llm
+                loadedModelId = model.id
                 llm
             } catch (t: Throwable) {
                 Log.e(TAG, "Failed to initialise LlmInference", t)
@@ -164,6 +172,7 @@ private object SharedLlm {
         synchronized(initLock) {
             inference?.close()
             inference = null
+            loadedModelId = null
         }
     }
 
