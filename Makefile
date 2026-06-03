@@ -109,14 +109,14 @@ ship: ## One-shot release: tests + lint -> signed build -> tag + GitHub release 
 	$(MAKE) release CONFIRM=$(CONFIRM)
 
 publish-checklist: ## Print the release + store-publishing checklist
-	@echo "Per release (feeds IzzyOnDroid + F-Droid automatically once accepted):"; \
+	@echo "Per release (auto-feeds the self-hosted F-Droid repo; F-Droid main once accepted):"; \
 	  echo "  1. make bump-<patch|minor>   # bump version + changelog stub, then edit the stub"; \
 	  echo "  2. KEYSTORE_* env set (signing) via direnv"; \
 	  echo "  3. make ship CONFIRM=1       # tests+lint, signed build, tag + GitHub release"; \
 	  echo ""; \
 	  echo "Stores (one-time setup; pull-based per release afterwards):"; \
-	  echo "  - IzzyOnDroid: RFP at codeberg.org/IzzyOnDroid/repodata  (submitted)"; \
-	  echo "  - F-Droid:     submit docs/fdroid/*.yml to gitlab.com/fdroid/fdroiddata"; \
+	  echo "  - F-Droid (self-hosted): auto-published to leinss.xyz/TobiBoard/repo on each release"; \
+	  echo "  - F-Droid main:          submit docs/fdroid/*.yml to gitlab.com/fdroid/fdroiddata"; \
 	  echo "  - Google Play: make publish-play TRACK=internal  (needs a one-time \$$25 dev account)"
 
 publish-play: bundle-release ## Upload signed AAB + listing to Google Play (needs fastlane + PLAY_SERVICE_ACCOUNT_JSON; TRACK=internal|production)

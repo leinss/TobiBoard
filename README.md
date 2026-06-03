@@ -80,7 +80,7 @@ Typing, glide typing, autocorrect, and dictionaries run **fully on-device and of
 
 ## Get started
 
-1. **Download** the APK from [Releases](https://github.com/leinss/TobiBoard/releases/latest).
+1. **Install** — add the F-Droid repo `https://leinss.xyz/TobiBoard/repo` to your F-Droid client for automatic updates, or download the APK from [Releases](https://github.com/leinss/TobiBoard/releases/latest).
 2. **Enable** TobiBoard in *Settings → System → Keyboards*.
 3. **Choose a provider** in *TobiBoard Settings → Voice Input*, then add an OpenRouter or PayPerQ API key.
 4. **Long-press Return**, tap the mic, start talking.
