@@ -1,0 +1,2 @@
+* Packaging change so the release builds reproducibly from source, enabling F-Droid distribution
+* No changes to typing, voice input, or text-fix behaviour
