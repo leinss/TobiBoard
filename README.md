@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="WisprBoard" width="140" />
+<img src="docs/assets/readme-icon.png" alt="TobiBoard" width="132" />
 
-# WisprBoard
+# TobiBoard
 
-### An open-source keyboard with AI superpowers, built for people who care about privacy.
+### A private, fully on-device keyboard — with optional AI when you want it.
 
-An open-source Android keyboard with **AI Voice-to-Text** and **AI Text Fix**. Bring your own [OpenRouter](https://openrouter.ai/) or [PayPerQ](https://ppq.ai/) key; OpenRouter users can keep **zero data retention on by default**.
+TobiBoard is a fast, private keyboard that runs **entirely on your device** — a fork of [HeliBoard](https://github.com/Helium314/HeliBoard) with all of its offline typing, glide, autocorrect, suggestions and dictionaries. On top of that it adds **two optional AI helpers** — Voice-to-Text and Text Fix — that you switch on with your own [OpenRouter](https://openrouter.ai/) or [PayPerQ](https://ppq.ai/) key, or ignore completely. Nothing leaves your device until you opt in, and OpenRouter routes default to **zero data retention**.
 
-[<img src="https://user-images.githubusercontent.com/663460/26973090-f8fdc986-4d14-11e7-995a-e7c5e79ed925.png" alt="Get APK from GitHub" height="64">](https://github.com/Turtlecute33/WisprBoard/releases/latest)
+[<img src="https://user-images.githubusercontent.com/663460/26973090-f8fdc986-4d14-11e7-995a-e7c5e79ed925.png" alt="Get APK from GitHub" height="64">](https://github.com/leinss/TobiBoard/releases/latest)
 
 </div>
 
@@ -16,9 +16,9 @@ An open-source Android keyboard with **AI Voice-to-Text** and **AI Text Fix**. B
 
 ## Why I built this
 
-I tried Wispr Flow, the trendy dictation app everyone talks about. The Android version is rough: slow, account-locked, and with a very clunky and low-quality user experience. I wanted the same idea (talk, get clean text) but with a better UX and more customization.
+I tried the trendy dictation apps everyone talks about. On Android they're rough: slow, account-locked, and with a very clunky, low-quality user experience. I wanted the same idea — talk, get clean text — but with a better UX and more control.
 
-So I forked [HeliBoard](https://github.com/Helium314/HeliBoard) and added two AI buttons. You choose OpenRouter or PayPerQ, paste your own API key, and pick the speech or text model you want. WisprBoard asks OpenRouter for zero-data-retention endpoints by default, so nothing about you is logged or trained on when that route is available. I also polished and optimized other minor flaws and bugs of the HeliBoard codebase, offering a smoother experience and more secure and private backup and restore handling.
+So I forked [HeliBoard](https://github.com/Helium314/HeliBoard) and added two AI buttons. You choose OpenRouter or PayPerQ, paste your own API key, and pick the speech or text model you want. TobiBoard asks OpenRouter for zero-data-retention endpoints by default, so nothing about you is logged or trained on when that route is available. Along the way I smoothed over rough edges in the HeliBoard codebase and hardened the backup-and-restore flow, so it's faster to live with and keeps your data more private.
 
 No subscription. No account. No telemetry. Just a keyboard.
 
@@ -50,15 +50,15 @@ You're chatting in English, Italian, German, whatever isn't your strongest. You 
 
 ## Zero Data Retention
 
-OpenRouter is the default provider, and WisprBoard asks OpenRouter for **zero-data-retention endpoints by default**. When your model offers a [ZDR route](https://openrouter.ai/docs/use-cases/zero-data-retention), your audio and text aren't logged, stored, or used for training. If a model doesn't offer one, WisprBoard tells you and falls back so things still work. You can turn the strict setting off if you'd rather.
+OpenRouter is the default provider, and TobiBoard asks OpenRouter for **zero-data-retention endpoints by default**. When your model offers a [ZDR route](https://openrouter.ai/docs/use-cases/zero-data-retention), your audio and text aren't logged, stored, or used for training. If a model doesn't offer one, TobiBoard tells you and falls back so things still work. You can turn the strict setting off if you'd rather.
 
 PayPerQ support uses PayPerQ's own API endpoints and policies. Your provider API keys are encrypted with the Android Keystore, excluded from cloud backups, and never written to logs. AI is opt-in: both features stay off until you paste a key in.
 
 <br>
 
-## WisprBoard vs HeliBoard
+## TobiBoard vs HeliBoard
 
-|                                         | HeliBoard | WisprBoard |
+|                                         | HeliBoard | TobiBoard |
 | --------------------------------------- | :-------: | :--------: |
 | Everything HeliBoard does               |     ✅     |     ✅      |
 | Installs alongside HeliBoard            |     —     |     ✅      |
@@ -73,27 +73,27 @@ If you don't want AI features, stay on HeliBoard. It's wonderful as-is.
 
 ## Privacy footnote
 
-WisprBoard has no backend, no analytics, no tracking. Once your audio or selected text reaches OpenRouter, PayPerQ, or the underlying model provider, their policies apply. Read [OpenRouter's policy](https://openrouter.ai/privacy) and [PayPerQ's terms](https://ppq.ai/terms) before pointing this at anything sensitive.
+Typing, glide typing, autocorrect, and dictionaries run **fully on-device and offline**, exactly like HeliBoard. The AI Voice-to-Text and Text Fix features are **cloud-based** — there is no local or on-device speech/language model, so the audio or text you run through them is sent to the provider you pick (OpenRouter or PayPerQ). TobiBoard itself has no backend, no analytics, no tracking. Once your audio or selected text reaches OpenRouter, PayPerQ, or the underlying model provider, their policies apply. Read [OpenRouter's policy](https://openrouter.ai/privacy) and [PayPerQ's terms](https://ppq.ai/terms) before pointing this at anything sensitive.
 
 
 <br>
 
 ## Get started
 
-1. **Download** the APK from [Releases](https://github.com/Turtlecute33/WisprBoard/releases/latest).
-2. **Enable** WisprBoard in *Settings → System → Keyboards*.
-3. **Choose a provider** in *WisprBoard Settings → Voice Input*, then add an OpenRouter or PayPerQ API key.
+1. **Install** — add the F-Droid repo `https://leinss.xyz/TobiBoard/repo` to your F-Droid client for automatic updates, or download the APK from [Releases](https://github.com/leinss/TobiBoard/releases/latest).
+2. **Enable** TobiBoard in *Settings → System → Keyboards*.
+3. **Choose a provider** in *TobiBoard Settings → Voice Input*, then add an OpenRouter or PayPerQ API key.
 4. **Long-press Return**, tap the mic, start talking.
 
-WisprBoard installs side-by-side with HeliBoard, so you can keep both.
+TobiBoard installs side-by-side with HeliBoard, so you can keep both.
 
 <br>
 
 ## Build from source
 
 ```bash
-git clone https://github.com/Turtlecute33/WisprBoard.git
-cd WisprBoard
+git clone https://github.com/leinss/TobiBoard.git
+cd TobiBoard
 ./gradlew assembleDebug
 ```
 
@@ -103,7 +103,7 @@ Needs JDK 17, Android SDK 35, NDK `28.0.13004108`. APK lands in `app/build/outpu
 
 ## Open source, top to bottom
 
-WisprBoard stands on the shoulders of giants:
+TobiBoard stands on the shoulders of giants:
 
 - [**HeliBoard**](https://github.com/Helium314/HeliBoard), the keyboard this fork is built on.
 - [**OpenBoard**](https://github.com/openboard-team/openboard) and [**AOSP LatinIME**](https://android.googlesource.com/platform/packages/inputmethods/LatinIME/), the foundation of both.

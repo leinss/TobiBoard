@@ -63,6 +63,7 @@ import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChang
 import helium314.keyboard.latin.voice.RecordingOverlayView
 import helium314.keyboard.latin.voice.TextFixExpandedPopup
 import helium314.keyboard.latin.voice.TextFixOverlayView
+import helium314.keyboard.latin.voice.UndoBarView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.min
@@ -377,9 +378,9 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
     }
 
-    fun showTextFixResult(proposed: String) {
+    fun showTextFixResult(original: String, proposed: String) {
         textFixProposedText = proposed
-        textFixOverlay?.showResult(proposed)
+        textFixOverlay?.showResult(original, proposed)
     }
 
     fun showTextFixError(message: String) {
@@ -424,6 +425,26 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             onReplace = { onReplaceTextFix?.run() },
             onDiscard = { onDiscardTextFix?.run() },
         )
+    }
+
+    // --- Undo bar (post AI-insertion) ---
+
+    private var undoBar: UndoBarView? = null
+
+    fun showUndoBar(labelText: String, onUndo: Runnable) {
+        val bar = UndoBarView(context)
+        bar.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+        bar.setLabel(labelText)
+        bar.onUndoClick = { onUndo.run() }
+        setExternalSuggestionView(bar, false)
+        undoBar = bar
+    }
+
+    fun hideUndoBar() {
+        if (undoBar == null) return
+        undoBar = null
+        clear()
+        isExternalSuggestionVisible = false
     }
 
     fun setMoreSuggestionsHeight(remainingHeight: Int) {

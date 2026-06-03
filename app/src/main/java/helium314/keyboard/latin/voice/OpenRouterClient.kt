@@ -39,6 +39,17 @@ class OpenRouterClient(
 ) : SttEngine, TextFixEngine {
     @Volatile private var activeConnection: HttpURLConnection? = null
 
+    /** Total tokens reported by the most recent successful response, or 0 when the provider
+     *  omitted a `usage` object (e.g. PayPerQ transcription). Read by callers to feed the meter.
+     *
+     *  Invariant: each [OpenRouterClient] serves exactly ONE in-flight request and the caller reads
+     *  this field on the same thread immediately after the blocking call returns. VoiceInputManager
+     *  and TextFixManager honor this by constructing a fresh client per request — reusing one client
+     *  across concurrent or back-to-back requests would race or stale this count. */
+    @Volatile
+    override var lastResponseTokens: Int = 0
+        private set
+
     companion object {
         private const val TAG = "OpenRouterClient"
         const val API_BASE = "https://openrouter.ai/api/v1"
@@ -53,8 +64,8 @@ class OpenRouterClient(
         /** Template: call [modelEndpointUrl] to fill in the model id safely. */
         fun modelEndpointUrl(author: String, slug: String): String = "$API_BASE/models/$author/$slug/endpoints"
         private const val STABLE_AUDIO_INSTRUCTION = "Process the attached audio input according to the system instructions. Return only the final answer."
-        private const val APP_REFERER = "https://github.com/anomalyco/Turtleboard"
-        private const val APP_TITLE = "Turtleboard"
+        private const val APP_REFERER = "https://github.com/leinss/TobiBoard"
+        private const val APP_TITLE = "TobiBoard"
         private const val APP_CATEGORIES = "programming-app"
         const val DEFAULT_CONNECT_TIMEOUT_MS = 15_000
         const val DEFAULT_READ_TIMEOUT_MS = 90_000
@@ -477,6 +488,7 @@ class OpenRouterClient(
             throw OpenRouterException("Malformed API response")
         }
         logCacheUsage(json)
+        lastResponseTokens = parseTotalTokens(json)
         val choices = json.optJSONArray("choices")
         if (choices == null || choices.length() == 0) {
             throw OpenRouterException("API response missing choices")
@@ -518,9 +530,19 @@ class OpenRouterClient(
             return responseBody.trim().takeIf { it.isNotEmpty() }
                 ?: throw OpenRouterException("Malformed API response")
         }
+        lastResponseTokens = parseTotalTokens(json)
         val text = json.optString("text").trim()
         if (text.isEmpty()) throw OpenRouterException("API response missing content")
         return text
+    }
+
+    /** Extracts total tokens from an OpenAI-style `usage` object; falls back to prompt+completion. */
+    @VisibleForTesting
+    internal fun parseTotalTokens(json: JSONObject): Int {
+        val usage = json.optJSONObject("usage") ?: return 0
+        val total = usage.optInt("total_tokens", 0)
+        if (total > 0) return total
+        return usage.optInt("prompt_tokens", 0) + usage.optInt("completion_tokens", 0)
     }
 
     private fun logCacheUsage(json: JSONObject) {

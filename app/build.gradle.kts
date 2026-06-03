@@ -23,8 +23,14 @@ android {
             && configuredKeyAlias != null
             && configuredKeyPassword != null
     val requestedReleaseBuild = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
-    if (requestedReleaseBuild && !releaseSigningConfigured) {
-        throw GradleException("Release signing must be provided via KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD.")
+    // Only the maintainer's own release path (`make build-release` / `make release`) sets
+    // REQUIRE_SIGNED_RELEASE=1 to guard against accidentally publishing an unsigned APK.
+    // F-Droid's buildserver builds an UNSIGNED release and signs it with its own key, so a
+    // plain `gradlew assembleRelease` (no keystore, no REQUIRE_SIGNED_RELEASE) must succeed
+    // and simply produce an unsigned APK rather than failing the build.
+    val requireSignedRelease = !System.getenv("REQUIRE_SIGNED_RELEASE").isNullOrBlank()
+    if (requestedReleaseBuild && requireSignedRelease && !releaseSigningConfigured) {
+        throw GradleException("REQUIRE_SIGNED_RELEASE is set but release signing is incomplete; provide KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD.")
     }
 
     signingConfigs {
@@ -42,8 +48,8 @@ android {
         applicationId = "helium314.keyboard.tobiboard"
         minSdk = 21
         targetSdk = 35
-        versionCode = 6610
-        versionName = "6.6.1"
+        versionCode = 6800
+        versionName = "6.8.0"
         buildConfigField("boolean", "ALLOW_USER_SUPPLIED_JNI", "false")
         buildConfigField("boolean", "ENABLE_GESTURE_DATA_GATHERING", "false")
         manifestPlaceholders["gestureDataProviderEnabled"] = "false"

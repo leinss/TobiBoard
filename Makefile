@@ -1,13 +1,23 @@
-# TobiBoard build/test orchestration
+# TobiBoard build/test/release orchestration
 # `make help` lists everything.
 
 SHELL := /bin/bash
+GRADLE := ./gradlew
 
-PKG_DEBUG := helium314.keyboard.tobiboard.debug
+PKG := helium314.keyboard.tobiboard
+PKG_DEBUG := $(PKG).debug
 IME_COMPONENT := $(PKG_DEBUG)/helium314.keyboard.latin.LatinIME
-APK_DEBUG_NO_MINIFY := app/build/outputs/apk/debugNoMinify/TobiBoard_6.6.0-debugNoMinify.apk
-APK_DEBUG := app/build/outputs/apk/debug/TobiBoard_6.6.0-debug.apk
-APK_RELEASE := app/build/outputs/apk/release/TobiBoard_6.6.0-release.apk
+IME_DEBUG := $(IME_COMPONENT)
+
+# Derive the version from the single source of truth so APK/AAB paths never drift.
+VERSION_NAME := $(shell grep -E 'versionName = ' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
+APK_DEBUG_NO_MINIFY := app/build/outputs/apk/debugNoMinify/TobiBoard_$(VERSION_NAME)-debugNoMinify.apk
+APK_DEBUG := app/build/outputs/apk/debug/TobiBoard_$(VERSION_NAME)-debug.apk
+APK_RELEASE := app/build/outputs/apk/release/TobiBoard_$(VERSION_NAME)-release.apk
+# Glob fallbacks so install targets keep working even if the version-derived name shifts.
+APK_DEBUG_NO_MINIFY_GLOB := app/build/outputs/apk/debugNoMinify/*-debugNoMinify.apk
+APK_RELEASE_GLOB := app/build/outputs/apk/release/*-release.apk
+AAB_RELEASE_GLOB := app/build/outputs/bundle/release/*.aab
 
 AVD_NAME ?= tobiboard_pixel6_api34
 # google_apis (vs aosp_atd) gives us a properly rendering framebuffer on macOS:
@@ -32,9 +42,19 @@ ADB := $(ANDROID_SDK_ROOT)/platform-tools/adb
 ADB_PHONE_SERIAL = $$($(ADB) devices | awk '/_adb-tls-connect|adb-.*-.* / && !/emulator-/ {print $$1; exit}')
 ADB_SIM_SERIAL   = $$($(ADB) devices | awk '/^emulator-/ {print $$1; exit}')
 
+.DEFAULT_GOAL := help
+
 .PHONY: help
-help:
+help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ { printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+.PHONY: version
+version: ## Print current versionName / versionCode
+	@grep -E 'version(Name|Code) =' app/build.gradle.kts | sed 's/^[[:space:]]*//'
+
+.PHONY: devices
+devices: ## List connected adb devices
+	@$(ADB) devices -l
 
 ## --- builds ---------------------------------------------------------------
 
@@ -54,17 +74,27 @@ $(SHERPA_ONNX_AAR):
 .PHONY: fetch-native-libs
 fetch-native-libs: $(SHERPA_ONNX_AAR) ## Download native AARs (sherpa-onnx) into app/libs/
 
+.PHONY: build
+build: build-debug ## Build the small (minified) debug APK (alias for build-debug)
+
 .PHONY: build-debug
 build-debug: $(SHERPA_ONNX_AAR) ## Assemble the small (minified) debug APK
-	./gradlew :app:assembleDebug
+	$(GRADLE) :app:assembleDebug
+	@ls -1 app/build/outputs/apk/debug/*-debug.apk
 
-.PHONY: build-debug-fast
-build-debug-fast: $(SHERPA_ONNX_AAR) ## Assemble the unminified debug APK (fast iteration)
-	./gradlew :app:assembleDebugNoMinify
+.PHONY: build-debug-fast build-fast
+build-debug-fast build-fast: $(SHERPA_ONNX_AAR) ## Assemble the unminified debug APK (fast iteration)
+	$(GRADLE) :app:assembleDebugNoMinify
 
 .PHONY: build-release
-build-release: $(SHERPA_ONNX_AAR) ## Assemble the signed release APK (requires KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD env vars)
-	./gradlew :app:assembleRelease
+build-release: $(SHERPA_ONNX_AAR) ## Build the signed release APK (needs KEYSTORE_FILE/PASSWORD, KEY_ALIAS/PASSWORD)
+	REQUIRE_SIGNED_RELEASE=1 $(GRADLE) :app:assembleRelease
+	@ls -1 $(APK_RELEASE_GLOB)
+
+.PHONY: bundle-release
+bundle-release: $(SHERPA_ONNX_AAR) ## Build the signed release AAB for Play Store
+	REQUIRE_SIGNED_RELEASE=1 $(GRADLE) :app:bundleRelease
+	@ls -1 $(AAB_RELEASE_GLOB)
 
 .PHONY: apk
 apk: build-debug-fast ## Build the sideloadable debug APK and print its path
@@ -83,10 +113,10 @@ apk-release: build-release ## Build the signed release APK and print its path
 
 .PHONY: clean
 clean: ## Wipe build outputs
-	./gradlew clean
+	$(GRADLE) clean
 
 .PHONY: update-fork
-update-fork: ## Rebase TobiBoard onto upstream (WisprBoard) via the global update-forks binary; tail the result
+update-fork: ## Rebase TobiBoard onto upstream via the global update-forks binary; tail the result
 	@command -v update-forks >/dev/null 2>&1 || { echo "update-forks not on PATH (expected ~/.local/bin/update-forks)"; exit 1; }
 	update-forks
 	@echo ""
@@ -305,17 +335,24 @@ uninstall: ## Remove the debug build from the device
 
 ## --- tests ----------------------------------------------------------------
 
-.PHONY: test-unit
-test-unit: ## Run JVM (Robolectric) unit tests
-	./gradlew :app:testDebugUnitTest
+.PHONY: test test-unit
+test test-unit: ## Run JVM (Robolectric) unit tests
+	$(GRADLE) :app:testDebugUnitTest
 
 .PHONY: test-managed
 test-managed: ## Run instrumentation tests on the Gradle Managed Device (headless)
-	./gradlew :app:pixel6Api34DebugAndroidTest
+	$(GRADLE) :app:pixel6Api34DebugAndroidTest
 
 .PHONY: test-connected
 test-connected: ## Run instrumentation tests on whatever device adb sees
-	./gradlew :app:connectedDebugAndroidTest
+	$(GRADLE) :app:connectedDebugAndroidTest
+
+.PHONY: lint
+lint: ## Run Android lint
+	$(GRADLE) lintDebug
+
+.PHONY: check
+check: test lint ## Run unit tests + lint
 
 ## --- composite flows ------------------------------------------------------
 
@@ -330,4 +367,70 @@ dev-install: emulator-up install ime-enable launch-typing ## Full path: boot emu
 
 .PHONY: logcat
 logcat: ## Tail logcat filtered to TobiBoard + IME plumbing
-	$(ADB) logcat -v color LatinIME:V VoiceInputManager:V TextFixManager:V OpenRouterClient:V LocalSherpaEngine:V LocalMediaPipeEngine:V ModelDownloader:V AndroidRuntime:E *:S
+	$(ADB) logcat -v color LatinIME:V VoiceInputManager:V TextFixManager:V OpenRouterClient:V LocalSherpaEngine:V LocalMediaPipeEngine:V ModelDownloader:V SecretStore:V AudioRecorder:V AndroidRuntime:E '*:S'
+
+## --- versioning -----------------------------------------------------------
+
+.PHONY: bump-patch
+bump-patch: ## Bump patch version (x.y.Z+1) + changelog stub
+	python3 tools/bump_version.py patch
+
+.PHONY: bump-minor
+bump-minor: ## Bump minor version (x.Y+1.0) + changelog stub
+	python3 tools/bump_version.py minor
+
+.PHONY: bump-major
+bump-major: ## Bump major version (X+1.0.0) + changelog stub
+	python3 tools/bump_version.py major
+
+## --- publishing -----------------------------------------------------------
+
+.PHONY: tag
+tag: ## Create a local annotated git tag vX.Y.Z from the current version
+	@v=$$(grep -E 'versionName = ' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/'); \
+	  git tag -a "v$$v" -m "Release $$v" && echo "Created tag v$$v (push with: git push origin v$$v)"
+
+.PHONY: release
+release: build-release ## Build signed release + GitHub release. Dry-run unless CONFIRM=1
+	@v=$$(grep -E 'versionName = ' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/'); \
+	  code=$$(grep -oE 'versionCode = [0-9]+' app/build.gradle.kts | grep -oE '[0-9]+'); \
+	  apk=$$(ls -1 app/build/outputs/apk/release/*.apk | head -1); \
+	  notes="fastlane/metadata/android/en-US/changelogs/$$code.txt"; \
+	  cmd="gh release create v$$v $$apk --title \"TobiBoard $$v\" --notes-file $$notes"; \
+	  if [ "$(CONFIRM)" = "1" ]; then echo "+ $$cmd"; eval $$cmd; \
+	  else echo "DRY-RUN (re-run with CONFIRM=1 to publish):"; echo "  $$cmd"; fi
+
+.PHONY: ship
+ship: ## One-shot release: tests + lint -> signed build -> tag + GitHub release (dry-run unless CONFIRM=1)
+	$(MAKE) check
+	$(MAKE) release CONFIRM=$(CONFIRM)
+
+.PHONY: publish-checklist
+publish-checklist: ## Print the release + store-publishing checklist
+	@echo "Per release (auto-feeds the self-hosted F-Droid repo; F-Droid main once accepted):"; \
+	  echo "  1. make bump-<patch|minor>   # bump version + changelog stub, then edit the stub"; \
+	  echo "  2. KEYSTORE_* env set (signing) via direnv"; \
+	  echo "  3. make ship CONFIRM=1       # tests+lint, signed build, tag + GitHub release"; \
+	  echo ""; \
+	  echo "Stores (one-time setup; pull-based per release afterwards):"; \
+	  echo "  - F-Droid (self-hosted): auto-published to leinss.xyz/TobiBoard/repo on each release"; \
+	  echo "  - F-Droid main:          submit docs/fdroid/*.yml to gitlab.com/fdroid/fdroiddata"; \
+	  echo "  - Google Play: make publish-play TRACK=internal  (needs a one-time \$$25 dev account)"
+
+.PHONY: publish-play
+publish-play: bundle-release ## Upload signed AAB + listing to Google Play (needs fastlane + PLAY_SERVICE_ACCOUNT_JSON; TRACK=internal|production)
+	@command -v fastlane >/dev/null || { echo "Install fastlane: brew install fastlane (or: gem install fastlane)"; exit 1; }
+	@test -n "$$PLAY_SERVICE_ACCOUNT_JSON" || { echo "Set PLAY_SERVICE_ACCOUNT_JSON=/path/to/play-service-account.json — see docs/PLAY_PUBLISHING.md"; exit 1; }
+	fastlane android play track:$(or $(TRACK),internal)
+
+# ---- Self-hosted F-Droid repo (local test) ----
+.PHONY: fdroid-repo-local
+fdroid-repo-local: ## Build the self-hosted F-Droid index locally (needs fdroidserver + local fdroid/config.yml, keystore.p12, repo/*.apk)
+	@command -v fdroid >/dev/null || { echo "Install fdroidserver: pipx install fdroidserver (or: uv tool install fdroidserver)"; exit 1; }
+	@test -f fdroid/config.yml || { echo "Missing fdroid/config.yml (cp fdroid/config.template.yml fdroid/config.yml and add keystorepass/keypass)"; exit 1; }
+	@test -f fdroid/keystore.p12 || { echo "Missing fdroid/keystore.p12 (generate per docs/fdroid/SELF_HOSTED_REPO.md)"; exit 1; }
+	@ls fdroid/repo/*.apk >/dev/null 2>&1 || { echo "Put at least one signed *-release.apk in fdroid/repo/"; exit 1; }
+	cd fdroid && fdroid update --create-metadata --verbose
+	@pass=$$(grep -E '^keystorepass:' fdroid/config.yml | sed -E 's/.*: *"?([^"]*)"?.*/\1/'); \
+	  fp=$$(keytool -exportcert -alias fdroidrepo -keystore fdroid/keystore.p12 -storepass "$$pass" 2>/dev/null | openssl dgst -sha256 | awk '{print $$NF}'); \
+	  echo "Repo fingerprint: $$fp"

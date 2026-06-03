@@ -5,7 +5,13 @@ import android.content.Context
 import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
+import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.method.ScrollingMovementMethod
+import android.text.style.ForegroundColorSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -35,6 +41,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
     /** Invoked when the user taps the proposed text to view it in a popup. Only fires in result state. */
     var onExpandClick: (() -> Unit)? = null
     private var lastClickMs = 0L
+    private var baseTextColor: Int = 0xFF000000.toInt()
 
     init {
         orientation = HORIZONTAL
@@ -51,9 +58,10 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         }
         resultText = TextView(context).apply {
             textSize = 13f
-            // Fits within the strip's row height. Long results overflow vertically and are
+            // A little more room so the inline diff (which carries the struck-through removals
+            // alongside the additions) stays legible. Long results overflow vertically and are
             // touch-scrollable; the user can also tap the text to expand it into a popup.
-            maxLines = 2
+            maxLines = 3
             isVerticalScrollBarEnabled = true
             movementMethod = ScrollingMovementMethod()
             isClickable = true
@@ -119,6 +127,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
     }
 
     fun setColors(textColor: Int) {
+        baseTextColor = textColor
         statusText.setTextColor(textColor)
         resultText.setTextColor(textColor)
         // Primary (Replace): strong filled background with full-opacity text.
@@ -145,15 +154,43 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         announceForAccessibility(statusText.text)
     }
 
-    fun showResult(proposed: String) {
+    fun showResult(original: String, proposed: String) {
         statusText.visibility = View.GONE
-        resultText.text = proposed
+        // Inline word-diff: additions are bold + underlined, removals struck through and dimmed,
+        // so the user sees what the fix changed rather than just the final text. Theme-safe — no
+        // hardcoded hues, only emphasis derived from the current strip text color.
+        resultText.text = buildDiffSpannable(original, proposed)
         resultText.scrollTo(0, 0)
         resultText.visibility = View.VISIBLE
         expandButton.visibility = View.VISIBLE
         replaceButton.visibility = View.VISIBLE
         discardButton.visibility = View.VISIBLE
+        // Announce the final proposed text (not the diff markup) for screen readers.
         announceForAccessibility(context.getString(R.string.text_fix_result_a11y, proposed))
+    }
+
+    private fun buildDiffSpannable(original: String, proposed: String): CharSequence {
+        val segments = WordDiff.diff(original, proposed)
+        // Dim removals to ~50% alpha of the base text color so they recede behind the additions.
+        val dimColor = (baseTextColor and 0x00FFFFFF) or (0x80 shl 24)
+        val sb = SpannableStringBuilder()
+        for (segment in segments) {
+            val start = sb.length
+            sb.append(segment.text)
+            val end = sb.length
+            when (segment.op) {
+                WordDiff.Op.ADDED -> {
+                    sb.setSpan(StyleSpan(android.graphics.Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    sb.setSpan(UnderlineSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                WordDiff.Op.REMOVED -> {
+                    sb.setSpan(StrikethroughSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    sb.setSpan(ForegroundColorSpan(dimColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                WordDiff.Op.COMMON -> Unit
+            }
+        }
+        return sb
     }
 
     fun showError(message: String) {

@@ -21,7 +21,14 @@ tools/*.txt
 release-signing/
 *.jks
 *.keystore
+*.p12
+*.pkcs12
 keystore.properties
+*service-account*.json
+play-*.json
+
+# Local env (Keychain references + paths) — never commit
+.envrc
 
 # Native libs pulled by `make fetch-native-libs` — too large for git.
 app/libs/*.aar

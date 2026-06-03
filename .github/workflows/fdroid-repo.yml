@@ -1,0 +1,123 @@
+name: Self-hosted F-Droid repo
+
+# Regenerates the static F-Droid repository (signed index + APKs) and publishes
+# it to GitHub Pages. Runs automatically when a release is published, and can be
+# triggered manually for testing.
+#
+# Requires three repository secrets (see docs/fdroid/SELF_HOSTED_REPO.md):
+#   FDROID_KEYSTORE_B64   base64 of the repo INDEX signing keystore (PKCS12)
+#   FDROID_KEYSTORE_PASS  keystore password
+#   FDROID_KEY_PASS       key password (== keystore password for PKCS12)
+# and GitHub Pages set to "GitHub Actions" as its source.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: fdroid-pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.repository == 'leinss/TobiBoard'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install fdroidserver
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y libmagic1
+          pip install --upgrade pip
+          # androguard 4.1.4 regresses APK v2/v3 signature parsing
+          # ('NoOverwriteDict' object has no attribute 'append'); pin the verified combo.
+          pip install 'fdroidserver==2.4.4' 'androguard==4.1.3'
+
+      - name: Stage config + repo signing key (from secrets)
+        env:
+          FDROID_KEYSTORE_B64: ${{ secrets.FDROID_KEYSTORE_B64 }}
+          FDROID_KEYSTORE_PASS: ${{ secrets.FDROID_KEYSTORE_PASS }}
+          FDROID_KEY_PASS: ${{ secrets.FDROID_KEY_PASS }}
+        run: |
+          set -eu
+          test -n "${FDROID_KEYSTORE_B64:-}" || { echo "::error::FDROID_KEYSTORE_B64 secret is not set"; exit 1; }
+          mkdir -p fdroid/repo
+          echo "$FDROID_KEYSTORE_B64" | base64 -d > fdroid/keystore.p12
+          cp fdroid/config.template.yml fdroid/config.yml
+          # passwords are injected here into the EPHEMERAL config — never deployed
+          printf 'keystorepass: "%s"\n' "$FDROID_KEYSTORE_PASS" >> fdroid/config.yml
+          printf 'keypass: "%s"\n'      "$FDROID_KEY_PASS"      >> fdroid/config.yml
+          chmod 600 fdroid/keystore.p12 fdroid/config.yml
+          # repo fingerprint (PUBLIC) = SHA-256 of the index signing cert; surfaced on the landing page
+          FP="$(keytool -exportcert -alias fdroidrepo -keystore fdroid/keystore.p12 -storepass "$FDROID_KEYSTORE_PASS" 2>/dev/null | openssl dgst -sha256 | awk '{print $NF}')"
+          echo "FDROID_FP=$FP" >> "$GITHUB_ENV"
+
+      - name: Collect signed APKs from recent releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # pull the signed release APK from the latest 3 releases so the repo
+          # keeps a short version history
+          for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 3 --json tagName -q '.[].tagName'); do
+            echo "Fetching APK(s) from $tag"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern '*-release.apk' --dir fdroid/repo --skip-existing || true
+          done
+          echo "APKs staged:"; ls -l fdroid/repo || true
+          ls fdroid/repo/*.apk >/dev/null 2>&1 || { echo "::error::no signed release APKs found in recent releases"; exit 1; }
+
+      - name: Generate signed index
+        working-directory: fdroid
+        run: fdroid update --create-metadata --verbose
+
+      - name: Assemble public site (repo + landing page only — no secrets)
+        run: |
+          set -eu
+          mkdir -p site
+          cp -r fdroid/repo site/repo
+          FP="${FDROID_FP:-}"
+          URL="https://leinss.xyz/TobiBoard/repo"
+          echo "Repo fingerprint: ${FP:-<unavailable>}"
+          cat > site/index.html <<HTML
+          <!doctype html><html lang="en"><head><meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>TobiBoard — F-Droid repo</title>
+          <style>body{font-family:system-ui,-apple-system,sans-serif;max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.6;background:#0a0a0a;color:#e7e7e7}code{background:#1b1b1b;padding:.15em .45em;border-radius:5px;word-break:break-all}a{color:#10b981}h1{color:#06b6d4}</style>
+          </head><body>
+          <h1>TobiBoard — F-Droid repository</h1>
+          <p>Add this repo in F-Droid (or Droid-ify / Neo Store) to install TobiBoard and get automatic updates.</p>
+          <h2>Repo address</h2><p><code>$URL</code></p>
+          <h2>Fingerprint (SHA-256)</h2><p><code>${FP:-see the workflow log}</code></p>
+          <h2>One-tap add</h2><p><a href="$URL?fingerprint=$FP">$URL?fingerprint=$FP</a></p>
+          <p>Privacy-first, on-device keyboard (a HeliBoard fork) with optional, bring-your-own-key AI voice-to-text and text-fix. <a href="https://github.com/leinss/TobiBoard">Source</a>.</p>
+          </body></html>
+          HTML
+          find site -maxdepth 2 -type f | sort
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

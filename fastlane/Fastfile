@@ -1,0 +1,23 @@
+# Google Play publishing for TobiBoard via fastlane supply.
+# Setup + first run: see docs/PLAY_PUBLISHING.md
+# Reads the listing/screenshots/changelogs from fastlane/metadata/android/.
+default_platform(:android)
+
+platform :android do
+  desc "Upload the signed release AAB + store listing to Google Play (TRACK defaults to internal)"
+  lane :play do |options|
+    aab = Dir.glob(File.expand_path("../app/build/outputs/bundle/release/*.aab", __dir__))
+             .max_by { |f| File.mtime(f) }
+    UI.user_error!("No release AAB found — run `make bundle-release` first.") if aab.nil?
+
+    upload_to_play_store(
+      package_name: "helium314.keyboard.tobiboard",
+      json_key: ENV["PLAY_SERVICE_ACCOUNT_JSON"],
+      track: options[:track] || "internal",
+      release_status: "draft",   # uploads as a draft; review + roll out in the Play Console
+      aab: aab,
+      skip_upload_apk: true,     # we ship an AAB
+      sync_image_upload: true
+    )
+  end
+end

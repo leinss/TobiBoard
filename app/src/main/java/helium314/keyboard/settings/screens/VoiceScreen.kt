@@ -44,6 +44,7 @@ import helium314.keyboard.latin.voice.isValidCustomModelSlug
 import helium314.keyboard.latin.voice.supportsOpenRouterSttSlug
 import helium314.keyboard.latin.voice.supportsTextFixSlug
 import helium314.keyboard.latin.voice.supportsVoiceSlug
+import helium314.keyboard.latin.voice.UsageTracker
 import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.Setting
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
@@ -164,6 +165,8 @@ internal fun buildVoiceScreenItems(
     if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_AUTO_STOP_SILENCE else null,
     if (voiceInputEnabled && voiceAutoStop) Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_OFFLINE_RETRY else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_ACTION_USAGE else null,
     )
 }
 
@@ -396,6 +399,9 @@ fun createVoiceSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_VOICE_ACTION_TEST_KEY, R.string.voice_validate_key) {
         VoiceTestKeyPreference(it)
     },
+    Setting(context, Settings.PREF_VOICE_ACTION_USAGE, R.string.voice_usage_meter) {
+        VoiceUsageMeterPreference(it)
+    },
     Setting(context, Settings.PREF_VOICE_LANGUAGE_HINT, R.string.voice_language_hint, R.string.voice_language_hint_summary) {
         SwitchPreference(it, Defaults.PREF_VOICE_LANGUAGE_HINT)
     },
@@ -467,6 +473,9 @@ fun createVoiceSettings(context: Context) = listOf(
             range = 1f..10f,
         )
     },
+    Setting(context, Settings.PREF_VOICE_OFFLINE_RETRY, R.string.voice_offline_retry, R.string.voice_offline_retry_summary) {
+        SwitchPreference(it, Defaults.PREF_VOICE_OFFLINE_RETRY)
+    },
 )
 
 @Composable
@@ -501,6 +510,34 @@ private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {
             isPassword = true,
         )
     }
+}
+
+@Composable
+private fun VoiceUsageMeterPreference(setting: Setting) {
+    val ctx = LocalContext.current
+    // Bump to force a recomposition after a reset; usage is otherwise read once when the row shows.
+    var refresh by remember { mutableStateOf(0) }
+    @Suppress("UNUSED_EXPRESSION") refresh // establish the recomposition dependency
+    val requests = UsageTracker.sessionRequests
+    val tokens = UsageTracker.sessionTokens
+    val description = if (requests <= 0) {
+        stringResource(R.string.voice_usage_meter_empty)
+    } else {
+        stringResource(
+            R.string.voice_usage_meter_value,
+            String.format(java.util.Locale.getDefault(), "%,d", tokens),
+            requests,
+        )
+    }
+    Preference(
+        name = setting.title,
+        description = description,
+        onClick = {
+            UsageTracker.reset()
+            refresh++
+            Toast.makeText(ctx, R.string.voice_usage_meter_reset, Toast.LENGTH_SHORT).show()
+        },
+    )
 }
 
 @Composable
