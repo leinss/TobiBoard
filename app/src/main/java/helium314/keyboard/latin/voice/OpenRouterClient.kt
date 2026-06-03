@@ -79,7 +79,7 @@ class OpenRouterClient(
         // Plain ASCII sentinel: org.json escapes control characters (e.g. U+0000 -> literal "\u0000"),
         // which used to make the placeholder un-findable in the serialized body. Unlikely to collide
         // with real content.
-        private const val AUDIO_PLACEHOLDER = "__WISPRBOARD_AUDIO_B64_PLACEHOLDER__"
+        private const val AUDIO_PLACEHOLDER = "__TOBIBOARD_AUDIO_B64_PLACEHOLDER__"
         // Must be a multiple of 3 so chunked base64 encoding is padding-free until the final chunk.
         private const val AUDIO_READ_CHUNK = 48 * 1024
         private val HTTP_DATE_FORMAT = object : ThreadLocal<SimpleDateFormat>() {
@@ -405,7 +405,7 @@ class OpenRouterClient(
     }
 
     private fun performPayPerQTranscription(audioFile: File): String {
-        val boundary = "WisprBoard-${UUID.randomUUID()}"
+        val boundary = "TobiBoard-${UUID.randomUUID()}"
         val connection = (URL(PAYPERQ_TRANSCRIPTION_ENDPOINT).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             setRequestProperty("Authorization", "Bearer $apiKey")

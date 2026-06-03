@@ -270,7 +270,7 @@ class VoiceInputManager(
         val useZdr = provider == AiProvider.OPENROUTER &&
             prefs.getBoolean(Settings.PREF_OPENROUTER_ZDR_ENABLED, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
 
-        // Wispr-Flow-style auto-polish: after the raw transcription comes back, optionally pipe it
+        // Two-pass auto-polish: after the raw transcription comes back, optionally pipe it
         // through a second, text-only LLM call that cleans it up to the chosen level. Resolved
         // here on the main thread so the background job receives plain values.
         // Auto-polish runs through OpenRouter / PayPerQ only — it would need a second on-device
