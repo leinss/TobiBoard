@@ -1,0 +1,5 @@
+* New: on-device voice-to-text — no account, no API key. Downloads a speech model on first use, then transcribes fully offline
+* New: on-device Text Fix — cleans up your text offline with a downloaded language model, also with no API key
+* On-device is now the default for Voice and Text Fix; the optional cloud providers (OpenRouter, PayPerQ) are still there if you prefer them
+* Manage on-device models in Voice settings: choose a model, check its size and license, and download when you're ready
+* Core typing stays fully offline, as always
