@@ -704,6 +704,18 @@ public class LatinIME extends InputMethodService implements
                     return null;
                 }
             }
+
+            @Override
+            public void onOpenSettings(@NonNull final String settingsDestination) {
+                requestHideSelf(0);
+                final Intent intent = new Intent();
+                intent.setClass(LatinIME.this, SettingsActivity2.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                intent.putExtra("start_destination", settingsDestination);
+                startActivity(intent);
+            }
         });
 
         mTextFixManager = new TextFixManager(this, new TextFixManager.Callbacks() {
