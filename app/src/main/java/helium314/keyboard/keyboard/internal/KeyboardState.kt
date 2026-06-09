@@ -186,6 +186,10 @@ class KeyboardState(private val switchActions: SwitchActions) {
         }
     }
 
+    fun clearShiftLock() {
+        setShiftLocked(false)
+    }
+
     private fun setShiftLocked(shiftLocked: Boolean) {
         if (DebugFlags.DEBUG_ENABLED) {
             Log.d(TAG, "setShiftLocked: shiftLocked=$shiftLocked $this")

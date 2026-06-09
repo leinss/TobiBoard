@@ -311,6 +311,12 @@ public class LatinIME extends InputMethodService implements
                         // If we were able to reset the caches, then we can reload the keyboard.
                         // Otherwise, we'll do it when we can.
                         latinIme.mKeyboardSwitcher.reloadMainKeyboard();
+                    } else if (msg.arg2 == 0) {
+                        // All retries exhausted and the input connection is still broken.
+                        // Hide the keyboard so the framework issues a fresh onStartInput when
+                        // the user next taps the field, re-establishing the connection.
+                        Log.w(TAG, "Input connection reset failed after all retries; hiding keyboard to force reconnect.");
+                        latinIme.requestHideSelf(0);
                     }
                     break;
                 case MSG_WAIT_FOR_DICTIONARY_LOAD:
@@ -1392,6 +1398,7 @@ public class LatinIME extends InputMethodService implements
         // Should do the following in onFinishInputInternal but until JB MR2 it's not called :(
         mInputLogic.finishInput();
         mKeyboardActionListener.resetMetaState();
+        mKeyboardSwitcher.clearShiftLock();
     }
 
     protected void deallocateMemory() {
