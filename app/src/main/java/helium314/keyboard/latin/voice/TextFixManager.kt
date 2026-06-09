@@ -126,14 +126,15 @@ class TextFixManager(
             return
         }
         callbacks.getBlockedErrorResId()?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (!SecretStore.isSecureStorageAvailable(context)) {
-            callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
             return
         }
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
+        // SecretStore is only needed for cloud API keys; LOCAL provider never touches it.
+        if (provider.isCloud && !SecretStore.isSecureStorageAvailable(context)) {
+            callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
+            return
+        }
         val apiKey = if (provider.isCloud) {
             SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
         } else ""
@@ -154,11 +155,11 @@ class TextFixManager(
 
         val textToFix = callbacks.getTextToFix()?.toString().orEmpty()
         if (textToFix.isBlank()) {
-            Toast.makeText(context, R.string.text_fix_error_no_selection, Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.text_fix_error_no_selection, Toast.LENGTH_LONG).show()
             return
         }
         if (textToFix.length > MAX_INPUT_LENGTH) {
-            Toast.makeText(context, R.string.text_fix_error_too_long, Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.text_fix_error_too_long, Toast.LENGTH_LONG).show()
             return
         }
         val input = textToFix
