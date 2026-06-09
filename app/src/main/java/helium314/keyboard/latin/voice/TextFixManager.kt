@@ -57,9 +57,9 @@ class TextFixManager(
             if ((imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0) {
                 return R.string.text_fix_error_sensitive_field
             }
-            if ((inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0) {
-                return R.string.text_fix_error_sensitive_field
-            }
+            // TYPE_TEXT_FLAG_NO_SUGGESTIONS means "disable autocomplete strip" — it is widely set
+            // by cross-platform frameworks (React Native, Flutter) for non-privacy reasons and is
+            // NOT a signal that the field content is sensitive. Do not block text fix on it.
             when (inputType and InputType.TYPE_MASK_CLASS) {
                 InputType.TYPE_CLASS_TEXT -> {
                     if (InputTypeUtils.isUriOrEmailType(inputType)) {
