@@ -1110,6 +1110,14 @@ New dictionary:
     <string name="voice_local_model">On-device STT model</string>
     <string name="voice_local_model_ready">Parakeet TDT 0.6 B — ready</string>
     <string name="voice_local_model_not_downloaded">Not downloaded — tap to open On-device models</string>
+    <string name="setup_model_download_title">Download on-device model</string>
+    <string name="setup_model_download_instruction">The Parakeet speech recognition model runs entirely on your device with no cloud account needed.</string>
+    <string name="setup_model_download_size">~%d MB — Wi-Fi recommended</string>
+    <string name="setup_model_download_action">Download now</string>
+    <string name="setup_model_download_downloading">Downloading…</string>
+    <string name="setup_model_download_connecting">Connecting…</string>
+    <string name="setup_model_download_progress">Downloading… %d%%</string>
+    <string name="setup_model_download_ready">Model ready ✓</string>
     <string name="text_fix_error_local_not_ready">Gemma model not downloaded. Open Settings → On-device models.</string>
     <string name="openrouter_api_key">OpenRouter API Key</string>
     <string name="openrouter_api_key_summary">Required before long-pressing Return to use voice input with your OpenRouter account</string>
