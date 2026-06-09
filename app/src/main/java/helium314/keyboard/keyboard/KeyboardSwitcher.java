@@ -186,6 +186,10 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
         }
     }
 
+    public void clearShiftLock() {
+        mState.clearShiftLock();
+    }
+
     public void saveKeyboardState() {
         if (getKeyboard() != null || isShowingEmojiPalettes() || isShowingClipboardHistory()) {
             mState.onSaveKeyboardState();
