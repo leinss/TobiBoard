@@ -38,6 +38,8 @@ class TextFixManager(
         private const val TAG = "TextFixManager"
         private const val MAX_INPUT_LENGTH = 10_000
         private const val MAX_OUTPUT_LENGTH = 10_000
+        const val SETTINGS_TEXT_FIX = "text_fix"
+        const val SETTINGS_LOCAL_MODELS = "local_models"
 
         @JvmStatic
         @StringRes
@@ -101,6 +103,8 @@ class TextFixManager(
         fun onFinished()
         fun onResult(originalText: String, proposedText: String)
         fun onError(message: String)
+        /** Called instead of a toast when a required setup step is missing. See [VoiceInputManager.Callbacks.onOpenSettings]. */
+        fun onOpenSettings(settingsDestination: String) {}
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -118,7 +122,7 @@ class TextFixManager(
         val prefs = context.prefs()
 
         if (!prefs.getBoolean(variant.enabledPref, variant.enabledDefault)) {
-            Toast.makeText(context, R.string.text_fix_error_not_enabled, Toast.LENGTH_SHORT).show()
+            callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
             return
         }
         callbacks.getBlockedErrorResId()?.let {
@@ -134,7 +138,7 @@ class TextFixManager(
             SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
         } else ""
         if (provider.isCloud && apiKey.isBlank()) {
-            Toast.makeText(context, R.string.voice_error_no_api_key, Toast.LENGTH_SHORT).show()
+            callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
             return
         }
         if (provider.isCloud && !isNetworkAvailable(context)) {
@@ -144,7 +148,7 @@ class TextFixManager(
         if (provider == AiProvider.LOCAL &&
             !helium314.keyboard.latin.voice.local.ModelStorage.isReady(context, helium314.keyboard.latin.voice.local.ModelRegistry.activeTextFix(context))
         ) {
-            Toast.makeText(context, R.string.text_fix_error_local_not_ready, Toast.LENGTH_LONG).show()
+            callbacks.onOpenSettings(SETTINGS_LOCAL_MODELS)
             return
         }
 
