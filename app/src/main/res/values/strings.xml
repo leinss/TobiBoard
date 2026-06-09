@@ -1107,6 +1107,9 @@ New dictionary:
     <string name="ai_provider_payperq">PayPerQ</string>
     <string name="ai_provider_local">On-device</string>
     <string name="voice_error_local_not_ready">Parakeet model not downloaded. Open Settings → On-device models.</string>
+    <string name="voice_local_model">On-device STT model</string>
+    <string name="voice_local_model_ready">Parakeet TDT 0.6 B — ready</string>
+    <string name="voice_local_model_not_downloaded">Not downloaded — tap to open On-device models</string>
     <string name="text_fix_error_local_not_ready">Gemma model not downloaded. Open Settings → On-device models.</string>
     <string name="openrouter_api_key">OpenRouter API Key</string>
     <string name="openrouter_api_key_summary">Required before long-pressing Return to use voice input with your OpenRouter account</string>
