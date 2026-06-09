@@ -125,7 +125,7 @@ class VoiceInputManager(
         }
 
         if (!SecretStore.isSecureStorageAvailable(context)) {
-            Toast.makeText(context, R.string.voice_error_secure_storage_unavailable, Toast.LENGTH_SHORT).show()
+            callbacks.onOpenSettings(SETTINGS_VOICE)
             return
         }
 
@@ -157,7 +157,7 @@ class VoiceInputManager(
 
         if (currentUseDedicatedStt && provider != AiProvider.OPENROUTER) {
             currentUseDedicatedStt = false
-            Toast.makeText(context, R.string.voice_error_stt_openrouter_only, Toast.LENGTH_SHORT).show()
+            callbacks.onOpenSettings(SETTINGS_VOICE)
             return
         }
 

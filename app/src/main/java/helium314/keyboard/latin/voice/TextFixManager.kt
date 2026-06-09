@@ -130,7 +130,7 @@ class TextFixManager(
             return
         }
         if (!SecretStore.isSecureStorageAvailable(context)) {
-            Toast.makeText(context, R.string.voice_error_secure_storage_unavailable, Toast.LENGTH_SHORT).show()
+            callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
             return
         }
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
@@ -168,7 +168,7 @@ class TextFixManager(
         val model = if (provider.isCloud) {
             val resolved = resolveProviderModel(selectedModel, customModel)
             if (resolved == null) {
-                Toast.makeText(context, R.string.voice_error_no_model, Toast.LENGTH_SHORT).show()
+                callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
                 return
             }
             resolved
