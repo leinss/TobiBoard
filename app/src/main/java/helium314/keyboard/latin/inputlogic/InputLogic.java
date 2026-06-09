@@ -2578,10 +2578,10 @@ public final class InputLogic {
                 shouldFinishComposition)) {
             if (0 < remainingTries) {
                 handler.postResetCaches(tryResumeSuggestions, remainingTries - 1);
-                return false;
             }
-            // If remainingTries is 0, we should stop waiting for new tries, however we'll still
-            // return true as we need to perform other tasks (for example, loading the keyboard).
+            // Return false in all failure cases so the caller can decide what to do
+            // (schedule another retry or force-hide the keyboard on last attempt).
+            return false;
         }
         mConnection.tryFixIncorrectCursorPosition();
         if (tryResumeSuggestions) {
