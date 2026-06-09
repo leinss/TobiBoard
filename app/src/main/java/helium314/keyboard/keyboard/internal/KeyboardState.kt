@@ -576,8 +576,19 @@ class KeyboardState(private val switchActions: SwitchActions) {
             val isShiftLocked = alphabetShiftState.isShiftLocked
             isInAlphabetUnshiftedFromShifted = false
             when {
-                // Double tap shift key has been handled in {@link #onPressShift}, so that just ignore this release shift key here.
-                isInDoubleTapShiftKey -> isInDoubleTapShiftKey = false
+                // Double tap shift key was handled in onPressShift. If we are in caps lock, exit it
+                // now — any shift tap while locked should escape regardless of double-tap timing.
+                // Otherwise just clear the flag (the double-tap already did its job).
+                isInDoubleTapShiftKey -> {
+                    isInDoubleTapShiftKey = false
+                    if (isShiftLocked && !shiftKeyState.isIgnoring && !withSliding) {
+                        setShiftLocked(false)
+                        switchActions.cancelDoubleTapShiftKeyTimer()
+                        shiftKeyState.onRelease()
+                        switchActions.requestUpdatingShiftState(autoCapsFlags, recapitalizeMode)
+                        return
+                    }
+                }
                 // After chording input
                 shiftKeyState.isChording -> {
                     // On touchscreens, an accidental graze of a nearby key while tapping Shift to
