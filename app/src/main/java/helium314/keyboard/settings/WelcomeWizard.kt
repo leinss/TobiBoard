@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -93,19 +94,25 @@ fun WelcomeWizard(
     val enableStep = 1
     val switchStep = 2
     val providerStep = 3
-    val apiKeyStep = 4
-    val languageStep = 5
-    val voiceStep = 6
-    val doneStep = 7
-    val totalSetupSteps = 7
+    val modelStep = 4      // LOCAL only: download on-device STT model
+    val apiKeyStep = 5     // cloud only: enter API key
+    val languageStep = 6
+    val voiceStep = 7
+    val doneStep = 8
+    val totalSetupSteps = 8
     val ctx = LocalContext.current
     val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
     var aiSetupSkipped by rememberSaveable { mutableStateOf(false) }
     fun isAiProviderReady(): Boolean {
         val prefs = ctx.prefs()
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
-        val credentialReady = !provider.isCloud ||
-            SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).isNotBlank()
+        val credentialReady = when {
+            provider.isCloud -> SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).isNotBlank()
+            // LOCAL: Parakeet must be downloaded before voice works
+            else -> helium314.keyboard.latin.voice.local.ModelStorage.isReady(
+                ctx, helium314.keyboard.latin.voice.local.SttModelInfo.ParakeetTdt06b
+            )
+        }
         return credentialReady
                 && prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)
                 && PermissionsUtil.checkAllPermissionsGranted(ctx, Manifest.permission.RECORD_AUDIO)
@@ -366,19 +373,25 @@ fun WelcomeWizard(
                         primaryAction = { actionText, icon, action -> PrimaryAction(actionText, icon, action) },
                         secondaryAction = { actionText, icon, action -> SecondaryAction(actionText, icon, action) },
                         onProviderConfigured = {
-                            // LOCAL has no API key; skip step 4 entirely.
                             val picked = AiProvider.fromPref(
                                 ctx.prefs().getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
                             )
-                            step = if (picked.isCloud) apiKeyStep else languageStep
+                            step = if (picked.isCloud) apiKeyStep else modelStep
                         },
+                        onModelConfigured = { step = languageStep },
                         onApiKeyConfigured = { step = languageStep },
                         onLanguageConfigured = { step = voiceStep },
                         onVoiceConfigured = { step = doneStep },
                         onSkip = {
                             if (step == voiceStep) aiSetupSkipped = true
                             step = when (step) {
-                                providerStep -> apiKeyStep
+                                providerStep -> {
+                                    val picked = AiProvider.fromPref(
+                                        ctx.prefs().getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
+                                    )
+                                    if (picked.isCloud) apiKeyStep else modelStep
+                                }
+                                modelStep -> languageStep
                                 apiKeyStep -> languageStep
                                 languageStep -> voiceStep
                                 else -> doneStep
@@ -454,6 +467,7 @@ private fun AiProviderSetupStep(
     primaryAction: @Composable (String, Painter, () -> Unit) -> Unit,
     secondaryAction: @Composable (String, Painter?, () -> Unit) -> Unit,
     onProviderConfigured: () -> Unit,
+    onModelConfigured: () -> Unit,
     onApiKeyConfigured: () -> Unit,
     onLanguageConfigured: () -> Unit,
     onVoiceConfigured: () -> Unit,
@@ -650,6 +664,77 @@ private fun AiProviderSetupStep(
                     )
                 }
                 4 -> {
+                    // LOCAL only: download the on-device STT model.
+                    val downloadStates by helium314.keyboard.latin.voice.local.ModelDownloadRepository.states.collectAsState()
+                    val model = helium314.keyboard.latin.voice.local.SttModelInfo.ParakeetTdt06b
+                    val downloadState = downloadStates[model.id] ?: if (
+                        helium314.keyboard.latin.voice.local.ModelStorage.isReady(ctx, model)
+                    ) helium314.keyboard.latin.voice.local.DownloadState.Ready
+                    else helium314.keyboard.latin.voice.local.DownloadState.NotDownloaded
+                    val isReady = downloadState is helium314.keyboard.latin.voice.local.DownloadState.Ready
+                    val isInProgress = downloadState is helium314.keyboard.latin.voice.local.DownloadState.Downloading
+                        || downloadState is helium314.keyboard.latin.voice.local.DownloadState.Queued
+                        || downloadState is helium314.keyboard.latin.voice.local.DownloadState.Verifying
+                    Text(
+                        stringResource(R.string.setup_model_download_title),
+                        style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.setup_model_download_instruction),
+                        style = MaterialTheme.typography.bodyLarge.merge(color = textColor)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    when (downloadState) {
+                        is helium314.keyboard.latin.voice.local.DownloadState.Ready ->
+                            Text(stringResource(R.string.setup_model_download_ready),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim))
+                        is helium314.keyboard.latin.voice.local.DownloadState.Downloading -> {
+                            val pct = if (downloadState.bytesTotal > 0L)
+                                downloadState.bytesDownloaded.toFloat() / downloadState.bytesTotal
+                            else 0f
+                            Text(
+                                if (pct > 0f) stringResource(R.string.setup_model_download_progress, (pct * 100).toInt())
+                                else stringResource(R.string.setup_model_download_connecting),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { pct },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        is helium314.keyboard.latin.voice.local.DownloadState.Verifying -> {
+                            Text(stringResource(R.string.setup_model_download_connecting),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim))
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        else ->
+                            Text(stringResource(R.string.setup_model_download_size, model.totalBytes / 1_048_576L),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim))
+                    }
+                    Spacer(Modifier.height(24.dp))
+                    if (!isReady) {
+                        primaryAction(
+                            if (isInProgress) stringResource(R.string.setup_model_download_downloading)
+                            else stringResource(R.string.setup_model_download_action),
+                            painterResource(R.drawable.ic_settings_preferences)
+                        ) {
+                            if (!isInProgress) {
+                                helium314.keyboard.latin.voice.local.ModelDownloadService.start(ctx, model.id)
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    secondaryAction(
+                        if (isReady) stringResource(R.string.setup_continue_action)
+                        else stringResource(R.string.setup_ai_provider_skip),
+                        if (isReady) painterResource(R.drawable.ic_setup_check) else null,
+                        if (isReady) onModelConfigured else onSkip
+                    )
+                }
+                5 -> {
                     Text(
                         stringResource(R.string.setup_ai_provider_key_title),
                         style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)
@@ -691,7 +776,7 @@ private fun AiProviderSetupStep(
                         )
                     }
                 }
-                5 -> {
+                6 -> {
                     Text(
                         stringResource(R.string.setup_ai_provider_language_title),
                         style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)
