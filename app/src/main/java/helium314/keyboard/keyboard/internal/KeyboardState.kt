@@ -580,7 +580,12 @@ class KeyboardState(private val switchActions: SwitchActions) {
                 isInDoubleTapShiftKey -> isInDoubleTapShiftKey = false
                 // After chording input
                 shiftKeyState.isChording -> {
-                    if (alphabetShiftState.isShiftLockShifted) setShiftLocked(true) else setShifted(ShiftMode.UNSHIFT)
+                    // On touchscreens, an accidental graze of a nearby key while tapping Shift to
+                    // exit caps lock registers as a chord and would previously re-lock caps lock
+                    // (SHIFT_LOCK_SHIFTED → SHIFT_LOCKED). This feels completely broken to users.
+                    // Simply unshift in all chord cases — intentional caps-lock chording (a desktop
+                    // concept) is not a meaningful interaction on a touchscreen.
+                    setShifted(ShiftMode.UNSHIFT)
                     // Automatic shift state may have been changed depending on what characters were input.
                     shiftKeyState.onRelease()
                     switchActions.requestUpdatingShiftState(autoCapsFlags, recapitalizeMode)
