@@ -11,7 +11,7 @@ platform :android do
     UI.user_error!("No release AAB found — run `make bundle-release` first.") if aab.nil?
 
     upload_to_play_store(
-      package_name: "helium314.keyboard.tobiboard",
+      package_name: "xyz.leinss.TobiBoard",
       json_key: ENV["PLAY_SERVICE_ACCOUNT_JSON"],
       track: options[:track] || "internal",
       release_status: "draft",   # uploads as a draft; review + roll out in the Play Console

@@ -1,1 +1,1 @@
-Privacy-first keyboard with optional AI voice-to-text and text fix
+On-device voice, text fix, and clipboard history. Cloud optional, no account needed.

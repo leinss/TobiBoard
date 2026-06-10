@@ -6,12 +6,10 @@ import android.os.Handler
 import android.os.Looper
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
-import android.widget.Toast
 import androidx.annotation.StringRes
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
-import helium314.keyboard.latin.utils.InputTypeUtils
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.prefs
 import kotlinx.coroutines.CancellationException
@@ -61,11 +59,7 @@ class TextFixManager(
             // by cross-platform frameworks (React Native, Flutter) for non-privacy reasons and is
             // NOT a signal that the field content is sensitive. Do not block text fix on it.
             when (inputType and InputType.TYPE_MASK_CLASS) {
-                InputType.TYPE_CLASS_TEXT -> {
-                    if (InputTypeUtils.isUriOrEmailType(inputType)) {
-                        return R.string.text_fix_error_unsupported_field
-                    }
-                }
+                InputType.TYPE_CLASS_TEXT -> { /* always allowed */ }
                 InputType.TYPE_CLASS_NUMBER -> {
                     // Preventative: today we reject NUMBER as unsupported, but check password
                     // variation first so it registers as sensitive rather than unsupported.
@@ -118,20 +112,26 @@ class TextFixManager(
 
     @Synchronized
     fun startTextFix(variant: Variant = Variant.PRIMARY) {
-        if (state != State.IDLE) return
+        Log.d(TAG, "startTextFix: state=$state")
+        if (state != State.IDLE) { Log.d(TAG, "startTextFix: blocked — state=$state"); return }
         val prefs = context.prefs()
 
         if (!prefs.getBoolean(variant.enabledPref, variant.enabledDefault)) {
+            Log.d(TAG, "startTextFix: disabled — navigating to text_fix settings")
             callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
             return
         }
-        callbacks.getBlockedErrorResId()?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+        val blocked = callbacks.getBlockedErrorResId()
+        Log.d(TAG, "startTextFix: blockedResId=$blocked")
+        blocked?.let {
+            callbacks.onError(context.getString(it))
             return
         }
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
+        Log.d(TAG, "startTextFix: provider=$provider")
         // SecretStore is only needed for cloud API keys; LOCAL provider never touches it.
         if (provider.isCloud && !SecretStore.isSecureStorageAvailable(context)) {
+            Log.d(TAG, "startTextFix: SecretStore unavailable — navigating to text_fix settings")
             callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
             return
         }
@@ -139,27 +139,30 @@ class TextFixManager(
             SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
         } else ""
         if (provider.isCloud && apiKey.isBlank()) {
+            Log.d(TAG, "startTextFix: no API key — navigating to text_fix settings")
             callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
             return
         }
         if (provider.isCloud && !isNetworkAvailable(context)) {
-            Toast.makeText(context, R.string.voice_error_no_network, Toast.LENGTH_SHORT).show()
+            callbacks.onError(context.getString(R.string.voice_error_no_network))
             return
         }
-        if (provider == AiProvider.LOCAL &&
-            !helium314.keyboard.latin.voice.local.ModelStorage.isReady(context, helium314.keyboard.latin.voice.local.ModelRegistry.activeTextFix(context))
-        ) {
+        val activeModel = helium314.keyboard.latin.voice.local.ModelRegistry.activeTextFix(context)
+        val modelReady = helium314.keyboard.latin.voice.local.ModelStorage.isReady(context, activeModel)
+        Log.d(TAG, "startTextFix: LOCAL model=${activeModel.id} ready=$modelReady")
+        if (provider == AiProvider.LOCAL && !modelReady) {
+            Log.d(TAG, "startTextFix: model not ready — navigating to local_models")
             callbacks.onOpenSettings(SETTINGS_LOCAL_MODELS)
             return
         }
 
         val textToFix = callbacks.getTextToFix()?.toString().orEmpty()
         if (textToFix.isBlank()) {
-            Toast.makeText(context, R.string.text_fix_error_no_selection, Toast.LENGTH_LONG).show()
+            callbacks.onError(context.getString(R.string.text_fix_error_no_selection))
             return
         }
         if (textToFix.length > MAX_INPUT_LENGTH) {
-            Toast.makeText(context, R.string.text_fix_error_too_long, Toast.LENGTH_LONG).show()
+            callbacks.onError(context.getString(R.string.text_fix_error_too_long))
             return
         }
         val input = textToFix
