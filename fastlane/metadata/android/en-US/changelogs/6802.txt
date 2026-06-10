@@ -1,0 +1,7 @@
+* Fix: caps lock no longer stays stuck after switching text fields or a touch-cancel gesture
+* Fix: keyboard no longer stops typing after an input connection failure — auto-recovers silently
+* Fix: text fix now works in URL and email fields, and in fields with no-suggestions mode
+* Fix: text fix error toasts are visible long enough to read
+* Clipboard history: tracks usage frequency and shows copy timestamp on each entry
+* Long-press a clipboard entry to pin it or delete it directly from the keyboard
+* New Clipboard Management screen in Settings: search, annotate, and bulk-remove entries
