@@ -1,1 +1,1 @@
-On-device voice, text fix, and clipboard history. Cloud optional, no account needed.
+On-device voice, text fix & clipboard history. No account, cloud optional.
