@@ -20,10 +20,7 @@ platform :android do
       aab: aab,
       version_code: version_code,
       skip_upload_apk: true,
-      skip_upload_aab: true,
-      skip_upload_metadata: true,    # service account is Release Manager; Store Listing Editor needed for metadata
-      skip_upload_screenshots: true, # same — Store Listing Editor required
-      skip_upload_images: true       # same — Store Listing Editor required
+      skip_upload_screenshots: true  # no screenshots set up yet
     )
   end
 end
