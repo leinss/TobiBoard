@@ -21,6 +21,7 @@ import helium314.keyboard.latin.settings.getTransitionAnimationScale
 import helium314.keyboard.settings.screens.AboutScreen
 import helium314.keyboard.settings.screens.AdvancedSettingsScreen
 import helium314.keyboard.settings.screens.AppearanceScreen
+import helium314.keyboard.settings.screens.ClipboardManagementScreen
 import helium314.keyboard.settings.screens.ColorsScreen
 import helium314.keyboard.settings.screens.DebugScreen
 import helium314.keyboard.settings.screens.DictionaryScreen
@@ -146,6 +147,9 @@ fun SettingsNavHost(
         composable(SettingsDestination.Layouts) {
             SecondaryLayoutScreen(onClickBack = ::goBack)
         }
+        composable(SettingsDestination.ClipboardManagement) {
+            ClipboardManagementScreen(onClickBack = ::goBack)
+        }
         composable(SettingsDestination.Colors + "{theme}") {
             ColorsScreen(isNight = false, theme = it.arguments?.getString("theme"), onClickBack = ::goBack)
         }
@@ -202,6 +206,7 @@ object SettingsDestination {
     const val Subtype = "subtype/"
     const val Layouts = "layouts"
     const val Dictionaries = "dictionaries"
+    const val ClipboardManagement = "clipboard_management"
     val navTarget = MutableStateFlow<SettingsNavigationRequest?>(null)
 
     private val nextNavigationId = AtomicLong(0L)

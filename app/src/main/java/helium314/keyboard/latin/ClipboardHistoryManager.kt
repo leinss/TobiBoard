@@ -69,6 +69,18 @@ class ClipboardHistoryManager(
         clipboardDao?.togglePinned(id)
     }
 
+    fun incrementUseCount(id: Long) {
+        clipboardDao?.incrementUseCount(id)
+    }
+
+    fun setAnnotation(id: Long, annotation: String?) {
+        clipboardDao?.setAnnotation(id, annotation)
+    }
+
+    fun deleteEntryById(id: Long) {
+        clipboardDao?.deleteById(id)
+    }
+
     fun clearHistory() {
         clipboardDao?.clearNonPinned()
         ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
