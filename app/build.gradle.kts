@@ -45,7 +45,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "helium314.keyboard.tobiboard"
+        applicationId = "xyz.leinss.TobiBoard"
         minSdk = 21
         targetSdk = 35
         versionCode = 6801

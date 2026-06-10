@@ -19,11 +19,15 @@ class Database private constructor(context: Context, name: String = NAME) : SQLi
         if (oldVersion <= 1) {
             db.execSQL(GestureDataDao.CREATE_TABLE)
         }
+        if (oldVersion <= 2) {
+            db.execSQL("ALTER TABLE CLIPBOARD ADD COLUMN USE_COUNT INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE CLIPBOARD ADD COLUMN ANNOTATION TEXT")
+        }
     }
 
     companion object {
         private val TAG = Database::class.java.simpleName
-        private const val VERSION = 2
+        private const val VERSION = 3
         const val NAME = "heliboard.db"
         private var instance: Database? = null
         @Synchronized

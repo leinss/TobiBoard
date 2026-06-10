@@ -210,6 +210,16 @@
     <string name="clipboard_history_retention_time">History retention time</string>
     <!-- Preferences item for showing pinned clipboard items first -->
     <string name="clipboard_history_pinned_first">Show pinned items on top</string>
+    <string name="clipboard_used_count">Used %1$d×</string>
+    <string name="clipboard_context_pin">Pin</string>
+    <string name="clipboard_context_unpin">Unpin</string>
+    <string name="clipboard_context_delete">Delete</string>
+    <string name="clipboard_management">Manage clipboard history</string>
+    <string name="clipboard_management_summary">Browse, search, annotate, and delete entries</string>
+    <string name="clipboard_annotation_hint">Label (optional)</string>
+    <string name="clipboard_annotation_dialog_title">Add label</string>
+    <string name="clipboard_search_hint">Search clipboard history…</string>
+    <string name="clipboard_no_results">No matching entries</string>
     <!-- Preferences item for enabling swipe deletion -->
     <string name="delete_swipe">Delete swipe</string>
     <!-- Description for "delete_swipe" option. -->

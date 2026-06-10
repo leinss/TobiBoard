@@ -20,8 +20,12 @@ import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.utils.locale
 import helium314.keyboard.settings.preferences.ListPreference
 import helium314.keyboard.settings.Setting
+import helium314.keyboard.settings.SettingsDestination
+import helium314.keyboard.settings.SettingsWithoutKey
 import helium314.keyboard.settings.preferences.ReorderSwitchPreference
 import helium314.keyboard.settings.SearchSettingsScreen
+import helium314.keyboard.latin.utils.NextScreenIcon
+import helium314.keyboard.settings.preferences.Preference
 import helium314.keyboard.settings.preferences.SliderPreference
 import helium314.keyboard.settings.preferences.SwitchPreference
 import helium314.keyboard.latin.utils.Theme
@@ -80,7 +84,8 @@ fun PreferencesScreen(
         R.string.settings_category_clipboard_history,
         Settings.PREF_ENABLE_CLIPBOARD_HISTORY,
         if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME else null,
-        if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST else null
+        if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST else null,
+        if (clipboardHistoryEnabled) SettingsWithoutKey.CLIPBOARD_MANAGEMENT else null,
     )
     SearchSettingsScreen(
         onClickBack = onClickBack,
@@ -190,6 +195,15 @@ fun createPreferencesSettings(context: Context) = listOf(
     },
     Setting(context, Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST, R.string.clipboard_history_pinned_first) {
         SwitchPreference(it, Defaults.PREF_CLIPBOARD_HISTORY_PINNED_FIRST)
+    },
+    Setting(context, SettingsWithoutKey.CLIPBOARD_MANAGEMENT,
+        R.string.clipboard_management, R.string.clipboard_management_summary)
+    {
+        Preference(
+            name = it.title,
+            description = it.description,
+            onClick = { SettingsDestination.navigateTo(SettingsDestination.ClipboardManagement) }
+        ) { NextScreenIcon() }
     },
     Setting(context, Settings.PREF_VIBRATION_DURATION_SETTINGS, R.string.prefs_keypress_vibration_duration_settings) { setting ->
         SliderPreference(

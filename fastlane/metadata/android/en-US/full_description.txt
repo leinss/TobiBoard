@@ -1,40 +1,41 @@
-TobiBoard is a privacy-first Android keyboard, forked from HeliBoard (which is based on AOSP / OpenBoard). Core typing runs locally on-device. Two optional AI features — Voice-to-Text and Text Fix — only run when you turn them on and supply your own API key.
+Everything runs on your device. Cloud is optional.
 
-No accounts. No subscription. No telemetry. No backend. Bring your own key.
+TobiBoard is a fork of HeliBoard — the best privacy-respecting Android keyboard — with the three things it was missing: on-device voice-to-text, on-device text fix, and a proper clipboard manager. All run locally by default. No account. No API key required. Cloud providers are available if you want more powerful models, but you never need one.
 
-<b>AI Voice-to-Text</b>
-Long-press Return, tap the mic, speak. Your words land as polished text.
+<b>On-device Voice-to-Text</b>
+Long-press Return, tap the mic, speak. Your words land as polished text. Uses an on-device Whisper model by default — audio never leaves your phone.
 <ul>
-  <li>Choose OpenRouter audio models or PayPerQ speech models</li>
-  <li>Add a custom prompt or vocabulary so it nails names and jargon</li>
-  <li>Local recordings are deleted the moment they're sent</li>
+  <li>Works offline, no key needed</li>
+  <li>Cloud models (OpenRouter, PayPerQ) available if you want them — bring your own key</li>
+  <li>Custom prompt or vocabulary so it nails names and jargon</li>
 </ul>
 
-<b>AI Text Fix</b>
-Select rough text, long-press Return, hit Fix. Get back a clean message in the same language.
+<b>On-device Text Fix</b>
+Select rough text, long-press Return, hit Fix. Back as clean text in the same language. Runs locally by default — nothing uploaded, no key needed.
 <ul>
-  <li>Works in any language your model supports</li>
-  <li>Cleans typos, awkward phrasing, or shifts tone (formal ↔ casual)</li>
-  <li>You review the rewrite before replacing the original</li>
+  <li>Works offline, no key needed</li>
+  <li>Any language, cleans typos and awkward phrasing, adjusts tone</li>
+  <li>Review the rewrite before replacing the original</li>
 </ul>
 
-<b>Zero Data Retention</b>
-TobiBoard requests OpenRouter zero-data-retention endpoints by default. When the model offers a ZDR route, your audio and text aren't logged, stored, or used for training. API keys are encrypted with the Android Keystore, excluded from cloud backups, and never written to logs.
-
-<b>All the HeliBoard features you expect</b>
+<b>Clipboard history — stays on your device</b>
+Long-press the clipboard icon to browse everything you've copied. See when it was copied and how often you paste it.
 <ul>
-  <li>Add dictionaries for suggestions and spell check</li>
-  <li>Customize themes (style, colors, background image); follows system day/night and dynamic colors</li>
-  <li>Customize keyboard layouts and special layouts (symbols, number, functional keys)</li>
-  <li>Multilingual typing</li>
-  <li>Clipboard history</li>
-  <li>One-handed mode and split keyboard</li>
-  <li>Number pad</li>
-  <li>Backup and restore your settings and custom assets</li>
+  <li>Pin entries you paste often so they're always at the top</li>
+  <li>Add labels to find things later</li>
+  <li>Search, manage, and delete from Settings — never uploaded or backed up to the cloud</li>
 </ul>
 
-<b>Privacy footnote</b>
-Once your audio or selected text reaches OpenRouter, PayPerQ, or the underlying model provider, their policies apply. Read their privacy terms before pointing this at anything sensitive.
+<b>When you do go cloud</b>
+TobiBoard requests OpenRouter zero-data-retention endpoints by default — your audio and text aren't logged or used for training when the model supports it. API keys are encrypted with the Android Keystore and never written to logs.
+
+<b>All the HeliBoard features you already know</b>
+<ul>
+  <li>Dictionaries, spell check, multilingual typing</li>
+  <li>Themes, dynamic colors, background image, day/night</li>
+  <li>Custom layouts, number row, one-handed mode, split keyboard</li>
+  <li>Backup and restore settings and custom assets</li>
+</ul>
 
 TobiBoard installs side-by-side with HeliBoard, so you can keep both.
 
