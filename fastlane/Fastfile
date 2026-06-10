@@ -6,6 +6,8 @@ default_platform(:android)
 platform :android do
   desc "Upload the signed release AAB + store listing to Google Play (TRACK defaults to internal)"
   lane :play do |options|
+    gradle_path = File.expand_path("../app/build.gradle.kts", __dir__)
+    version_code = File.read(gradle_path)[/versionCode\s*=\s*(\d+)/, 1].to_i
     aab = Dir.glob(File.expand_path("../app/build/outputs/bundle/release/*.aab", __dir__))
              .max_by { |f| File.mtime(f) }
     UI.user_error!("No release AAB found — run `make bundle-release` first.") if aab.nil?
@@ -14,10 +16,14 @@ platform :android do
       package_name: "xyz.leinss.TobiBoard",
       json_key: ENV["PLAY_SERVICE_ACCOUNT_JSON"],
       track: options[:track] || "internal",
-      release_status: "draft",   # uploads as a draft; review + roll out in the Play Console
+      release_status: "draft",      # uploads as a draft; review + roll out in the Play Console
       aab: aab,
-      skip_upload_apk: true,        # we ship an AAB
-      skip_upload_screenshots: true # no screenshots yet; prevents sync_image_upload permission error
+      version_code: version_code,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,    # service account is Release Manager; Store Listing Editor needed for metadata
+      skip_upload_screenshots: true, # same — Store Listing Editor required
+      skip_upload_images: true       # same — Store Listing Editor required
     )
   end
 end
