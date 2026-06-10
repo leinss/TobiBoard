@@ -16,8 +16,8 @@ platform :android do
       track: options[:track] || "internal",
       release_status: "draft",   # uploads as a draft; review + roll out in the Play Console
       aab: aab,
-      skip_upload_apk: true,     # we ship an AAB
-      sync_image_upload: true
+      skip_upload_apk: true,        # we ship an AAB
+      skip_upload_screenshots: true # no screenshots yet; prevents sync_image_upload permission error
     )
   end
 end
