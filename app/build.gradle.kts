@@ -45,11 +45,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "helium314.keyboard.tobiboard"
+        applicationId = "xyz.leinss.TobiBoard"
         minSdk = 21
         targetSdk = 35
-        versionCode = 6800
-        versionName = "6.8.0"
+        versionCode = 6802
+        versionName = "6.8.2"
         buildConfigField("boolean", "ALLOW_USER_SUPPLIED_JNI", "false")
         buildConfigField("boolean", "ENABLE_GESTURE_DATA_GATHERING", "false")
         manifestPlaceholders["gestureDataProviderEnabled"] = "false"

@@ -25,6 +25,12 @@ no intermediary server operated by this app.
   transcription request and deleted immediately afterward. If you enable "Auto-retry on reconnect",
   a recording may be held a little longer — only until the retry succeeds, you cancel, or it times
   out — and is then deleted. Audio is never persisted across app restarts.
+- **Clipboard history** is stored in a local SQLite database on your device when the clipboard
+  history feature is enabled (off by default). The database stores the text content of items you
+  copy, the time they were copied, how many times you have pasted them, and any labels you add.
+  Clipboard data never leaves your device and is not included in cloud backups. You can clear the
+  history at any time from TobiBoard Settings → Preferences → Manage clipboard history, or by
+  disabling clipboard history entirely.
 - **Token usage counts** shown in settings are kept in memory only for the current session and are
   cleared when the app process ends or when you reset them.
 

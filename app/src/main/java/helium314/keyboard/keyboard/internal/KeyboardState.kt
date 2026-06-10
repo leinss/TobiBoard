@@ -186,6 +186,10 @@ class KeyboardState(private val switchActions: SwitchActions) {
         }
     }
 
+    fun clearShiftLock() {
+        setShiftLocked(false)
+    }
+
     private fun setShiftLocked(shiftLocked: Boolean) {
         if (DebugFlags.DEBUG_ENABLED) {
             Log.d(TAG, "setShiftLocked: shiftLocked=$shiftLocked $this")
@@ -525,23 +529,23 @@ class KeyboardState(private val switchActions: SwitchActions) {
             shiftKeyState.onPress()
             return
         }
+        // Shift while caps lock is active always exits caps lock, regardless of double-tap timing.
+        if (alphabetShiftState.isShiftLocked) {
+            setShiftLocked(false)
+            switchActions.cancelDoubleTapShiftKeyTimer()
+            return
+        }
         isInDoubleTapShiftKey = switchActions.isInDoubleTapShiftKeyTimeout
         if (isInDoubleTapShiftKey) {
             if (alphabetShiftState.isManualShifted || isInAlphabetUnshiftedFromShifted) {
                 // Shift key has been double tapped while in manual shifted or automatic shifted state.
                 setShiftLocked(true)
             }
-            // Else shift key has been double tapped while in normal state.
-            // This is the second tap to disable shift locked state, so just ignore this.
+            // Else shift key has been double tapped while in normal state — just ignore.
         } else {
             // This is first tap.
             switchActions.startDoubleTapShiftKeyTimer()
-            if (alphabetShiftState.isShiftLocked) {
-                // Shift key is pressed while shift locked state, we will treat this state as
-                // shift lock shifted state and mark as if shift key pressed while normal state.
-                setShifted(ShiftMode.SHIFT_LOCKED)
-                shiftKeyState.onPress()
-            } else if (alphabetShiftState.isAutomaticShifted) {
+            if (alphabetShiftState.isAutomaticShifted) {
                 // Shift key is pressed while automatic shifted, we have to move to manual shifted.
                 setShifted(ShiftMode.MANUAL)
                 oneShotManualShiftPending = true
@@ -572,11 +576,16 @@ class KeyboardState(private val switchActions: SwitchActions) {
             val isShiftLocked = alphabetShiftState.isShiftLocked
             isInAlphabetUnshiftedFromShifted = false
             when {
-                // Double tap shift key has been handled in {@link #onPressShift}, so that just ignore this release shift key here.
+                // Double tap shift key was handled in onPressShift — just clear the flag.
                 isInDoubleTapShiftKey -> isInDoubleTapShiftKey = false
                 // After chording input
                 shiftKeyState.isChording -> {
-                    if (alphabetShiftState.isShiftLockShifted) setShiftLocked(true) else setShifted(ShiftMode.UNSHIFT)
+                    // On touchscreens, an accidental graze of a nearby key while tapping Shift to
+                    // exit caps lock registers as a chord and would previously re-lock caps lock
+                    // (SHIFT_LOCK_SHIFTED → SHIFT_LOCKED). This feels completely broken to users.
+                    // Simply unshift in all chord cases — intentional caps-lock chording (a desktop
+                    // concept) is not a meaningful interaction on a touchscreen.
+                    setShifted(ShiftMode.UNSHIFT)
                     // Automatic shift state may have been changed depending on what characters were input.
                     shiftKeyState.onRelease()
                     switchActions.requestUpdatingShiftState(autoCapsFlags, recapitalizeMode)

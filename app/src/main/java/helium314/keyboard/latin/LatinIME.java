@@ -179,6 +179,16 @@ public class LatinIME extends InputMethodService implements
     private final BroadcastReceiver mDictionaryDumpBroadcastReceiver =
             new DictionaryDumpBroadcastReceiver(this);
 
+    private final BroadcastReceiver mDebugTextFixReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.d(TAG, "mDebugTextFixReceiver: triggering startTextFix, state=" + (mTextFixManager != null ? mTextFixManager.getState() : "null"));
+            if (mTextFixManager != null && mTextFixManager.getState() == TextFixManager.State.IDLE) {
+                mTextFixManager.startTextFix(TextFixManager.Variant.PRIMARY);
+            }
+        }
+    };
+
     final static class RestartAfterDeviceUnlockReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -311,6 +321,12 @@ public class LatinIME extends InputMethodService implements
                         // If we were able to reset the caches, then we can reload the keyboard.
                         // Otherwise, we'll do it when we can.
                         latinIme.mKeyboardSwitcher.reloadMainKeyboard();
+                    } else if (msg.arg2 == 0) {
+                        // All retries exhausted and the input connection is still broken.
+                        // Hide the keyboard so the framework issues a fresh onStartInput when
+                        // the user next taps the field, re-establishing the connection.
+                        Log.w(TAG, "Input connection reset failed after all retries; hiding keyboard to force reconnect.");
+                        latinIme.requestHideSelf(0);
                     }
                     break;
                 case MSG_WAIT_FOR_DICTIONARY_LOAD:
@@ -597,6 +613,12 @@ public class LatinIME extends InputMethodService implements
         filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
         registerReceiver(mRingerModeChangeReceiver, filter);
 
+        // Debug-only: broadcast receiver to trigger text fix from adb without keyboard UI.
+        if (BuildConfig.DEBUG) {
+            final IntentFilter debugFilter = new IntentFilter("helium314.keyboard.DEBUG_TEXT_FIX");
+            ContextCompat.registerReceiver(this, mDebugTextFixReceiver, debugFilter, ContextCompat.RECEIVER_EXPORTED);
+        }
+
         // Register to receive installation and removal of a dictionary pack.
         final IntentFilter packageFilter = new IntentFilter();
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -698,6 +720,18 @@ public class LatinIME extends InputMethodService implements
                     return null;
                 }
             }
+
+            @Override
+            public void onOpenSettings(@NonNull final String settingsDestination) {
+                requestHideSelf(0);
+                final Intent intent = new Intent();
+                intent.setClass(LatinIME.this, SettingsActivity2.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                intent.putExtra("start_destination", settingsDestination);
+                startActivity(intent);
+            }
         });
 
         mTextFixManager = new TextFixManager(this, new TextFixManager.Callbacks() {
@@ -706,10 +740,17 @@ public class LatinIME extends InputMethodService implements
             public Integer getBlockedErrorResId() {
                 final SettingsValues settingsValues = mSettings.getCurrent();
                 if (settingsValues == null) {
+                    Log.d(TAG, "getBlockedErrorResId: settingsValues=null → unsupported_field");
                     return R.string.text_fix_error_unsupported_field;
                 }
                 final EditorInfo ei = getCurrentInputEditorInfo();
                 final int imeOptions = ei != null ? ei.imeOptions : 0;
+                Log.d(TAG, String.format("getBlockedErrorResId: inputType=0x%08X isPassword=%b noLearning=%b incognito=%b imeOptions=0x%08X",
+                        settingsValues.mInputAttributes.mInputType,
+                        settingsValues.mInputAttributes.mIsPasswordField,
+                        settingsValues.mInputAttributes.mNoLearning,
+                        settingsValues.mIncognitoModeEnabled,
+                        imeOptions));
                 return TextFixManager.getBlockedErrorResId(
                         settingsValues.mInputAttributes.mInputType,
                         settingsValues.mInputAttributes.mIsPasswordField,
@@ -784,6 +825,18 @@ public class LatinIME extends InputMethodService implements
                     mTextFixErrorOverlayHideRunnable = hideRunnable;
                     mTextFixOverlayHandler.postDelayed(hideRunnable, TEXT_FIX_ERROR_OVERLAY_HIDE_MS);
                 }
+            }
+
+            @Override
+            public void onOpenSettings(@NonNull final String settingsDestination) {
+                requestHideSelf(0);
+                final Intent intent = new Intent();
+                intent.setClass(LatinIME.this, SettingsActivity2.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                intent.putExtra("start_destination", settingsDestination);
+                startActivity(intent);
             }
         });
     }
@@ -1020,6 +1073,7 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onDestroy() {
+        if (BuildConfig.DEBUG) unregisterReceiver(mDebugTextFixReceiver);
         mVoiceInputManager.release();
         if (mTextFixManager != null) mTextFixManager.release();
         mClipboardHistoryManager.onDestroy();
@@ -1392,6 +1446,7 @@ public class LatinIME extends InputMethodService implements
         // Should do the following in onFinishInputInternal but until JB MR2 it's not called :(
         mInputLogic.finishInput();
         mKeyboardActionListener.resetMetaState();
+        mKeyboardSwitcher.clearShiftLock();
     }
 
     protected void deallocateMemory() {
@@ -1764,6 +1819,7 @@ public class LatinIME extends InputMethodService implements
             return;
         }
         if (KeyCode.TEXT_FIX == event.getKeyCode()) {
+            Log.d(TAG, "onEvent: TEXT_FIX received, mTextFixManager=" + mTextFixManager + " state=" + (mTextFixManager != null ? mTextFixManager.getState() : "null"));
             if (mTextFixManager != null && mTextFixManager.getState() == TextFixManager.State.IDLE) {
                 mTextFixManager.startTextFix(TextFixManager.Variant.PRIMARY);
             }

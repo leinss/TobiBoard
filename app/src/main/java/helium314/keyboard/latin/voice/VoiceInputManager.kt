@@ -39,6 +39,9 @@ class VoiceInputManager(
     companion object {
         private const val TAG = "VoiceInputManager"
         private const val MAX_TRANSCRIPTION_LENGTH = 10_000
+        // Settings nav-route strings for onOpenSettings — must match SettingsDestination constants.
+        const val SETTINGS_VOICE = "voice"
+        const val SETTINGS_LOCAL_MODELS = "local_models"
         private const val AUDIO_CACHE_SUBDIR = "voice_audio"
         private const val MIN_RECORDING_DURATION_MS = 500L
         private const val MIN_SPEECH_MEAN_AMPLITUDE = 80.0
@@ -66,6 +69,13 @@ class VoiceInputManager(
         fun onMaxDurationReached()
         /** Called when a transcription is paused, waiting for the network to come back. */
         fun onWaitingForNetwork() {}
+        /**
+         * Called instead of a toast when voice can't start because a required setup step is
+         * missing (model not downloaded, feature not enabled, no API key). [settingsDestination]
+         * is the nav-route string the settings activity should open to (e.g. "local_models",
+         * "voice"). The IME should hide itself and launch settings at that destination.
+         */
+        fun onOpenSettings(settingsDestination: String) {}
         /** Optional IME subtype locale; used as a hint to the transcription model. */
         fun getLocaleHint(): Locale? = null
         /** Optional surrounding-text snapshot; used to decide whether to insert spaces. */
@@ -100,12 +110,12 @@ class VoiceInputManager(
         val prefs = context.prefs()
 
         if (!prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)) {
-            Toast.makeText(context, R.string.voice_error_not_enabled, Toast.LENGTH_SHORT).show()
+            callbacks.onOpenSettings(SETTINGS_VOICE)
             return
         }
 
         if (!SecretStore.isSecureStorageAvailable(context)) {
-            Toast.makeText(context, R.string.voice_error_secure_storage_unavailable, Toast.LENGTH_SHORT).show()
+            callbacks.onOpenSettings(SETTINGS_VOICE)
             return
         }
 
@@ -113,7 +123,7 @@ class VoiceInputManager(
         if (provider.isCloud) {
             val apiKey = SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
             if (apiKey.isBlank()) {
-                Toast.makeText(context, R.string.voice_error_no_api_key, Toast.LENGTH_SHORT).show()
+                callbacks.onOpenSettings(SETTINGS_VOICE)
                 return
             }
         }
@@ -131,13 +141,13 @@ class VoiceInputManager(
         if (provider == AiProvider.LOCAL && !helium314.keyboard.latin.voice.local.ModelStorage.isReady(
                 context, helium314.keyboard.latin.voice.local.SttModelInfo.ParakeetTdt06b
         )) {
-            Toast.makeText(context, R.string.voice_error_local_not_ready, Toast.LENGTH_LONG).show()
+            callbacks.onOpenSettings(SETTINGS_LOCAL_MODELS)
             return
         }
 
         if (currentUseDedicatedStt && provider != AiProvider.OPENROUTER) {
             currentUseDedicatedStt = false
-            Toast.makeText(context, R.string.voice_error_stt_openrouter_only, Toast.LENGTH_SHORT).show()
+            callbacks.onOpenSettings(SETTINGS_VOICE)
             return
         }
 
