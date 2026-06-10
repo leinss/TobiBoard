@@ -23,4 +23,21 @@ platform :android do
       skip_upload_screenshots: true  # no screenshots set up yet
     )
   end
+
+  desc "Upload the Main store listing only (title, descriptions, icon, feature graphic, screenshots) — no binary."
+  desc "Decoupled from the AAB; pass validate:true for a dry run. Reads from fastlane/metadata/android/."
+  lane :listing do |options|
+    # Shared account-level Play publisher key (covers TobiReader + TobiBoard).
+    key = ENV["PLAY_SERVICE_ACCOUNT_JSON"]
+    key = File.expand_path("~/.keys/leinss-play.json") if key.nil? || key.empty?
+    upload_to_play_store(
+      package_name: "xyz.leinss.TobiBoard",
+      json_key: key,
+      track: "internal",
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      skip_upload_changelogs: true,
+      validate_only: options[:validate] ? true : false,
+    )
+  end
 end
