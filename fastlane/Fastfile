@@ -16,7 +16,7 @@ platform :android do
       package_name: "xyz.leinss.TobiBoard",
       json_key: ENV["PLAY_SERVICE_ACCOUNT_JSON"],
       track: options[:track] || "internal",
-      release_status: "draft",      # uploads as a draft; review + roll out in the Play Console
+      release_status: "draft",      # uploads as draft; review + roll out in Play Console
       aab: aab,
       version_code: version_code,
       skip_upload_apk: true,
