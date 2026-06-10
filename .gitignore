@@ -40,3 +40,7 @@ docs/superpowers/
 # Claude config
 CLAUDE.md
 .env
+
+# fastlane generated
+fastlane/README.md
+fastlane/report.xml

@@ -480,6 +480,11 @@ publish-play: bundle-release ## Upload signed AAB + listing to Google Play (need
 	@test -n "$$PLAY_SERVICE_ACCOUNT_JSON" || { echo "Set PLAY_SERVICE_ACCOUNT_JSON=/path/to/play-service-account.json — see docs/PLAY_PUBLISHING.md"; exit 1; }
 	fastlane android play track:$(or $(TRACK),internal)
 
+.PHONY: store-listing
+store-listing: ## Upload Main store listing (title, descriptions, graphics, screenshots) to Google Play — no binary. VALIDATE=1 for dry run
+	@command -v fastlane >/dev/null || { echo "Install fastlane: brew install fastlane (or: gem install fastlane)"; exit 1; }
+	fastlane android listing validate:$(if $(VALIDATE),true,false)
+
 # ---- Self-hosted F-Droid repo (local test) ----
 .PHONY: fdroid-repo-local
 fdroid-repo-local: ## Build the self-hosted F-Droid index locally (needs fdroidserver + local fdroid/config.yml, keystore.p12, repo/*.apk)
