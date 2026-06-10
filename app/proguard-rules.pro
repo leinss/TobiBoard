@@ -17,3 +17,7 @@
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn javax.annotation.concurrent.**
 -dontwarn com.google.j2objc.annotations.**
+
+# MediaPipe LlmInference uses AutoValue annotations that are compile-only and absent at runtime.
+-dontwarn com.google.auto.value.AutoValue
+-dontwarn com.google.auto.value.AutoValue$Builder

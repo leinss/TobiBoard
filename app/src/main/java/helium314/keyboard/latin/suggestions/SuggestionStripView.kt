@@ -384,7 +384,14 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun showTextFixError(message: String) {
-        textFixOverlay?.showError(message)
+        val overlay = textFixOverlay ?: TextFixOverlayView(context).also {
+            it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+            captureToolbarStateForOverlay()
+            setToolbarVisibility(false)
+            setExternalSuggestionView(it, false)
+            textFixOverlay = it
+        }
+        overlay.showError(message)
     }
 
     fun hideTextFixOverlay() {

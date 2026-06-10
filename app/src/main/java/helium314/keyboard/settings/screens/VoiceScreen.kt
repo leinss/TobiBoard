@@ -45,8 +45,11 @@ import helium314.keyboard.latin.voice.supportsOpenRouterSttSlug
 import helium314.keyboard.latin.voice.supportsTextFixSlug
 import helium314.keyboard.latin.voice.supportsVoiceSlug
 import helium314.keyboard.latin.voice.UsageTracker
+import helium314.keyboard.latin.voice.local.ModelStorage
+import helium314.keyboard.latin.voice.local.SttModelInfo
 import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.Setting
+import helium314.keyboard.settings.SettingsDestination
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.dialogs.TextInputDialog
@@ -125,6 +128,7 @@ internal fun buildVoiceScreenItems(
     return listOf(
     Settings.PREF_VOICE_INPUT_ENABLED,
     if (voiceInputEnabled) Settings.PREF_AI_PROVIDER else null,
+    if (voiceInputEnabled && !cloud) Settings.PREF_VOICE_ACTION_LOCAL_MODEL else null,
     if (voiceInputEnabled && cloud) provider.apiKeyPrefKey() else null,
     if (voiceInputEnabled && provider == AiProvider.OPENROUTER) Settings.PREF_OPENROUTER_ZDR_ENABLED else null,
     if (voiceInputEnabled && cloud) Settings.PREF_VOICE_ACTION_TEST_KEY else null,
@@ -290,6 +294,9 @@ fun createVoiceSettings(context: Context) = listOf(
                 }
             }
         }
+    },
+    Setting(context, Settings.PREF_VOICE_ACTION_LOCAL_MODEL, R.string.voice_local_model) { setting ->
+        VoiceLocalModelPreference(setting)
     },
     Setting(context, Settings.PREF_OPENROUTER_ZDR_ENABLED, R.string.openrouter_zdr_enabled, R.string.openrouter_zdr_enabled_summary) {
         SwitchPreference(it, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
@@ -477,6 +484,20 @@ fun createVoiceSettings(context: Context) = listOf(
         SwitchPreference(it, Defaults.PREF_VOICE_OFFLINE_RETRY)
     },
 )
+
+@Composable
+private fun VoiceLocalModelPreference(setting: Setting) {
+    val ctx = LocalContext.current
+    val isReady = remember { ModelStorage.isReady(ctx, SttModelInfo.ParakeetTdt06b) }
+    Preference(
+        name = setting.title,
+        description = if (isReady)
+            stringResource(R.string.voice_local_model_ready)
+        else
+            stringResource(R.string.voice_local_model_not_downloaded),
+        onClick = { SettingsDestination.navigateTo(SettingsDestination.LocalModels) },
+    )
+}
 
 @Composable
 private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {

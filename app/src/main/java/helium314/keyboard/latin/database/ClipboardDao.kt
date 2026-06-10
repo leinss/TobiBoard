@@ -38,15 +38,22 @@ class ClipboardDao private constructor(private val db: Database) {
     private val cache = mutableListOf<ClipboardHistoryEntry>().apply {
         db.readableDatabase.query(
             TABLE,
-            arrayOf(COLUMN_ID, COLUMN_TIMESTAMP, COLUMN_PINNED, COLUMN_TEXT),
+            arrayOf(COLUMN_ID, COLUMN_TIMESTAMP, COLUMN_PINNED, COLUMN_TEXT, COLUMN_USE_COUNT, COLUMN_ANNOTATION),
             null,
             null,
             null,
             null,
-            "$COLUMN_PINNED, $COLUMN_TIMESTAMP DESC" // was only relevant in the initial approach of using a cursor instead of a cache
+            "$COLUMN_PINNED, $COLUMN_TIMESTAMP DESC"
         ).use {
             while (it.moveToNext()) {
-                add(ClipboardHistoryEntry(it.getLong(0), it.getLong(1), it.getInt(2) != 0, it.getString(3)))
+                add(ClipboardHistoryEntry(
+                    id = it.getLong(0),
+                    timeStamp = it.getLong(1),
+                    isPinned = it.getInt(2) != 0,
+                    text = it.getString(3),
+                    useCount = it.getInt(4),
+                    annotation = it.getString(5),
+                ))
             }
         }
         sort()
@@ -65,10 +72,12 @@ class ClipboardDao private constructor(private val db: Database) {
     }
 
     private fun insertNewEntry(timestamp: Long, pinned: Boolean, text: String) {
-        val cv = ContentValues(3)
+        val cv = ContentValues(5)
         cv.put(COLUMN_TIMESTAMP, timestamp)
         cv.put(COLUMN_PINNED, pinned)
         cv.put(COLUMN_TEXT, text)
+        cv.put(COLUMN_USE_COUNT, 0)
+        cv.putNull(COLUMN_ANNOTATION)
         val rowId = db.writableDatabase.insert(TABLE, null, cv)
 
         val entry = ClipboardHistoryEntry(rowId, timestamp, pinned, text)
@@ -113,6 +122,30 @@ class ClipboardDao private constructor(private val db: Database) {
         cv.put(COLUMN_PINNED, entry.isPinned)
         cv.put(COLUMN_TIMESTAMP, entry.timeStamp)
         db.writableDatabase.update(TABLE, cv, "$COLUMN_ID = ${entry.id}", null)
+    }
+
+    fun incrementUseCount(id: Long) {
+        val entry = cache.firstOrNull { it.id == id } ?: return
+        entry.useCount++
+        val cv = ContentValues(1)
+        cv.put(COLUMN_USE_COUNT, entry.useCount)
+        db.writableDatabase.update(TABLE, cv, "$COLUMN_ID = $id", null)
+    }
+
+    fun setAnnotation(id: Long, annotation: String?) {
+        val entry = cache.firstOrNull { it.id == id } ?: return
+        entry.annotation = annotation
+        val cv = ContentValues(1)
+        if (annotation == null) cv.putNull(COLUMN_ANNOTATION) else cv.put(COLUMN_ANNOTATION, annotation)
+        db.writableDatabase.update(TABLE, cv, "$COLUMN_ID = $id", null)
+    }
+
+    fun deleteById(id: Long) {
+        val entry = cache.firstOrNull { it.id == id } ?: return
+        val index = cache.indexOf(entry)
+        cache.remove(entry)
+        listener?.onClipsRemoved(index, 1)
+        db.writableDatabase.delete(TABLE, "$COLUMN_ID = $id", null)
     }
 
     // RecyclerView initiates this, so we don't call listener (or we'll get an IndexOutOfRangeException from RecyclerView)
@@ -173,12 +206,16 @@ class ClipboardDao private constructor(private val db: Database) {
         private const val COLUMN_TIMESTAMP = "TIMESTAMP"
         private const val COLUMN_PINNED = "PINNED"
         private const val COLUMN_TEXT = "TEXT" // we could enforce unique text, but that's only necessary if we can drop the cache (later)
+        private const val COLUMN_USE_COUNT = "USE_COUNT"
+        private const val COLUMN_ANNOTATION = "ANNOTATION"
         const val CREATE_TABLE = """
             CREATE TABLE $TABLE (
                 $COLUMN_ID INTEGER PRIMARY KEY,
                 $COLUMN_TIMESTAMP INTEGER NOT NULL,
                 $COLUMN_PINNED TINYINT NOT NULL,
-                $COLUMN_TEXT TEXT
+                $COLUMN_TEXT TEXT,
+                $COLUMN_USE_COUNT INTEGER NOT NULL DEFAULT 0,
+                $COLUMN_ANNOTATION TEXT
             )
         """
 
