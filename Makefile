@@ -4,7 +4,7 @@
 SHELL := /bin/bash
 GRADLE := ./gradlew
 
-PKG := helium314.keyboard.tobiboard
+PKG := xyz.leinss.TobiBoard
 PKG_DEBUG := $(PKG).debug
 IME_COMPONENT := $(PKG_DEBUG)/helium314.keyboard.latin.LatinIME
 IME_DEBUG := $(IME_COMPONENT)
@@ -382,6 +382,63 @@ bump-minor: ## Bump minor version (x.Y+1.0) + changelog stub
 .PHONY: bump-major
 bump-major: ## Bump major version (X+1.0.0) + changelog stub
 	python3 tools/bump_version.py major
+
+## --- one-time setup -------------------------------------------------------
+
+KEYSTORE_PATH := $(HOME)/.keystores/tobiboard-release.jks
+PLAY_SA_NAME  := tobiboard-play-publisher
+PLAY_SA_JSON  := $(HOME)/.config/play-service-accounts/tobiboard.json
+
+.PHONY: keystore-create
+keystore-create: ## (one-time) Create the release signing keystore at ~/.keystores/tobiboard-release.jks
+	@if [ -f "$(KEYSTORE_PATH)" ]; then \
+		echo "✓ Keystore already exists at $(KEYSTORE_PATH)"; exit 0; \
+	fi
+	@mkdir -p $(HOME)/.keystores
+	keytool -genkeypair \
+		-alias tobiboard \
+		-keyalg RSA \
+		-keysize 4096 \
+		-validity 10000 \
+		-keystore $(KEYSTORE_PATH) \
+		-storetype JKS
+	@echo ""
+	@echo "✓ Keystore created at $(KEYSTORE_PATH)"
+	@echo "Store the password in Keychain, then add to .envrc:"
+	@echo "  security add-generic-password -a own_projects -s tobiboard_keystore_password -w <password>"
+	@echo "  export KEYSTORE_FILE=$(KEYSTORE_PATH)"
+	@echo "  export KEY_ALIAS=tobiboard"
+	@echo "  kc_env KEYSTORE_PASSWORD \"own_projects\" \"tobiboard_keystore_password\""
+	@echo "  export KEY_PASSWORD=\"\$$KEYSTORE_PASSWORD\""
+
+.PHONY: play-api-setup
+play-api-setup: ## (one-time) Create the Google Play service account + download JSON key via gcloud
+	@command -v gcloud >/dev/null || { echo "Install gcloud: brew install --cask google-cloud-sdk && gcloud init"; exit 1; }
+	@if [ -z "$(PROJECT)" ]; then \
+		echo "Usage: make play-api-setup PROJECT=<your-gcloud-project-id>"; \
+		echo ""; \
+		echo "Find your project ID:"; \
+		echo "  1. Play Console → Setup → API access → linked Google Cloud project name"; \
+		echo "  2. cloud.google.com/console → copy the project ID (not name)"; \
+		exit 1; \
+	fi
+	@echo "→ Creating service account $(PLAY_SA_NAME) in project $(PROJECT)..."
+	gcloud iam service-accounts create $(PLAY_SA_NAME) \
+		--project "$(PROJECT)" \
+		--display-name "TobiBoard Play Publisher" 2>/dev/null || true
+	@echo "→ Downloading JSON key to $(PLAY_SA_JSON)..."
+	@mkdir -p $(HOME)/.config/play-service-accounts
+	gcloud iam service-accounts keys create $(PLAY_SA_JSON) \
+		--iam-account "$(PLAY_SA_NAME)@$(PROJECT).iam.gserviceaccount.com" \
+		--project "$(PROJECT)"
+	@echo ""
+	@echo "✓ Key saved to $(PLAY_SA_JSON)"
+	@echo ""
+	@echo "Manual step still required — grant Play Console access:"
+	@echo "  Play Console → Setup → API access → find '$(PLAY_SA_NAME)' → Grant access → Release Manager"
+	@echo ""
+	@echo "Then add to .envrc and run 'direnv allow':"
+	@echo "  export PLAY_SERVICE_ACCOUNT_JSON=$(PLAY_SA_JSON)"
 
 ## --- publishing -----------------------------------------------------------
 

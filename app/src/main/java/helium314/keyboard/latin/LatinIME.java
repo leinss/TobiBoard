@@ -179,6 +179,16 @@ public class LatinIME extends InputMethodService implements
     private final BroadcastReceiver mDictionaryDumpBroadcastReceiver =
             new DictionaryDumpBroadcastReceiver(this);
 
+    private final BroadcastReceiver mDebugTextFixReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.d(TAG, "mDebugTextFixReceiver: triggering startTextFix, state=" + (mTextFixManager != null ? mTextFixManager.getState() : "null"));
+            if (mTextFixManager != null && mTextFixManager.getState() == TextFixManager.State.IDLE) {
+                mTextFixManager.startTextFix(TextFixManager.Variant.PRIMARY);
+            }
+        }
+    };
+
     final static class RestartAfterDeviceUnlockReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -603,6 +613,12 @@ public class LatinIME extends InputMethodService implements
         filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
         registerReceiver(mRingerModeChangeReceiver, filter);
 
+        // Debug-only: broadcast receiver to trigger text fix from adb without keyboard UI.
+        if (BuildConfig.DEBUG) {
+            final IntentFilter debugFilter = new IntentFilter("helium314.keyboard.DEBUG_TEXT_FIX");
+            ContextCompat.registerReceiver(this, mDebugTextFixReceiver, debugFilter, ContextCompat.RECEIVER_EXPORTED);
+        }
+
         // Register to receive installation and removal of a dictionary pack.
         final IntentFilter packageFilter = new IntentFilter();
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -724,10 +740,17 @@ public class LatinIME extends InputMethodService implements
             public Integer getBlockedErrorResId() {
                 final SettingsValues settingsValues = mSettings.getCurrent();
                 if (settingsValues == null) {
+                    Log.d(TAG, "getBlockedErrorResId: settingsValues=null → unsupported_field");
                     return R.string.text_fix_error_unsupported_field;
                 }
                 final EditorInfo ei = getCurrentInputEditorInfo();
                 final int imeOptions = ei != null ? ei.imeOptions : 0;
+                Log.d(TAG, String.format("getBlockedErrorResId: inputType=0x%08X isPassword=%b noLearning=%b incognito=%b imeOptions=0x%08X",
+                        settingsValues.mInputAttributes.mInputType,
+                        settingsValues.mInputAttributes.mIsPasswordField,
+                        settingsValues.mInputAttributes.mNoLearning,
+                        settingsValues.mIncognitoModeEnabled,
+                        imeOptions));
                 return TextFixManager.getBlockedErrorResId(
                         settingsValues.mInputAttributes.mInputType,
                         settingsValues.mInputAttributes.mIsPasswordField,
@@ -1050,6 +1073,7 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onDestroy() {
+        if (BuildConfig.DEBUG) unregisterReceiver(mDebugTextFixReceiver);
         mVoiceInputManager.release();
         if (mTextFixManager != null) mTextFixManager.release();
         mClipboardHistoryManager.onDestroy();
@@ -1795,6 +1819,7 @@ public class LatinIME extends InputMethodService implements
             return;
         }
         if (KeyCode.TEXT_FIX == event.getKeyCode()) {
+            Log.d(TAG, "onEvent: TEXT_FIX received, mTextFixManager=" + mTextFixManager + " state=" + (mTextFixManager != null ? mTextFixManager.getState() : "null"));
             if (mTextFixManager != null && mTextFixManager.getState() == TextFixManager.State.IDLE) {
                 mTextFixManager.startTextFix(TextFixManager.Variant.PRIMARY);
             }
