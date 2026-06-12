@@ -1,0 +1,5 @@
+• Voice typing now works fully on-device — no API key or cloud setup required
+• Fixed: punctuation and capitalization corrections were sometimes discarded
+• Fixed: the Cancel button on model downloads
+• Cleaner AI text-fix output across languages
+• More accurate privacy documentation
