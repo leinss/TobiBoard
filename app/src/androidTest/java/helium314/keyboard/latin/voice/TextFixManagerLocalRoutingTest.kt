@@ -52,7 +52,7 @@ class TextFixManagerLocalRoutingTest {
 
         val callbacks = object : TextFixManager.Callbacks {
             override fun getBlockedErrorResId(): Int? = null
-            override fun getSelectedText(): CharSequence = INPUT
+            override fun getTextToFix(): CharSequence = INPUT
             override fun onWorking() {}
             override fun onFinished() {}
             override fun onResult(originalText: String, proposedText: String) {
