@@ -3,7 +3,7 @@ Everything runs on your device. Cloud is optional.
 TobiBoard is a fork of HeliBoard — the best privacy-respecting Android keyboard — with the three things it was missing: on-device voice-to-text, on-device text fix, and a proper clipboard manager. All run locally by default. No account. No API key required. Cloud providers are available if you want more powerful models, but you never need one.
 
 <b>On-device Voice-to-Text</b>
-Long-press Return, tap the mic, speak. Your words land as polished text. Uses an on-device Whisper model by default — audio never leaves your phone.
+Long-press Return, tap the mic, speak. Your words land as polished text. Uses an on-device NVIDIA Parakeet TDT 0.6B v3 model (multilingual) by default — audio never leaves your phone.
 <ul>
   <li>Works offline, no key needed</li>
   <li>Cloud models (OpenRouter, PayPerQ) available if you want them — bring your own key</li>
