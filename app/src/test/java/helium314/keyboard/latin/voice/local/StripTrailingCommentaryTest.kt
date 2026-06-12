@@ -59,44 +59,61 @@ class StripTrailingCommentaryTest {
         assertEquals("Hello world.", stripTrailingCommentary(raw))
     }
 
-    // --- Known gaps (pin current behavior before M1-3 makes the stripper language-agnostic) ---
+    // --- Language-agnostic cleanup (M1-3) ---
     //
-    // The default text-fix prompt preserves the input language (Defaults.PREF_TEXT_FIX_SYSTEM_PROMPT),
-    // so a 1B model fed German/Spanish/French input narrates its edits in that language. The current
-    // COMMENTARY_TRIGGERS list is English-only, so non-English commentary is NOT stripped today and
-    // leaks into the committed replacement. These fixtures capture real-shape outputs and assert the
-    // current (leaky) behavior; when M1-3 lands a structural/multi-language stripper, flip the
-    // expected value to the cleaned text and drop the "gap_" prefix.
+    // The default text-fix prompt preserves the input language, so a 1B model fed German/Spanish/
+    // French input narrates its edits in that language. Trigger-phrase backstops plus a structural
+    // rule (short, low-overlap trailing paragraph) now strip that commentary.
 
-    @Test fun gap_germanCommentaryNotStrippedToday() {
+    @Test fun stripsGermanCommentaryViaTrigger() {
         val raw = "Hallo Welt.\nIch habe die Tippfehler korrigiert und die Grammatik verbessert."
-        // TODO(M1-3): should become "Hallo Welt."
-        assertEquals(raw, stripTrailingCommentary(raw))
+        assertEquals("Hallo Welt.", stripTrailingCommentary(raw))
     }
 
-    @Test fun gap_spanishCommentaryNotStrippedToday() {
+    @Test fun stripsSpanishCommentaryViaTrigger() {
         val raw = "Hola mundo.\nHe corregido los errores y mejorado la gramática."
-        // TODO(M1-3): should become "Hola mundo."
-        assertEquals(raw, stripTrailingCommentary(raw))
+        assertEquals("Hola mundo.", stripTrailingCommentary(raw))
     }
 
-    @Test fun gap_frenchCommentaryNotStrippedToday() {
+    @Test fun stripsFrenchCommentaryViaTrigger() {
         val raw = "Bonjour le monde.\nVoici le texte corrigé : Bonjour le monde."
-        // TODO(M1-3): should become "Bonjour le monde."
-        assertEquals(raw, stripTrailingCommentary(raw))
+        assertEquals("Bonjour le monde.", stripTrailingCommentary(raw))
     }
 
-    @Test fun gap_chatTemplateMarkersNotStrippedToday() {
-        // Should the MediaPipe runtime ever surface chat-template tokens, they currently survive.
-        val raw = "Hello world.<end_of_turn>"
-        // TODO(M1-3): should become "Hello world."
-        assertEquals(raw, stripTrailingCommentary(raw))
+    @Test fun stripsChatTemplateMarkers() {
+        assertEquals("Hello world.", stripTrailingCommentary("Hello world.<end_of_turn>"))
+        assertEquals("Hello world.", stripTrailingCommentary("<start_of_turn>Hello world.<end_of_turn>"))
+        assertEquals("Hello world.", stripTrailingCommentary("Hello world.<|im_end|>"))
     }
 
-    @Test fun gap_inputEchoNotDetectedToday() {
-        // Strict-envelope failure shape: model echoes the prompt+input instead of just the fix.
-        val raw = "Fix this text:\nHello world."
-        // TODO(M1-3): structural input-echo detection should return just "Hello world."
-        assertEquals(raw, stripTrailingCommentary(raw))
+    @Test fun detectsExactInputEcho() {
+        // Model echoed the input verbatim (over-cautious "fix") — return the input unchanged.
+        val input = "Hello world."
+        assertEquals(input, stripTrailingCommentary("Hello world.", input))
+    }
+
+    @Test fun detectsInputEchoAfterPromptLine() {
+        // Strict-envelope failure shape: a prompt-echo line, then the input as the actual reply.
+        val input = "Hello world."
+        val raw = "Fix this text:\n\nHello world."
+        assertEquals("Hello world.", stripTrailingCommentary(raw, input))
+    }
+
+    @Test fun structuralRuleDropsShortLowOverlapTrailingParagraph() {
+        // Non-English commentary with no trigger phrase, caught structurally.
+        val input = "ein langer deutscher Satz der korrigiert werden soll mit vielen Wörtern hier drin"
+        val raw = "Ein langer deutscher Satz der korrigiert werden soll mit vielen Wörtern hier drin.\n\n" +
+            "Fertig erledigt."
+        assertEquals(
+            "Ein langer deutscher Satz der korrigiert werden soll mit vielen Wörtern hier drin.",
+            stripTrailingCommentary(raw, input),
+        )
+    }
+
+    @Test fun structuralRuleKeepsLegitimateMultiParagraphResult() {
+        // Two real paragraphs whose second is long and overlaps the input heavily must survive.
+        val input = "frist paragraph abuot cats\n\nsecnd paragraph abuot cats and dogs togethr now"
+        val raw = "First paragraph about cats.\n\nSecond paragraph about cats and dogs together now."
+        assertEquals(raw, stripTrailingCommentary(raw, input))
     }
 }
