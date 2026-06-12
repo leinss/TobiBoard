@@ -182,7 +182,16 @@ dependencies {
 
     // on-device STT — sherpa-onnx AAR is fetched by `make fetch-native-libs`,
     // gitignored (~54 MB). See docs/EMULATOR.md.
-    implementation(files("libs/sherpa-onnx-1.13.2.aar"))
+    val sherpaOnnxAar = project.file("libs/sherpa-onnx-1.13.2.aar")
+    if (!sherpaOnnxAar.exists()) {
+        logger.warn(
+            "\n[TobiBoard] Native library missing: ${sherpaOnnxAar.relativeTo(rootProject.projectDir)}\n" +
+            "            This AAR is not vendored in the repo. Fetch it before building:\n" +
+            "                make fetch-native-libs\n" +
+            "            (or run `make build-fast`, which fetches it automatically).\n"
+        )
+    }
+    implementation(files(sherpaOnnxAar))
 
     // on-device text-fix — MediaPipe LLM Inference loads Gemma .task bundles
     implementation("com.google.mediapipe:tasks-genai:0.10.35")

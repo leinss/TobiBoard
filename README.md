@@ -97,8 +97,11 @@ Typing, glide, autocorrect, and dictionaries are **fully on-device**, exactly li
 ```bash
 git clone https://github.com/leinss/TobiBoard.git
 cd TobiBoard
+make fetch-native-libs   # downloads the sherpa-onnx AAR into app/libs/ (not vendored)
 ./gradlew assembleDebug
 ```
+
+The `sherpa-onnx` AAR is not committed to the repo; `make fetch-native-libs` downloads it (~54 MB) from the upstream sherpa-onnx GitHub release before the Gradle build can resolve it. `make build-fast` runs this step automatically.
 
 Needs JDK 17, Android SDK 35, NDK `28.0.13004108`. APK lands in `app/build/outputs/apk/debug/`.
 
