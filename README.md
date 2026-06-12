@@ -20,9 +20,9 @@ Along the way: fixed the caps-lock-gets-stuck bug, fixed the keyboard-stops-typi
 
 **Runs on your device. No account. No key. No audio leaves your phone.**
 
-Long-press Return, tap the mic, speak. Your words land as polished text. Uses an on-device Whisper model by default — nothing is sent anywhere. If you want a more powerful cloud model, switch to OpenRouter or PayPerQ and bring your own key.
+Long-press Return, tap the mic, speak. Your words land as polished text. Uses an on-device NVIDIA Parakeet TDT 0.6B v3 model (multilingual: English, German, Spanish, French) by default — nothing is sent anywhere. If you want a more powerful cloud model, switch to OpenRouter or PayPerQ and bring your own key.
 
-- **On-device by default** — Whisper runs locally, audio never leaves your phone
+- **On-device by default** — Parakeet runs locally, audio never leaves your phone
 - Cloud providers (OpenRouter, PayPerQ) available for larger models — your choice
 - Add a custom prompt or vocabulary so it nails names and jargon
 
@@ -45,7 +45,7 @@ Select rough text, long-press Return, hit Fix. It comes back clean in the same l
 
 **Stays on your device. Always.**
 
-Long-press the clipboard icon to browse everything you've copied. Every entry shows when it was copied and how many times you've pasted it. Long-press any entry to pin it to the top or delete it. Clipboard data is stored locally in an encrypted database and is never uploaded or backed up to the cloud.
+Long-press the clipboard icon to browse everything you've copied. Every entry shows when it was copied and how many times you've pasted it. Long-press any entry to pin it to the top or delete it. Clipboard data is stored only on your device, in the app's private storage, and is excluded from all backups — it is never uploaded or backed up to the cloud.
 
 - Search, label, and manage entries from **Settings → Preferences → Manage clipboard history**
 - Pin entries that you paste often so they're always at the top
@@ -97,8 +97,11 @@ Typing, glide, autocorrect, and dictionaries are **fully on-device**, exactly li
 ```bash
 git clone https://github.com/leinss/TobiBoard.git
 cd TobiBoard
+make fetch-native-libs   # downloads the sherpa-onnx AAR into app/libs/ (not vendored)
 ./gradlew assembleDebug
 ```
+
+The `sherpa-onnx` AAR is not committed to the repo; `make fetch-native-libs` downloads it (~54 MB) from the upstream sherpa-onnx GitHub release before the Gradle build can resolve it. `make build-fast` runs this step automatically.
 
 Needs JDK 17, Android SDK 35, NDK `28.0.13004108`. APK lands in `app/build/outputs/apk/debug/`.
 

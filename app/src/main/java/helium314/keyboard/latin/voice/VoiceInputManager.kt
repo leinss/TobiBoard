@@ -114,13 +114,13 @@ class VoiceInputManager(
             return
         }
 
-        if (!SecretStore.isSecureStorageAvailable(context)) {
-            callbacks.onOpenSettings(SETTINGS_VOICE)
-            return
-        }
-
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
         if (provider.isCloud) {
+            // SecretStore is only needed for cloud API keys; LOCAL voice input never touches it.
+            if (!SecretStore.isSecureStorageAvailable(context)) {
+                callbacks.onOpenSettings(SETTINGS_VOICE)
+                return
+            }
             val apiKey = SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
             if (apiKey.isBlank()) {
                 callbacks.onOpenSettings(SETTINGS_VOICE)
