@@ -79,14 +79,14 @@ internal class ModelDownloadService : Service() {
             return
         }
 
-        promoteToForeground(model.displayName, percent = 0)
+        promoteToForeground(modelId, model.displayName, percent = 0)
 
         val job = scope.launch {
             try {
                 val targetDir = ModelStorage.dirFor(applicationContext, model)
                 downloader.download(targetDir, model, authToken) { state ->
                     ModelDownloadRepository.update(modelId, state)
-                    updateNotification(model.displayName, state)
+                    updateNotification(modelId, model.displayName, state)
                 }
             } catch (e: Exception) {
                 ModelDownloadRepository.update(modelId, DownloadState.Cancelled)
@@ -104,8 +104,8 @@ internal class ModelDownloadService : Service() {
         if (jobs.isEmpty()) stopForegroundAndService()
     }
 
-    private fun promoteToForeground(displayName: String, percent: Int) {
-        val notification = buildNotification(displayName, percent, indeterminate = true)
+    private fun promoteToForeground(modelId: String, displayName: String, percent: Int) {
+        val notification = buildNotification(modelId, displayName, percent, indeterminate = true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -117,24 +117,25 @@ internal class ModelDownloadService : Service() {
         }
     }
 
-    private fun updateNotification(displayName: String, state: DownloadState) {
+    private fun updateNotification(modelId: String, displayName: String, state: DownloadState) {
         val notification = when (state) {
             is DownloadState.Downloading -> {
                 val pct = if (state.bytesTotal > 0)
                     ((state.bytesDownloaded * 100) / state.bytesTotal).toInt().coerceIn(0, 100)
                 else 0
                 buildNotification(
+                    modelId = modelId,
                     title = displayName,
                     percent = pct,
                     indeterminate = state.bytesTotal <= 0,
                     bodyOverride = "${state.currentFile} · ${pct}%",
                 )
             }
-            is DownloadState.Verifying -> buildNotification(displayName, 100, indeterminate = true, bodyOverride = getString(R.string.local_model_verifying))
+            is DownloadState.Verifying -> buildNotification(modelId, displayName, 100, indeterminate = true, bodyOverride = getString(R.string.local_model_verifying))
             DownloadState.Ready -> null
             DownloadState.Cancelled -> null
             is DownloadState.Failed -> null
-            else -> buildNotification(displayName, 0, indeterminate = true)
+            else -> buildNotification(modelId, displayName, 0, indeterminate = true)
         }
         if (notification != null) {
             NotificationManagerCompat(this).notify(NOTIFICATION_ID, notification)
@@ -142,14 +143,18 @@ internal class ModelDownloadService : Service() {
     }
 
     private fun buildNotification(
+        modelId: String,
         title: String,
         percent: Int,
         indeterminate: Boolean,
         bodyOverride: String? = null,
     ): Notification {
-        val cancelIntent = Intent(this, ModelDownloadService::class.java).apply { action = ACTION_CANCEL }
+        val cancelIntent = Intent(this, ModelDownloadService::class.java).apply {
+            action = ACTION_CANCEL
+            putExtra(EXTRA_MODEL_ID, modelId)
+        }
         val cancelPi = PendingIntent.getService(
-            this, title.hashCode(), cancelIntent,
+            this, modelId.hashCode(), cancelIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
