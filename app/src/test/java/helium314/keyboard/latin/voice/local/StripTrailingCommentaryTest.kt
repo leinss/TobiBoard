@@ -92,11 +92,31 @@ class StripTrailingCommentaryTest {
         assertEquals(input, stripTrailingCommentary("Hello world.", input))
     }
 
+    @Test fun echoWithPunctuationAndCasingCorrectionSurvives() {
+        // TB1: punctuation/casing-only correction must NOT be discarded as echo.
+        // input "hello world" normalizes to "hello world"; model "Hello world." also normalizes
+        // to "hello world" — they are equal token-wise, so echo-detection fires. The fix is to
+        // return markerStripped.trim() (the model's corrected form), not input.trim().
+        val input = "hello world"
+        val result = stripTrailingCommentary("Hello world.", input)
+        assertEquals("Hello world.", result)
+    }
+
     @Test fun detectsInputEchoAfterPromptLine() {
         // Strict-envelope failure shape: a prompt-echo line, then the input as the actual reply.
         val input = "Hello world."
         val raw = "Fix this text:\n\nHello world."
         assertEquals("Hello world.", stripTrailingCommentary(raw, input))
+    }
+
+    @Test fun fallbackUsesMarkerStrippedNotRawWhenFirstLineIsTriggerWithLeadingMarker() {
+        // TB12: <end_of_turn> marker followed immediately by a trigger-first-line.
+        // After marker stripping: "Here's the corrected text: Hello world." (trigger on line 0).
+        // Kept list is all-blank → fallback. Must return markerStripped, not raw (which would
+        // still contain "<end_of_turn>").
+        val raw = "<end_of_turn>Here's the corrected text: Hello world."
+        val result = stripTrailingCommentary(raw)
+        assertEquals("Here's the corrected text: Hello world.", result)
     }
 
     @Test fun structuralRuleDropsShortLowOverlapTrailingParagraph() {

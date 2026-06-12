@@ -53,6 +53,7 @@ internal class ModelDownloadService : Service() {
             ACTION_CANCEL -> {
                 val modelId = intent.getStringExtra(EXTRA_MODEL_ID)
                 if (modelId != null) cancelDownload(modelId)
+                else Log.w(TAG, "ACTION_CANCEL received without $EXTRA_MODEL_ID — stale PendingIntent?")
             }
         }
         return START_NOT_STICKY

@@ -179,7 +179,7 @@ internal fun stripTrailingCommentary(raw: String, input: String = ""): String {
     if (input.isNotBlank()) {
         val normInput = normalizeForEcho(input)
         if (normInput.isNotEmpty()) {
-            if (normalizeForEcho(markerStripped) == normInput) return input.trim()
+            if (normalizeForEcho(markerStripped) == normInput) return markerStripped.trim()
             val paras = markerStripped.split(Regex("\\n\\s*\\n")).map { it.trim() }.filter { it.isNotEmpty() }
             if (paras.size >= 2 && normalizeForEcho(paras.drop(1).joinToString("\n")) == normInput) {
                 return paras.drop(1).joinToString("\n").trim()
@@ -226,7 +226,11 @@ private fun dropTrailingCommentaryParagraph(body: String, input: String): String
     val tailTokens = tokenize(tail)
     if (tailTokens.isEmpty()) return body
     val overlap = tailTokens.count { it in inputTokens }.toDouble() / tailTokens.size
-    return if (overlap < 0.3) head else body
+    if (overlap < 0.3) {
+        Log.w("LocalLiteRtEngine", "dropTrailingCommentaryParagraph: dropped trailing paragraph (tailLen=$tailLen headLen=$headLen overlap=${"%.2f".format(overlap)})")
+        return head
+    }
+    return body
 }
 
 private object SharedLlm {
