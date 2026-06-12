@@ -19,9 +19,10 @@ IssueTracker: https://github.com/leinss/TobiBoard/issues
 Changelog: https://github.com/leinss/TobiBoard/releases
 
 # Core typing (glide, autocorrect, suggestions, dictionaries) is fully on-device.
-# The optional Voice-to-Text and Text Fix features call a user-chosen cloud
-# provider (OpenRouter / PayPerQ) with the user's own API key, and are disabled
-# until a key is entered.
+# The optional Voice-to-Text and Text Fix features support an on-device LOCAL
+# provider (Gemma 3 1B INT4 via MediaPipe) with no key required, as well as
+# user-chosen cloud providers (OpenRouter / PayPerQ) with the user's own API key.
+# Both features are off by default; the LOCAL provider never contacts any server.
 AntiFeatures:
   NonFreeNet:
     en-US: The optional AI voice-to-text and text-fix features send audio or selected text to a user-chosen cloud provider (OpenRouter or PayPerQ) using the user's own API key. Both features are off by default; all core keyboard functions work fully offline.
