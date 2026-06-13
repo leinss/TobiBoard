@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.latin.voice.local
 
+import android.os.Build
 import helium314.keyboard.latin.utils.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -94,7 +95,12 @@ internal class ModelDownloader(
 
         val (connection, partial) = openConnection(file.url, resumeFrom, authToken)
         try {
-            val streamLength = connection.contentLengthLong.takeIf { it >= 0 } ?: -1L
+            // getContentLengthLong requires API 24; fall back to the int variant on older devices.
+            val rawLength = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+                connection.contentLengthLong
+            else
+                connection.contentLength.toLong()
+            val streamLength = rawLength.takeIf { it >= 0 } ?: -1L
             val totalBytes = if (streamLength >= 0) {
                 if (partial) resumeFrom + streamLength else streamLength
             } else {
