@@ -66,6 +66,9 @@ jobs:
             exit 1
           }
 
+      - name: Fetch native libs (sherpa-onnx AAR)
+        run: make fetch-native-libs
+
       - name: Build signed release APK
         shell: bash
         env:
