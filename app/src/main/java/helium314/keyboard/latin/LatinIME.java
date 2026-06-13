@@ -87,6 +87,7 @@ import helium314.keyboard.latin.utils.SubtypeSettings;
 import helium314.keyboard.latin.utils.SubtypeState;
 import helium314.keyboard.latin.utils.ToolbarMode;
 import helium314.keyboard.latin.voice.TextFixManager;
+import helium314.keyboard.latin.voice.TextReplaceGuard;
 import helium314.keyboard.latin.voice.VoiceInputManager;
 import helium314.keyboard.settings.SettingsActivity2;
 import kotlin.Unit;
@@ -872,7 +873,7 @@ public class LatinIME extends InputMethodService implements
             Toast.makeText(this, R.string.text_fix_error_selection_changed, Toast.LENGTH_LONG).show();
             return;
         }
-        if (current == null || !original.contentEquals(current)) {
+        if (!TextReplaceGuard.liveTextStillMatches(original, current)) {
             Toast.makeText(this, R.string.text_fix_error_selection_changed, Toast.LENGTH_LONG).show();
             return;
         }
@@ -935,7 +936,7 @@ public class LatinIME extends InputMethodService implements
             Toast.makeText(this, R.string.voice_undo_nothing, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (before == null || !inserted.contentEquals(before)) {
+        if (!TextReplaceGuard.liveTextStillMatches(inserted, before)) {
             Toast.makeText(this, R.string.voice_undo_nothing, Toast.LENGTH_SHORT).show();
             return;
         }
