@@ -196,7 +196,13 @@ internal class ModelDownloadService : Service() {
                 action = ACTION_START
                 putExtra(EXTRA_MODEL_ID, modelId)
             }
-            context.startForegroundService(intent)
+            // startForegroundService requires API 26; on older devices a plain startService
+            // followed by the service's own startForeground (see promoteToForeground) is correct.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
 
         fun cancel(context: Context, modelId: String) {
@@ -228,7 +234,8 @@ internal class ModelDownloadService : Service() {
  */
 private class NotificationManagerCompat(private val context: Context) {
     fun notify(id: Int, notification: Notification) {
-        val mgr = context.getSystemService(NotificationManager::class.java) ?: return
+        // String overload is API 1; the Class<T> overload requires API 23 (minSdk is 21).
+        val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         mgr.notify(id, notification)
     }
 }

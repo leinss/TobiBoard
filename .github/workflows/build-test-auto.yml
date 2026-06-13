@@ -53,6 +53,9 @@ jobs:
             "build-tools;35.0.0" \
             "ndk;28.0.13004108"
 
+      - name: Fetch native libs (sherpa-onnx AAR)
+        run: make fetch-native-libs
+
       - name: Build with Gradle
         run: ./gradlew --no-daemon lintDebug testDebugUnitTest
 
