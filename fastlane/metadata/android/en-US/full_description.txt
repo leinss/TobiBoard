@@ -19,7 +19,7 @@ Select rough text, long-press Return, hit Fix. Back as clean text in the same la
 </ul>
 
 <b>Clipboard history — stays on your device</b>
-Long-press the clipboard icon to browse everything you've copied. See when it was copied and how often you paste it.
+Long-press the clipboard icon to browse everything you've copied. See when it was copied and how often you paste it. Copied text is encrypted at rest with a hardware-backed key (Android 6+).
 <ul>
   <li>Pin entries you paste often so they're always at the top</li>
   <li>Add labels to find things later</li>

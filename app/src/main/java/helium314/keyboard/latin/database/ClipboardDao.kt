@@ -3,6 +3,7 @@ package helium314.keyboard.latin.database
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.os.SystemClock
 import helium314.keyboard.latin.ClipboardHistoryEntry
 import helium314.keyboard.latin.settings.Settings
@@ -34,11 +35,15 @@ class ClipboardDao private constructor(private val db: Database) {
     // we clean up old clips when a new clip is added, but not too frequently
     private var lastClearOldClips = 0L
 
+    // Whether new clips are written encrypted. Fixed for the DAO's lifetime; reads honor each row's
+    // own ENCRYPTED flag so plaintext (legacy / API < 23) and encrypted rows can coexist.
+    private val encrypting = ClipboardCipher.isAvailable()
+
     // cache is loaded at start and never dropped
     private val cache = mutableListOf<ClipboardHistoryEntry>().apply {
         db.readableDatabase.query(
             TABLE,
-            arrayOf(COLUMN_ID, COLUMN_TIMESTAMP, COLUMN_PINNED, COLUMN_TEXT, COLUMN_USE_COUNT, COLUMN_ANNOTATION),
+            arrayOf(COLUMN_ID, COLUMN_TIMESTAMP, COLUMN_PINNED, COLUMN_TEXT, COLUMN_USE_COUNT, COLUMN_ANNOTATION, COLUMN_ENCRYPTED),
             null,
             null,
             null,
@@ -46,13 +51,22 @@ class ClipboardDao private constructor(private val db: Database) {
             "$COLUMN_PINNED, $COLUMN_TIMESTAMP DESC"
         ).use {
             while (it.moveToNext()) {
+                val isEncrypted = it.getInt(6) != 0
+                // A row flagged encrypted whose content won't decrypt (key lost / corrupt) is dropped
+                // rather than surfaced as ciphertext.
+                val text = if (isEncrypted)
+                    (it.getString(3)?.let { stored -> ClipboardCipher.decrypt(stored) } ?: continue)
+                else it.getString(3)
+                val storedAnnotation = it.getString(5)
+                val annotation = if (isEncrypted && storedAnnotation != null)
+                    ClipboardCipher.decrypt(storedAnnotation) else storedAnnotation
                 add(ClipboardHistoryEntry(
                     id = it.getLong(0),
                     timeStamp = it.getLong(1),
                     isPinned = it.getInt(2) != 0,
-                    text = it.getString(3),
+                    text = text,
                     useCount = it.getInt(4),
-                    annotation = it.getString(5),
+                    annotation = annotation,
                 ))
             }
         }
@@ -72,10 +86,14 @@ class ClipboardDao private constructor(private val db: Database) {
     }
 
     private fun insertNewEntry(timestamp: Long, pinned: Boolean, text: String) {
-        val cv = ContentValues(5)
+        val cv = ContentValues(6)
         cv.put(COLUMN_TIMESTAMP, timestamp)
         cv.put(COLUMN_PINNED, pinned)
-        cv.put(COLUMN_TEXT, text)
+        // Encrypt the clip content at rest when possible; fall back to plaintext (flag 0) so a
+        // transient keystore failure never drops the clip.
+        val encrypted = if (encrypting) ClipboardCipher.encrypt(text) else null
+        cv.put(COLUMN_TEXT, encrypted ?: text)
+        cv.put(COLUMN_ENCRYPTED, if (encrypted != null) 1 else 0)
         cv.put(COLUMN_USE_COUNT, 0)
         cv.putNull(COLUMN_ANNOTATION)
         val rowId = db.writableDatabase.insert(TABLE, null, cv)
@@ -136,9 +154,21 @@ class ClipboardDao private constructor(private val db: Database) {
         val entry = cache.firstOrNull { it.id == id } ?: return
         entry.annotation = annotation
         val cv = ContentValues(1)
-        if (annotation == null) cv.putNull(COLUMN_ANNOTATION) else cv.put(COLUMN_ANNOTATION, annotation)
+        if (annotation == null) {
+            cv.putNull(COLUMN_ANNOTATION)
+        } else {
+            // Match the row's at-rest format: an encrypted row keeps its annotation encrypted too,
+            // so the cache-load decrypt path reads it back correctly.
+            val stored = if (isRowEncrypted(id)) ClipboardCipher.encrypt(annotation) else null
+            cv.put(COLUMN_ANNOTATION, stored ?: annotation)
+        }
         db.writableDatabase.update(TABLE, cv, "$COLUMN_ID = $id", null)
     }
+
+    private fun isRowEncrypted(id: Long): Boolean =
+        db.readableDatabase.query(TABLE, arrayOf(COLUMN_ENCRYPTED), "$COLUMN_ID = $id", null, null, null, null).use {
+            it.moveToFirst() && it.getInt(0) != 0
+        }
 
     fun deleteById(id: Long) {
         val entry = cache.firstOrNull { it.id == id } ?: return
@@ -208,6 +238,8 @@ class ClipboardDao private constructor(private val db: Database) {
         private const val COLUMN_TEXT = "TEXT" // we could enforce unique text, but that's only necessary if we can drop the cache (later)
         private const val COLUMN_USE_COUNT = "USE_COUNT"
         private const val COLUMN_ANNOTATION = "ANNOTATION"
+        // 1 when COLUMN_TEXT / COLUMN_ANNOTATION hold AES-GCM ciphertext (see ClipboardCipher), else 0.
+        private const val COLUMN_ENCRYPTED = "ENCRYPTED"
         const val CREATE_TABLE = """
             CREATE TABLE $TABLE (
                 $COLUMN_ID INTEGER PRIMARY KEY,
@@ -215,9 +247,36 @@ class ClipboardDao private constructor(private val db: Database) {
                 $COLUMN_PINNED TINYINT NOT NULL,
                 $COLUMN_TEXT TEXT,
                 $COLUMN_USE_COUNT INTEGER NOT NULL DEFAULT 0,
-                $COLUMN_ANNOTATION TEXT
+                $COLUMN_ANNOTATION TEXT,
+                $COLUMN_ENCRYPTED INTEGER NOT NULL DEFAULT 0
             )
         """
+
+        /**
+         * v3 → v4 migration: encrypt existing plaintext clip rows in place. No-op when the keystore
+         * is unavailable (rows stay plaintext, flag 0). Runs once from [Database.onUpgrade], which
+         * already wraps it in a transaction.
+         */
+        fun encryptExistingRows(db: SQLiteDatabase) {
+            if (!ClipboardCipher.isAvailable()) return
+            db.query(TABLE, arrayOf(COLUMN_ID, COLUMN_TEXT, COLUMN_ANNOTATION), "$COLUMN_ENCRYPTED = 0", null, null, null, null).use { c ->
+                while (c.moveToNext()) {
+                    val id = c.getLong(0)
+                    val plainText = c.getString(1)
+                    val plainAnnotation = c.getString(2)
+                    val encText = plainText?.let { ClipboardCipher.encrypt(it) }
+                    val encAnnotation = plainAnnotation?.let { ClipboardCipher.encrypt(it) }
+                    // Skip a row if a present field failed to encrypt — never flag a row encrypted
+                    // while leaving plaintext in it.
+                    if ((plainText != null && encText == null) || (plainAnnotation != null && encAnnotation == null)) continue
+                    val cv = ContentValues()
+                    if (encText != null) cv.put(COLUMN_TEXT, encText)
+                    if (encAnnotation != null) cv.put(COLUMN_ANNOTATION, encAnnotation)
+                    cv.put(COLUMN_ENCRYPTED, 1)
+                    db.update(TABLE, cv, "$COLUMN_ID = ?", arrayOf(id.toString()))
+                }
+            }
+        }
 
         private var instance: ClipboardDao? = null
 
