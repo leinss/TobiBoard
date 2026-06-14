@@ -1277,6 +1277,7 @@ New dictionary:
     <string name="local_model_state_ready">Ready</string>
     <string name="local_model_state_cancelled">Cancelled</string>
     <string name="local_model_state_failed">Failed: <xliff:g id="reason">%1$s</xliff:g></string>
+    <string name="local_model_download_error_generic">Unexpected download error</string>
     <string name="local_model_license_title">Accept license for <xliff:g id="model">%1$s</xliff:g>?</string>
     <string name="local_model_license_accept">Accept &amp; download</string>
     <string name="local_model_auth_required">Hugging Face access token required. Open On-device models settings to add yours.</string>
