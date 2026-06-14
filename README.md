@@ -45,7 +45,7 @@ Select rough text, long-press Return, hit Fix. It comes back clean in the same l
 
 **Stays on your device. Always.**
 
-Long-press the clipboard icon to browse everything you've copied. Every entry shows when it was copied and how many times you've pasted it. Long-press any entry to pin it to the top or delete it. Clipboard data is stored only on your device, in the app's private storage, and is excluded from all backups — it is never uploaded or backed up to the cloud.
+Long-press the clipboard icon to browse everything you've copied. Every entry shows when it was copied and how many times you've pasted it. Long-press any entry to pin it to the top or delete it. Clipboard data is stored only on your device, in the app's private storage, and is excluded from all backups — it is never uploaded or backed up to the cloud. The copied text and your labels are encrypted at rest with AES-256-GCM using an Android Keystore key (on Android 6+).
 
 - Search, label, and manage entries from **Settings → Preferences → Manage clipboard history**
 - Pin entries that you paste often so they're always at the top
