@@ -89,6 +89,7 @@ import helium314.keyboard.latin.utils.ToolbarMode;
 import helium314.keyboard.latin.voice.TextFixManager;
 import helium314.keyboard.latin.voice.TextReplaceGuard;
 import helium314.keyboard.latin.voice.VoiceInputManager;
+import helium314.keyboard.latin.voice.local.LocalLiteRtEngine;
 import helium314.keyboard.settings.SettingsActivity2;
 import kotlin.Unit;
 
@@ -2278,6 +2279,9 @@ public class LatinIME extends InputMethodService implements
             }
             // deallocateMemory always called on hiding, and should not be called when showing
         }
+        // Free the on-device text-fix LLM (~1 GB native) under real memory pressure so the IME
+        // process is not killed for holding it; it reloads lazily on the next fix.
+        LocalLiteRtEngine.onTrimMemory(level);
     }
 
     public boolean isVoiceRecording() {
