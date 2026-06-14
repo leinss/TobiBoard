@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.annotation.StringRes
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.settings.Defaults
+import helium314.keyboard.latin.voice.local.LocalModelLoadException
 import java.text.BreakIterator
 import java.util.Locale
 
@@ -74,11 +75,13 @@ private val SENSITIVE_USER_FACING_PATTERNS: List<Pair<Regex, String>> = listOf(
 )
 
 /**
- * Resolves a user-facing error message from a transcription/text-fix exception. If the throwable
- * is one of our own [OpenRouterException]s we surface its message after scrubbing tokens; for
- * everything else we fall back to [fallbackResId] so unrelated stack traces never leak.
+ * Resolves a user-facing error message from a transcription/text-fix exception. A
+ * [LocalModelLoadException] maps to the re-download hint; an [OpenRouterException] surfaces its
+ * message after scrubbing tokens; everything else falls back to [fallbackResId] so unrelated
+ * stack traces never leak.
  */
 internal fun safeUserFacingError(context: Context, e: Throwable, @StringRes fallbackResId: Int): String {
+    if (e is LocalModelLoadException) return context.getString(R.string.text_fix_error_local_load_failed)
     if (e is OpenRouterException) {
         if (e.statusCode == 429 || e.statusCode == 503) return context.getString(R.string.voice_error_rate_limited)
         val raw = e.message?.takeIf { it.isNotBlank() }
