@@ -910,7 +910,9 @@ public class LatinIME extends InputMethodService implements
         if (inserted == null || inserted.isEmpty()) return;
         mUndoInserted = inserted;
         mUndoRestore = restore != null ? restore : "";
-        if (mSuggestionStripView != null) mSuggestionStripView.showUndoBar(label, this::performUndo);
+        // `inserted` is the AI output (voice transcript or text-fix result); pass it so the undo
+        // bar can offer a "Report" action per Google Play's Generative AI policy.
+        if (mSuggestionStripView != null) mSuggestionStripView.showUndoBar(label, this::performUndo, inserted);
         if (mUndoHideRunnable != null) mTextFixOverlayHandler.removeCallbacks(mUndoHideRunnable);
         final Runnable hide = new Runnable() {
             @Override

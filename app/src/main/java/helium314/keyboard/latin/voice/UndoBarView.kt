@@ -19,8 +19,11 @@ import helium314.keyboard.latin.R
 class UndoBarView(context: Context) : LinearLayout(context) {
 
     private val label: TextView
+    private val reportButton: TextView
     private val undoButton: TextView
     var onUndoClick: (() -> Unit)? = null
+    /** Report this AI output as objectionable (Google Play Generative AI policy). */
+    var onReportClick: (() -> Unit)? = null
     private var lastClickMs = 0L
 
     init {
@@ -34,6 +37,20 @@ class UndoBarView(context: Context) : LinearLayout(context) {
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(12) }
+        }
+        // Recessive text-only action (no fill) so the primary Undo pill stays dominant.
+        reportButton = TextView(context).apply {
+            text = context.getString(R.string.report_ai_output)
+            contentDescription = context.getString(R.string.report_ai_output_a11y)
+            textSize = 12f
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            gravity = Gravity.CENTER
+            isClickable = true
+            isFocusable = true
+            isAllCaps = false
+            minHeight = dp(36)
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(4) }
+            setOnClickListener { debounceClick { onReportClick?.invoke() } }
         }
         undoButton = TextView(context).apply {
             text = context.getString(R.string.voice_undo)
@@ -54,6 +71,7 @@ class UndoBarView(context: Context) : LinearLayout(context) {
         }
 
         addView(label)
+        addView(reportButton)
         addView(undoButton)
     }
 
@@ -63,6 +81,8 @@ class UndoBarView(context: Context) : LinearLayout(context) {
 
     fun setColors(textColor: Int) {
         label.setTextColor(textColor)
+        // Muted so Report reads as a secondary action next to the filled Undo pill.
+        reportButton.setTextColor((textColor and 0x00FFFFFF) or 0xB0000000.toInt())
         undoButton.setTextColor(textColor)
         (undoButton.background as? GradientDrawable)?.setColor((textColor and 0x00FFFFFF) or (0x55 shl 24))
     }

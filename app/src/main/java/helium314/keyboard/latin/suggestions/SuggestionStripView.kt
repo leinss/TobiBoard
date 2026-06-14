@@ -6,9 +6,11 @@
 package helium314.keyboard.latin.suggestions
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
+import android.widget.Toast
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -37,6 +39,7 @@ import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
 import helium314.keyboard.latin.AudioAndHapticFeedbackManager
 import helium314.keyboard.latin.dictionary.Dictionary
 import helium314.keyboard.latin.R
+import helium314.keyboard.latin.ReportConfig
 import helium314.keyboard.latin.SuggestedWords
 import helium314.keyboard.latin.SuggestedWords.SuggestedWordInfo
 import helium314.keyboard.latin.common.ColorType
@@ -370,6 +373,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             it.onReplaceClick = { onReplaceTextFix?.run() }
             it.onDiscardClick = { onDiscardTextFix?.run() }
             it.onExpandClick = { showTextFixExpandedPopup() }
+            it.onReportClick = { textFixProposedText?.let { proposed -> launchAiOutputReport(proposed) } }
         }
         overlay.showWorking()
         if (textFixOverlay == null) {
@@ -438,13 +442,33 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
 
     private var undoBar: UndoBarView? = null
 
-    fun showUndoBar(labelText: String, onUndo: Runnable) {
+    fun showUndoBar(labelText: String, onUndo: Runnable, aiOutput: String) {
         val bar = UndoBarView(context)
         bar.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
         bar.setLabel(labelText)
         bar.onUndoClick = { onUndo.run() }
+        bar.onReportClick = { launchAiOutputReport(aiOutput) }
         setExternalSuggestionView(bar, false)
         undoBar = bar
+    }
+
+    /**
+     * Open the user's mail app pre-filled to report a piece of AI output (Google Play Generative AI
+     * policy). Launched from the IME's context, so it needs FLAG_ACTIVITY_NEW_TASK (set in
+     * [ReportConfig.reportIntent]). The user reviews before sending.
+     */
+    private fun launchAiOutputReport(aiOutput: String) {
+        try {
+            context.startActivity(ReportConfig.reportIntent(context, aiOutput))
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(context, R.string.report_ai_no_mail_app, Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            // A click handler in the IME process must not crash the keyboard if the mail app
+            // launch fails for any other reason (e.g. SecurityException on a guarded compose
+            // activity). Surface a toast and log instead.
+            Log.w(TAG, "Failed to launch AI-output report", e)
+            Toast.makeText(context, R.string.report_ai_no_mail_app, Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun hideUndoBar() {
