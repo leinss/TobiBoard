@@ -33,6 +33,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
     private val statusText: TextView
     private val resultText: TextView
     private val expandButton: ImageView
+    private val reportButton: TextView
     private val replaceButton: TextView
     private val discardButton: TextView
 
@@ -40,6 +41,8 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
     var onDiscardClick: (() -> Unit)? = null
     /** Invoked when the user taps the proposed text to view it in a popup. Only fires in result state. */
     var onExpandClick: (() -> Unit)? = null
+    /** Report the proposed text as objectionable AI output (Google Play Generative AI policy). */
+    var onReportClick: (() -> Unit)? = null
     private var lastClickMs = 0L
     private var baseTextColor: Int = 0xFF000000.toInt()
 
@@ -90,12 +93,28 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
             setOnClickListener { debounceClick { onExpandClick?.invoke() } }
             visibility = View.GONE
         }
+        // Recessive text-only action so the Replace/Discard pills stay dominant.
+        reportButton = TextView(context).apply {
+            text = context.getString(R.string.report_ai_output)
+            contentDescription = context.getString(R.string.report_ai_output_a11y)
+            textSize = 12f
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            gravity = Gravity.CENTER
+            isClickable = true
+            isFocusable = true
+            isAllCaps = false
+            minHeight = dp(36)
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = dp(4) }
+            visibility = View.GONE
+            setOnClickListener { debounceClick { onReportClick?.invoke() } }
+        }
         discardButton = makePillButton(R.string.text_fix_discard, isPrimary = false) { debounceClick { onDiscardClick?.invoke() } }
         replaceButton = makePillButton(R.string.text_fix_replace, isPrimary = true) { debounceClick { onReplaceClick?.invoke() } }
 
         addView(statusText)
         addView(resultText)
         addView(expandButton)
+        addView(reportButton)
         addView(discardButton)
         addView(replaceButton)
     }
@@ -142,6 +161,8 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         expandButton.drawable?.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         (expandButton.background as? GradientDrawable)
             ?.setColor((textColor and 0x00FFFFFF) or 0x18000000)
+        // Report: muted text-only, recessive next to the Replace/Discard pills.
+        reportButton.setTextColor((textColor and 0x00FFFFFF) or 0xB0000000.toInt())
     }
 
     fun showWorking() {
@@ -149,6 +170,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         statusText.visibility = View.VISIBLE
         resultText.visibility = View.GONE
         expandButton.visibility = View.GONE
+        reportButton.visibility = View.GONE
         replaceButton.visibility = View.GONE
         discardButton.visibility = View.VISIBLE
         announceForAccessibility(statusText.text)
@@ -163,6 +185,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         resultText.scrollTo(0, 0)
         resultText.visibility = View.VISIBLE
         expandButton.visibility = View.VISIBLE
+        reportButton.visibility = View.VISIBLE
         replaceButton.visibility = View.VISIBLE
         discardButton.visibility = View.VISIBLE
         // Announce the final proposed text (not the diff markup) for screen readers.
@@ -198,6 +221,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         statusText.visibility = View.VISIBLE
         resultText.visibility = View.GONE
         expandButton.visibility = View.GONE
+        reportButton.visibility = View.GONE
         replaceButton.visibility = View.GONE
         discardButton.visibility = View.VISIBLE
         announceForAccessibility(message)
