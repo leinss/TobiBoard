@@ -116,6 +116,12 @@ TobiBoard stands on the shoulders of giants:
 
 <br>
 
+## Support
+
+TobiBoard is free and open-source — no ads, no tracking, no paid tiers. If it's useful to you, you can support continued development on [Ko-fi](https://ko-fi.com/leinss). Thank you 🙏
+
+<br>
+
 ## License
 
 [GPL v3](/LICENSE). AOSP-derived portions are also available under [Apache 2.0](LICENSE-Apache-2.0).
