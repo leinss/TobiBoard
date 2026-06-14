@@ -107,8 +107,9 @@ internal class ModelDownloader(
                 file.sizeBytes
             }
 
-            val openMode = if (partial) "rw" else "rw"
-            RandomAccessFile(partFile, openMode).use { raf ->
+            // "rw" for both fresh and resumed downloads; the resume offset is applied via the
+            // setLength/seek calls below.
+            RandomAccessFile(partFile, "rw").use { raf ->
                 raf.setLength(if (partial) resumeFrom else 0L)
                 raf.seek(if (partial) resumeFrom else 0L)
                 connection.inputStream.use { input ->
