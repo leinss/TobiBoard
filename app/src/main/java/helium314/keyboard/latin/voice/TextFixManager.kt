@@ -129,78 +129,88 @@ class TextFixManager(
         }
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
         Log.d(TAG, "startTextFix: provider=$provider")
-        // SecretStore is only needed for cloud API keys; LOCAL provider never touches it.
-        if (provider.isCloud && !SecretStore.isSecureStorageAvailable(context)) {
-            Log.d(TAG, "startTextFix: SecretStore unavailable — navigating to text_fix settings")
-            callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
-            return
-        }
-        val apiKey = if (provider.isCloud) {
-            SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
-        } else ""
-        if (provider.isCloud && apiKey.isBlank()) {
-            Log.d(TAG, "startTextFix: no API key — navigating to text_fix settings")
-            callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
-            return
-        }
-        if (provider.isCloud && !isNetworkAvailable(context)) {
-            callbacks.onError(context.getString(R.string.voice_error_no_network))
-            return
-        }
-        val activeModel = helium314.keyboard.latin.voice.local.ModelRegistry.activeTextFix(context)
-        val modelReady = helium314.keyboard.latin.voice.local.ModelStorage.isReady(context, activeModel)
-        Log.d(TAG, "startTextFix: LOCAL model=${activeModel.id} ready=$modelReady")
-        if (provider == AiProvider.LOCAL && !modelReady) {
-            Log.d(TAG, "startTextFix: model not ready — navigating to local_models")
-            callbacks.onOpenSettings(SETTINGS_LOCAL_MODELS)
-            return
-        }
 
-        val textToFix = callbacks.getTextToFix()?.toString().orEmpty()
-        if (textToFix.isBlank()) {
+        // Text retrieval must stay on the main thread (reads the input connection); cheap, no I/O.
+        val input = callbacks.getTextToFix()?.toString().orEmpty()
+        if (input.isBlank()) {
             callbacks.onError(context.getString(R.string.text_fix_error_no_selection))
             return
         }
-        if (textToFix.length > MAX_INPUT_LENGTH) {
+        if (input.length > MAX_INPUT_LENGTH) {
             callbacks.onError(context.getString(R.string.text_fix_error_too_long))
             return
         }
-        val input = textToFix
 
+        // Cheap in-memory pref reads.
         val selectedModel = prefs.getString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL) ?: Defaults.PREF_TEXT_FIX_MODEL
         val customModel = prefs.getString(Settings.PREF_TEXT_FIX_MODEL_CUSTOM, Defaults.PREF_TEXT_FIX_MODEL_CUSTOM) ?: ""
-        val model = if (provider.isCloud) {
-            val resolved = resolveProviderModel(selectedModel, customModel)
-            if (resolved == null) {
-                callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
-                return
-            }
-            resolved
-        } else ""
         val prompt = (prefs.getString(variant.promptPref, variant.promptDefault) ?: variant.promptDefault)
             .trim().ifEmpty { variant.promptDefault }
         val useZdr = provider == AiProvider.OPENROUTER &&
             prefs.getBoolean(Settings.PREF_OPENROUTER_ZDR_ENABLED, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
 
+        // Show the working state immediately, then run the keystore / model-file / network
+        // preconditions off the IME main thread. Failures post the same navigation/error back.
         state = State.WORKING
         callbacks.onWorking()
-
-        val client: TextFixEngine = when (provider) {
-            AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalLiteRtEngine(context, prompt)
-            AiProvider.OPENROUTER, AiProvider.PAYPERQ -> OpenRouterClient(
-                apiKey = apiKey,
-                model = model,
-                systemPrompt = prompt,
-                runtimeInstruction = null,
-                provider = provider,
-                useZeroDataRetention = useZdr,
-            )
-        }
         val token = activeToken + 1
         activeToken = token
-        activeClient = client
 
         activeJob = backgroundScope.launch(CoroutineName("TextFixRequest")) {
+            // SecretStore is only needed for cloud API keys; LOCAL provider never touches it.
+            if (provider.isCloud && !SecretStore.isSecureStorageAvailable(context)) {
+                Log.d(TAG, "startTextFix: SecretStore unavailable — navigating to text_fix settings")
+                finishWithSettings(token, SETTINGS_TEXT_FIX)
+                return@launch
+            }
+            val apiKey = if (provider.isCloud) {
+                SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
+            } else ""
+            if (provider.isCloud && apiKey.isBlank()) {
+                Log.d(TAG, "startTextFix: no API key — navigating to text_fix settings")
+                finishWithSettings(token, SETTINGS_TEXT_FIX)
+                return@launch
+            }
+            if (provider.isCloud && !isNetworkAvailable(context)) {
+                finish(token, error = context.getString(R.string.voice_error_no_network))
+                return@launch
+            }
+            if (provider == AiProvider.LOCAL) {
+                val activeModel = helium314.keyboard.latin.voice.local.ModelRegistry.activeTextFix(context)
+                val modelReady = helium314.keyboard.latin.voice.local.ModelStorage.isReady(context, activeModel)
+                Log.d(TAG, "startTextFix: LOCAL model=${activeModel.id} ready=$modelReady")
+                if (!modelReady) {
+                    Log.d(TAG, "startTextFix: model not ready — navigating to local_models")
+                    finishWithSettings(token, SETTINGS_LOCAL_MODELS)
+                    return@launch
+                }
+            }
+            val model = if (provider.isCloud) {
+                resolveProviderModel(selectedModel, customModel) ?: run {
+                    finishWithSettings(token, SETTINGS_TEXT_FIX)
+                    return@launch
+                }
+            } else ""
+
+            // Bail before any heavy work if a cancel raced in during the preflight.
+            if (activeToken != token) return@launch
+
+            val client: TextFixEngine = when (provider) {
+                AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalLiteRtEngine(context, prompt)
+                AiProvider.OPENROUTER, AiProvider.PAYPERQ -> OpenRouterClient(
+                    apiKey = apiKey,
+                    model = model,
+                    systemPrompt = prompt,
+                    runtimeInstruction = null,
+                    provider = provider,
+                    useZeroDataRetention = useZdr,
+                )
+            }
+            activeClient = client
+            // Re-check after publishing activeClient: a cancel() that landed between the check above
+            // and this assignment couldn't have called client.cancel() (activeClient was still null),
+            // so bail now rather than run a full uninterruptible generation whose result is discarded.
+            if (activeToken != token) return@launch
             try {
                 val proposed = sanitize(runInterruptible { client.fixText(input) })
                 UsageTracker.record(client.lastResponseTokens)
@@ -255,6 +265,18 @@ class TextFixManager(
             } else if (!error.isNullOrEmpty()) {
                 callbacks.onError(error)
             }
+        }
+    }
+
+    /** Reset to idle and route the user to settings — used when a background precondition fails. */
+    private fun finishWithSettings(token: Long, settingsDestination: String) {
+        mainHandler.post {
+            if (activeToken != token) return@post
+            activeJob = null
+            activeClient = null
+            state = State.IDLE
+            callbacks.onFinished()
+            callbacks.onOpenSettings(settingsDestination)
         }
     }
 
