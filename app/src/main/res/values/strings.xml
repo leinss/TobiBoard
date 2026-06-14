@@ -1136,7 +1136,10 @@ New dictionary:
     <string name="setup_model_download_connecting">Connecting…</string>
     <string name="setup_model_download_progress">Downloading… %d%%</string>
     <string name="setup_model_download_ready">Model ready ✓</string>
+    <string name="setup_model_download_failed">Download failed: %1$s</string>
+    <string name="setup_model_download_retry">Retry download</string>
     <string name="text_fix_error_local_not_ready">Gemma model not downloaded. Open Settings → On-device models.</string>
+    <string name="text_fix_error_local_load_failed">On-device model failed to load — it may be corrupt. Re-download it in Settings → On-device models.</string>
     <string name="openrouter_api_key">OpenRouter API Key</string>
     <string name="openrouter_api_key_summary">Required before long-pressing Return to use voice input with your OpenRouter account</string>
     <string name="payperq_api_key">PayPerQ API Key</string>

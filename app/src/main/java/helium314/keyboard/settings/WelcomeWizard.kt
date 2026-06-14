@@ -690,6 +690,7 @@ private fun AiProviderSetupStep(
                     val isInProgress = downloadState is helium314.keyboard.latin.voice.local.DownloadState.Downloading
                         || downloadState is helium314.keyboard.latin.voice.local.DownloadState.Queued
                         || downloadState is helium314.keyboard.latin.voice.local.DownloadState.Verifying
+                    val isFailed = downloadState is helium314.keyboard.latin.voice.local.DownloadState.Failed
                     Text(
                         stringResource(R.string.setup_model_download_title),
                         style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)
@@ -725,6 +726,9 @@ private fun AiProviderSetupStep(
                             Spacer(Modifier.height(8.dp))
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                         }
+                        is helium314.keyboard.latin.voice.local.DownloadState.Failed ->
+                            Text(stringResource(R.string.setup_model_download_failed, downloadState.reason),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = MaterialTheme.colorScheme.error))
                         else ->
                             Text(stringResource(R.string.setup_model_download_size, model.totalBytes / 1_048_576L),
                                 style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim))
@@ -732,8 +736,11 @@ private fun AiProviderSetupStep(
                     Spacer(Modifier.height(24.dp))
                     if (!isReady) {
                         primaryAction(
-                            if (isInProgress) stringResource(R.string.setup_model_download_downloading)
-                            else stringResource(R.string.setup_model_download_action),
+                            when {
+                                isInProgress -> stringResource(R.string.setup_model_download_downloading)
+                                isFailed -> stringResource(R.string.setup_model_download_retry)
+                                else -> stringResource(R.string.setup_model_download_action)
+                            },
                             painterResource(R.drawable.ic_settings_preferences)
                         ) {
                             if (!isInProgress) {
