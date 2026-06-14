@@ -4,11 +4,23 @@
 # F-Droid main repo, submit its contents as a merge request to F-Droid's data repo:
 #
 #   https://gitlab.com/fdroid/fdroiddata
-#   ->  metadata/helium314.keyboard.tobiboard.yml
+#   ->  metadata/xyz.leinss.TobiBoard.yml   (F-Droid names metadata by applicationId)
 #
 # Summary, description, icon, screenshots and per-version changelogs are read
 # automatically from the fastlane metadata already in this repo
 # (fastlane/metadata/android/en-US/...), so they are intentionally omitted here.
+#
+# NOT SUBMITTABLE TO F-DROID MAIN AS-IS. F-Droid main forbids prebuilt binaries
+# and this build pulls two:
+#   1. the sherpa-onnx STT runtime, a prebuilt AAR fetched at build time
+#      (`make fetch-native-libs`; app/libs/sherpa-onnx-1.13.2.aar, gitignored);
+#   2. MediaPipe `com.google.mediapipe:tasks-genai`, a Maven artifact that
+#      bundles prebuilt native .so libraries.
+# Acceptance on main would require building sherpa-onnx + onnxruntime + MediaPipe
+# from source in the recipe (tracked as M2-2 — XL). Until then the FOSS channels
+# are the self-hosted repo (leinss.xyz/TobiBoard/repo) and IzzyOnDroid (which
+# accepts the dev-signed release APKs from GitHub releases). This recipe is kept
+# accurate for that future source-build work and as the IzzyOnDroid reference.
 
 Categories:
   - System
@@ -30,21 +42,19 @@ AntiFeatures:
 RepoType: git
 Repo: https://github.com/leinss/TobiBoard.git
 
-# IMPORTANT: F-Droid builds the tagged commit FROM SOURCE. The keyless
-# (unsigned) release build only works from the commit that gates the signing
-# guard behind REQUIRE_SIGNED_RELEASE. The v6.7.0 tag predates that change, so
-# the first F-Droid build must target the NEXT tagged release that contains it.
-# Update versionName / versionCode / commit below to that release before
-# submitting this recipe (do not submit pinned to v6.7.0 — it would fail to build).
+# F-Droid builds the tagged commit FROM SOURCE with a keyless (unsigned) release
+# build, which only succeeds on commits that gate the signing guard behind
+# REQUIRE_SIGNED_RELEASE (present since the 6.8.x line). Pinned to v6.8.4. A real
+# source build additionally needs the prebuilt-binary blocker above resolved.
 Builds:
-  - versionName: 6.7.1
-    versionCode: 6701
-    commit: v6.7.1
+  - versionName: 6.8.4
+    versionCode: 6804
+    commit: v6.8.4
     ndk: 28.0.13004108
     gradle:
       - yes
 
 AutoUpdateMode: Version v%v
 UpdateCheckMode: Tags
-CurrentVersion: 6.7.1
-CurrentVersionCode: 6701
+CurrentVersion: 6.8.4
+CurrentVersionCode: 6804
