@@ -1333,6 +1333,12 @@ New dictionary:
     <string name="text_fix_result_a11y">Proposed text: <xliff:g id="text">%1$s</xliff:g>. Use Replace to accept or Discard to reject.</string>
     <string name="text_fix_replace">Replace</string>
     <string name="text_fix_discard">Discard</string>
+    <!-- Report objectionable AI output (Google Play Generative AI policy) -->
+    <string name="report_ai_output">Report</string>
+    <string name="report_ai_output_a11y">Report this AI output as objectionable</string>
+    <string name="report_ai_subject">Report objectionable AI output</string>
+    <string name="report_ai_body_prefix">I would like to report the following AI-generated output as objectionable:</string>
+    <string name="report_ai_no_mail_app">No email app available to send the report</string>
     <string name="text_fix_error_no_selection">No text to fix</string>
     <string name="text_fix_error_selection_changed">Text changed while fixing; try again</string>
     <string name="text_fix_error_too_long">Text is too long</string>
