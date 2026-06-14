@@ -77,12 +77,15 @@ internal class LocalLiteRtEngine(
                 releaseSharedAsync()
             }
         }
-
-        fun warmUp(context: Context) {
-            Thread { SharedLlm.acquire(context) }.start()
-        }
     }
 }
+
+/**
+ * Model files are present but the native LlmInference handle could not be initialised (corrupt
+ * `.task` bundle, OOM, unsupported backend). Distinct from "not downloaded" so the UI can suggest
+ * a re-download rather than misrouting the user to a model that already shows as Ready in Settings.
+ */
+internal class LocalModelLoadException(cause: Throwable) : Exception(cause)
 
 /**
  * The Gemma `.task` bundle applies its own chat template inside MediaPipe at runtime — passing
@@ -285,19 +288,6 @@ private object SharedLlm {
         Thread { releaseIfIdle() }.start()
     }
 
-    /** Load (or return) the shared handle. Used by warm-up; does not pin it against release. */
-    fun acquire(context: Context): LlmInference? {
-        val model = ModelRegistry.activeTextFix(context)
-        inference?.let { if (loadedModelId == model.id) return it }
-        synchronized(initLock) {
-            val llm = acquireLocked(context)
-            // Warm-up loads the handle without a beginUse/endUse cycle; arm the idle timer here so
-            // a warmed-but-never-used model is still released after the idle window.
-            if (llm != null && inUseCount == 0) armIdleTimer()
-            return llm
-        }
-    }
-
     /** Pin the handle for a generation. Pair with [endUse] in a finally block. */
     fun beginUse(context: Context): LlmInference? {
         synchronized(initLock) {
@@ -352,7 +342,9 @@ private object SharedLlm {
             llm
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to initialise LlmInference", t)
-            null
+            // Distinct from the not-ready null return above: the files exist but the native handle
+            // won't load. Surface it so the user is told to re-download, not "not downloaded".
+            throw LocalModelLoadException(t)
         }
     }
 
