@@ -12,17 +12,16 @@ import android.net.Uri
  * content. The in-keyboard "Report" actions (text-fix result overlay and the post-insertion undo
  * bar) all route through here, so the destination address lives in exactly one place.
  *
- * TODO(owner): before any Play **production** release, set [REPORT_EMAIL] to a real, monitored
- * mailbox. This constant is the single source of truth for the AI-output report recipient — the
- * only place to change it. (Note: the inherited HeliBoard gesture-data feature has its own,
- * unrelated submission address, obfuscated in `res/values/gesture_data.xml`; that is a separate
- * upstream channel, not this one.) Keep this on the project's own domain (not a personal address)
- * so it is safe to ship in a public repo.
+ * [REPORT_EMAIL] is the single source of truth for the AI-output report recipient — the only place
+ * to change it. It points at the project's monitored contact inbox (the same address as the public
+ * privacy policy). The inherited gesture-data feature now routes to the same inbox, but via its own
+ * obfuscated resource string in `res/values/gesture_data.xml` — keep the two in sync if it changes.
+ * Keep this on the project's own domain (not a personal address) so it is safe to ship in a public repo.
  */
 object ReportConfig {
 
-    /** Placeholder on the project's public domain (leinss.xyz, same host as the F-Droid repo). */
-    const val REPORT_EMAIL = "tobiboard-report@leinss.xyz"
+    /** Project contact inbox on leinss.xyz (same host as the F-Droid repo and the privacy policy). */
+    const val REPORT_EMAIL = "inquiry@leinss.xyz"
 
     /**
      * Build a pre-filled mail intent for reporting a piece of AI output. The user reviews and sends
