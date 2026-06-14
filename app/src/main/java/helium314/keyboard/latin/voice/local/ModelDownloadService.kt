@@ -14,6 +14,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.utils.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -60,13 +61,22 @@ internal class ModelDownloadService : Service() {
     }
 
     private fun startDownload(modelId: String) {
-        val model = ModelRegistry.findById(modelId) ?: run {
+        // start() launches us via startForegroundService() on API 26+, which obligates a prompt
+        // startForeground() call on EVERY path — including the early returns below — or the system
+        // kills the process with ForegroundServiceDidNotStartInTimeException. Promote up front and
+        // tear down again if we bail without actually starting a download.
+        val model = ModelRegistry.findById(modelId)
+        promoteToForeground(modelId, model?.displayName ?: modelId, percent = 0)
+
+        if (model == null) {
             Log.w(TAG, "startDownload: unknown model $modelId")
+            stopForegroundIfIdle()
             return
         }
-        if (jobs.containsKey(modelId)) return
+        if (jobs.containsKey(modelId)) return // already downloading: that job keeps us foreground
         if (ModelStorage.isReady(this, model)) {
             ModelDownloadRepository.update(modelId, DownloadState.Ready)
+            stopForegroundIfIdle()
             return
         }
 
@@ -76,11 +86,9 @@ internal class ModelDownloadService : Service() {
                 modelId,
                 DownloadState.Failed(getString(R.string.local_model_auth_required)),
             )
-            if (jobs.isEmpty()) stopForegroundAndService()
+            stopForegroundIfIdle()
             return
         }
-
-        promoteToForeground(modelId, model.displayName, percent = 0)
 
         val job = scope.launch {
             try {
@@ -89,14 +97,32 @@ internal class ModelDownloadService : Service() {
                     ModelDownloadRepository.update(modelId, state)
                     updateNotification(modelId, model.displayName, state)
                 }
+            } catch (e: CancellationException) {
+                // User cancel / service teardown: the Cancelled state is already set by
+                // cancelDownload()/onDestroy(). Never swallow cancellation — rethrow it.
+                throw e
             } catch (e: Exception) {
-                ModelDownloadRepository.update(modelId, DownloadState.Cancelled)
+                // A genuine failure (network, disk, verification) — surface it as Failed with a
+                // reason so the UI shows the error + retry, instead of masquerading as Cancelled.
+                Log.e(TAG, "download failed for $modelId", e)
+                ModelDownloadRepository.update(
+                    modelId,
+                    DownloadState.Failed(
+                        e.message?.takeUnless { it.isBlank() }
+                            ?: getString(R.string.local_model_download_error_generic),
+                    ),
+                )
             } finally {
                 jobs.remove(modelId)
                 if (jobs.isEmpty()) stopForegroundAndService()
             }
         }
         jobs[modelId] = job
+    }
+
+    /** Tear down the foreground notification + service if no download is currently running. */
+    private fun stopForegroundIfIdle() {
+        if (jobs.isEmpty()) stopForegroundAndService()
     }
 
     private fun cancelDownload(modelId: String) {
