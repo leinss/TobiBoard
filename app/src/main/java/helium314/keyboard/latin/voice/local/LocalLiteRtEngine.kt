@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.latin.voice.local
 
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.voice.TextFixEngine
@@ -28,23 +31,53 @@ internal class LocalLiteRtEngine(
 
     override fun fixText(userText: String): String {
         if (cancelled) return ""
-        val inference = SharedLlm.acquire(context)
+        // beginUse pins the shared handle for the duration of this generation so a concurrent
+        // trim/idle release can never close() it mid-call (generateResponse is uninterruptible);
+        // endUse unpins and honors any release that was deferred while we were running.
+        val inference = SharedLlm.beginUse(context)
             ?: throw IOException("On-device text-fix model not downloaded — open Settings → On-device models.")
-        val prompt = formatGemmaChat(systemPrompt, userText)
-        if (cancelled) return ""
-        val started = System.currentTimeMillis()
-        val raw = inference.generateResponse(prompt)
-        val cleaned = stripTrailingCommentary(raw, userText)
-        Log.i(
-            TAG,
-            "generated ${raw.length} chars in ${System.currentTimeMillis() - started} ms (after commentary strip: ${cleaned.length})"
-        )
-        return cleaned
+        try {
+            val prompt = formatGemmaChat(systemPrompt, userText)
+            if (cancelled) return ""
+            val started = System.currentTimeMillis()
+            val raw = inference.generateResponse(prompt)
+            val cleaned = stripTrailingCommentary(raw, userText)
+            Log.i(
+                TAG,
+                "generated ${raw.length} chars in ${System.currentTimeMillis() - started} ms (after commentary strip: ${cleaned.length})"
+            )
+            return cleaned
+        } finally {
+            SharedLlm.endUse()
+        }
     }
 
     companion object {
         private const val TAG = "LocalLiteRtEngine"
+
+        /** Release the shared handle now (deferred if a generation is in flight). */
+        @JvmStatic
         fun releaseShared() = SharedLlm.release()
+
+        /** Release off the caller's thread — freeing ~1 GB of native memory can be slow. */
+        @JvmStatic
+        fun releaseSharedAsync() {
+            Thread { SharedLlm.release() }.start()
+        }
+
+        /**
+         * Free the on-device LLM under real memory pressure so the IME process is not killed for
+         * squatting on ~1 GB of native memory. Reloads lazily on the next fix. Deliberately ignores
+         * TRIM_MEMORY_UI_HIDDEN (fires on every keyboard hide — far too frequent to reload for).
+         */
+        @JvmStatic
+        fun onTrimMemory(level: Int) {
+            if (level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+                || level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+                releaseSharedAsync()
+            }
+        }
+
         fun warmUp(context: Context) {
             Thread { SharedLlm.acquire(context) }.start()
         }
@@ -240,45 +273,122 @@ private object SharedLlm {
     @Volatile private var loadedModelId: String? = null
     private val initLock = Any()
 
+    // All three guarded by initLock. inUseCount > 0 means a generateResponse is running, so the
+    // handle must not be closed; a release requested while busy is deferred via releasePending.
+    private var inUseCount = 0
+    private var releasePending = false
+    private var lastUsedMs = 0L
+
+    private val idleHandler = Handler(Looper.getMainLooper())
+    private val idleReleaseRunnable = Runnable {
+        // Do the idle check + native free off the main thread.
+        Thread { releaseIfIdle() }.start()
+    }
+
+    /** Load (or return) the shared handle. Used by warm-up; does not pin it against release. */
     fun acquire(context: Context): LlmInference? {
         val model = ModelRegistry.activeTextFix(context)
         inference?.let { if (loadedModelId == model.id) return it }
         synchronized(initLock) {
-            inference?.let {
-                if (loadedModelId == model.id) return it
-                // The user switched the active text-fix model: drop the stale handle and reload.
-                it.close()
-                inference = null
-                loadedModelId = null
-            }
-            if (!ModelStorage.isReady(context, model)) return null
-            val modelFile = ModelStorage.fileFor(context, model, model.files.first())
-            return try {
-                val started = System.currentTimeMillis()
-                val options = LlmInference.LlmInferenceOptions.builder()
-                    .setModelPath(modelFile.absolutePath)
-                    .setMaxTokens(MAX_TOKENS)
-                    .build()
-                val llm = LlmInference.createFromOptions(context, options)
-                Log.i(TAG, "Initialised LlmInference (${model.id}) in ${System.currentTimeMillis() - started} ms")
-                inference = llm
-                loadedModelId = model.id
-                llm
-            } catch (t: Throwable) {
-                Log.e(TAG, "Failed to initialise LlmInference", t)
-                null
+            val llm = acquireLocked(context)
+            // Warm-up loads the handle without a beginUse/endUse cycle; arm the idle timer here so
+            // a warmed-but-never-used model is still released after the idle window.
+            if (llm != null && inUseCount == 0) armIdleTimer()
+            return llm
+        }
+    }
+
+    /** Pin the handle for a generation. Pair with [endUse] in a finally block. */
+    fun beginUse(context: Context): LlmInference? {
+        synchronized(initLock) {
+            val llm = acquireLocked(context) ?: return null
+            inUseCount++
+            idleHandler.removeCallbacks(idleReleaseRunnable)
+            return llm
+        }
+    }
+
+    /** Unpin after a generation; honor a deferred release or (re)arm the idle timer. */
+    fun endUse() {
+        synchronized(initLock) {
+            if (inUseCount > 0) inUseCount--
+            lastUsedMs = System.currentTimeMillis()
+            if (inUseCount == 0) {
+                if (releasePending) {
+                    releasePending = false
+                    closeLocked()
+                } else {
+                    armIdleTimer()
+                }
             }
         }
     }
 
-    fun release() {
-        synchronized(initLock) {
-            inference?.close()
+    private fun acquireLocked(context: Context): LlmInference? {
+        val model = ModelRegistry.activeTextFix(context)
+        inference?.let {
+            if (loadedModelId == model.id) return it
+            // The user switched the active text-fix model: drop the stale handle and reload.
+            it.close()
             inference = null
             loadedModelId = null
         }
+        if (!ModelStorage.isReady(context, model)) return null
+        val modelFile = ModelStorage.fileFor(context, model, model.files.first())
+        return try {
+            val started = System.currentTimeMillis()
+            val options = LlmInference.LlmInferenceOptions.builder()
+                .setModelPath(modelFile.absolutePath)
+                .setMaxTokens(MAX_TOKENS)
+                .build()
+            val llm = LlmInference.createFromOptions(context, options)
+            Log.i(TAG, "Initialised LlmInference (${model.id}) in ${System.currentTimeMillis() - started} ms")
+            inference = llm
+            loadedModelId = model.id
+            lastUsedMs = System.currentTimeMillis()
+            llm
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to initialise LlmInference", t)
+            null
+        }
+    }
+
+    /** Release now, or defer until the in-flight generation completes. */
+    fun release() {
+        synchronized(initLock) {
+            if (inUseCount > 0) {
+                releasePending = true
+                return
+            }
+            closeLocked()
+        }
+    }
+
+    private fun releaseIfIdle() {
+        synchronized(initLock) {
+            if (inUseCount > 0 || inference == null) return
+            if (System.currentTimeMillis() - lastUsedMs < IDLE_TIMEOUT_MS) return
+            Log.i(TAG, "Releasing idle LlmInference after ${IDLE_TIMEOUT_MS / 1000} s of inactivity")
+            closeLocked()
+        }
+    }
+
+    private fun armIdleTimer() {
+        idleHandler.removeCallbacks(idleReleaseRunnable)
+        idleHandler.postDelayed(idleReleaseRunnable, IDLE_TIMEOUT_MS)
+    }
+
+    /** Caller must hold initLock. */
+    private fun closeLocked() {
+        idleHandler.removeCallbacks(idleReleaseRunnable)
+        inference?.close()
+        inference = null
+        loadedModelId = null
     }
 
     // TextFixManager caps input at 10k chars (~3k tokens); 4k tokens leaves headroom both ways.
     private const val MAX_TOKENS = 4096
+
+    // Drop the (~1 GB) handle after this long with no fixes; next fix reloads it lazily.
+    private const val IDLE_TIMEOUT_MS = 5 * 60 * 1000L
 }
