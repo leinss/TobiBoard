@@ -311,7 +311,7 @@ private object SharedLlm {
     /** Unpin after a generation; honor a deferred release or (re)arm the idle timer. */
     fun endUse() {
         synchronized(initLock) {
-            if (inUseCount > 0) inUseCount--
+            if (inUseCount > 0) inUseCount-- else Log.w(TAG, "endUse() with inUseCount==0 — unbalanced begin/endUse")
             lastUsedMs = System.currentTimeMillis()
             if (inUseCount == 0) {
                 if (releasePending) {
@@ -328,7 +328,10 @@ private object SharedLlm {
         val model = ModelRegistry.activeTextFix(context)
         inference?.let {
             if (loadedModelId == model.id) return it
-            // The user switched the active text-fix model: drop the stale handle and reload.
+            // The user switched the active text-fix model. Reload — but never close a handle that a
+            // generation is still using (generateResponse is uninterruptible): serve the current
+            // one and let the switch take effect on the next acquire once it is idle.
+            if (inUseCount > 0) return it
             it.close()
             inference = null
             loadedModelId = null
