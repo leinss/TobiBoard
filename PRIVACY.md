@@ -49,9 +49,12 @@ is no intermediary server operated by this app.
 - **Clipboard history** is stored in a local SQLite database on your device when the clipboard
   history feature is enabled (off by default). The database stores the text content of items you
   copy, the time they were copied, how many times you have pasted them, and any labels you add.
-  Clipboard data never leaves your device and is not included in cloud backups. You can clear the
-  history at any time from TobiBoard Settings → Preferences → Manage clipboard history, or by
-  disabling clipboard history entirely.
+  The copied text and your labels are **encrypted at rest** with AES-256-GCM using a key held in
+  the Android Keystore (hardware-backed where the device supports it) on Android 6 and newer; on
+  older Android versions the data is stored unencrypted in the app's private storage. Clipboard
+  data never leaves your device and is not included in cloud backups. You can clear the history at
+  any time from TobiBoard Settings → Preferences → Manage clipboard history, or by disabling
+  clipboard history entirely.
 - **Token usage counts** shown in settings are kept in memory only for the current session and are
   cleared when the app process ends or when you reset them.
 

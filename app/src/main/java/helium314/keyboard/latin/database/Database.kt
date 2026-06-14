@@ -12,8 +12,11 @@ import java.io.File
 
 class Database private constructor(context: Context, name: String = NAME) : SQLiteOpenHelper(context, name, null, VERSION) {
     override fun onCreate(db: SQLiteDatabase) {
+        // Create the full current schema directly. Previously this ran onUpgrade(db, 0, VERSION),
+        // which re-ALTERed columns CREATE_TABLE already defines ("duplicate column name: USE_COUNT"),
+        // so a fresh install crashed DB creation and clipboard history silently never worked.
         db.execSQL(ClipboardDao.CREATE_TABLE)
-        onUpgrade(db, 0, VERSION)
+        db.execSQL(GestureDataDao.CREATE_TABLE)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -24,11 +27,15 @@ class Database private constructor(context: Context, name: String = NAME) : SQLi
             db.execSQL("ALTER TABLE CLIPBOARD ADD COLUMN USE_COUNT INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE CLIPBOARD ADD COLUMN ANNOTATION TEXT")
         }
+        if (oldVersion <= 3) {
+            db.execSQL("ALTER TABLE CLIPBOARD ADD COLUMN ENCRYPTED INTEGER NOT NULL DEFAULT 0")
+            ClipboardDao.encryptExistingRows(db)
+        }
     }
 
     companion object {
         private val TAG = Database::class.java.simpleName
-        private const val VERSION = 3
+        private const val VERSION = 4
         const val NAME = "heliboard.db"
         private var instance: Database? = null
         @Synchronized
