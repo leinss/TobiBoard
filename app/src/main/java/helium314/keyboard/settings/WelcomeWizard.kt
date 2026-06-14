@@ -90,16 +90,16 @@ fun WelcomeWizard(
     close: () -> Unit,
     finish: () -> Unit
 ) {
-    val welcomeStep = 0
-    val enableStep = 1
-    val switchStep = 2
-    val providerStep = 3
-    val modelStep = 4      // LOCAL only: download on-device STT model
-    val apiKeyStep = 5     // cloud only: enter API key
-    val languageStep = 6
-    val voiceStep = 7
-    val doneStep = 8
-    val totalSetupSteps = 8
+    val welcomeStep = WizardStepResolver.WELCOME
+    val enableStep = WizardStepResolver.ENABLE
+    val switchStep = WizardStepResolver.SWITCH
+    val providerStep = WizardStepResolver.PROVIDER
+    val modelStep = WizardStepResolver.MODEL      // LOCAL only: download on-device STT model
+    val apiKeyStep = WizardStepResolver.API_KEY   // cloud only: enter API key
+    val languageStep = WizardStepResolver.LANGUAGE
+    val voiceStep = WizardStepResolver.VOICE
+    val doneStep = WizardStepResolver.DONE
+    val totalSetupSteps = WizardStepResolver.DONE
     val ctx = LocalContext.current
     val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
     var aiSetupSkipped by rememberSaveable { mutableStateOf(false) }
@@ -117,18 +117,29 @@ fun WelcomeWizard(
                 && prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)
                 && PermissionsUtil.checkAllPermissionsGranted(ctx, Manifest.permission.RECORD_AUDIO)
     }
-    fun determineStep(): Int = when {
-        !UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm) -> welcomeStep
-        !UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm) -> switchStep
-        isAiProviderReady() || aiSetupSkipped -> doneStep
-        else -> providerStep
-    }
-    var step by rememberSaveable { mutableIntStateOf(determineStep()) }
+    // First mount, no saved position: derive purely from system + provider state.
+    fun seedStep(): Int = WizardStepResolver.seed(
+        imeEnabled = UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm),
+        imeCurrent = UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm),
+        aiReady = isAiProviderReady(),
+        aiSkipped = aiSetupSkipped,
+    )
+    // Re-evaluate against live system state WITHOUT discarding manual progress inside the AI
+    // sub-flow (steps 4-7). Used on resume / IME-change / switch-poll, where a coarse re-derivation
+    // would otherwise snap the user back to the provider step mid-download.
+    fun reconcileStep(current: Int): Int = WizardStepResolver.reconcile(
+        current = current,
+        imeEnabled = UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm),
+        imeCurrent = UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm),
+        aiReady = isAiProviderReady(),
+        aiSkipped = aiSetupSkipped,
+    )
+    var step by rememberSaveable { mutableIntStateOf(seedStep()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(ctx, imm, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                step = determineStep()
+                step = reconcileStep(step)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -139,7 +150,7 @@ fun WelcomeWizard(
     DisposableEffect(ctx, imm) {
         val inputMethodObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                step = determineStep()
+                step = reconcileStep(step)
             }
         }
         ctx.contentResolver.registerContentObserver(
@@ -154,7 +165,7 @@ fun WelcomeWizard(
     LaunchedEffect(step) {
         if (step == switchStep) {
             repeat(20) {
-                val nextStep = determineStep()
+                val nextStep = reconcileStep(step)
                 if (nextStep != switchStep) {
                     step = nextStep
                     return@LaunchedEffect
@@ -332,7 +343,7 @@ fun WelcomeWizard(
         else
             Column {
                 val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-                    step = determineStep()
+                    step = reconcileStep(step)
                 }
                 if (step == enableStep) {
                     WizardPage(
@@ -357,7 +368,7 @@ fun WelcomeWizard(
                         primaryText = stringResource(R.string.setup_step2_action),
                         primaryAction = imm::showInputMethodPicker,
                         secondaryText = stringResource(R.string.setup_continue_action),
-                        secondaryAction = { step = determineStep() }
+                        secondaryAction = { step = reconcileStep(step) }
                     )
                 } else if (step in providerStep..voiceStep) {
                     AiProviderSetupStep(
@@ -382,20 +393,12 @@ fun WelcomeWizard(
                         onApiKeyConfigured = { step = languageStep },
                         onLanguageConfigured = { step = voiceStep },
                         onVoiceConfigured = { step = doneStep },
+                        // The persistent bottom action: abandon AI setup entirely and jump to the
+                        // finish step. Distinct from the per-step "Continue" actions, which advance
+                        // one step. Marking it skipped keeps determineStep/reconcile on DONE.
                         onSkip = {
-                            if (step == voiceStep) aiSetupSkipped = true
-                            step = when (step) {
-                                providerStep -> {
-                                    val picked = AiProvider.fromPref(
-                                        ctx.prefs().getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
-                                    )
-                                    if (picked.isCloud) apiKeyStep else modelStep
-                                }
-                                modelStep -> languageStep
-                                apiKeyStep -> languageStep
-                                languageStep -> voiceStep
-                                else -> doneStep
-                            }
+                            aiSetupSkipped = true
+                            step = doneStep
                         },
                         onOpenVoiceSettings = {
                             close()
@@ -644,6 +647,18 @@ private fun AiProviderSetupStep(
                         stringResource(R.string.setup_ai_provider_choice_instruction),
                         style = MaterialTheme.typography.bodyLarge.merge(color = textColor)
                     )
+                    Spacer(Modifier.height(14.dp))
+                    // Compact trade-off so the choice is informed rather than blind: privacy/offline
+                    // (one-time download) vs. instant/no-download (BYO key, text leaves the device).
+                    Text(
+                        stringResource(R.string.setup_ai_provider_compare_local),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColor)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stringResource(R.string.setup_ai_provider_compare_cloud),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColor)
+                    )
                     Spacer(Modifier.height(12.dp))
                     Text(
                         stringResource(R.string.setup_ai_provider_current_provider, providerName(selectedProvider)),
@@ -727,11 +742,17 @@ private fun AiProviderSetupStep(
                         }
                         Spacer(Modifier.height(10.dp))
                     }
+                    // Non-blocking: the download is a foreground service, so the user can move on
+                    // and finish setup while it keeps running. This is NOT the same as the bottom
+                    // "skip AI setup" action — it advances to the next step rather than abandoning.
                     secondaryAction(
-                        if (isReady) stringResource(R.string.setup_continue_action)
-                        else stringResource(R.string.setup_ai_provider_skip),
+                        when {
+                            isReady -> stringResource(R.string.setup_continue_action)
+                            isInProgress -> stringResource(R.string.setup_model_download_continue_downloading)
+                            else -> stringResource(R.string.setup_model_download_continue_later)
+                        },
                         if (isReady) painterResource(R.drawable.ic_setup_check) else null,
-                        if (isReady) onModelConfigured else onSkip
+                        onModelConfigured
                     )
                 }
                 5 -> {

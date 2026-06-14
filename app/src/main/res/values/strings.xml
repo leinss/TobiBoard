@@ -1130,6 +1130,8 @@ New dictionary:
     <string name="setup_model_download_instruction">The Parakeet speech recognition model runs entirely on your device with no cloud account needed.</string>
     <string name="setup_model_download_size">~%d MB — Wi-Fi recommended</string>
     <string name="setup_model_download_action">Download now</string>
+    <string name="setup_model_download_continue_downloading">Continue while it downloads</string>
+    <string name="setup_model_download_continue_later">Continue, download later</string>
     <string name="setup_model_download_downloading">Downloading…</string>
     <string name="setup_model_download_connecting">Connecting…</string>
     <string name="setup_model_download_progress">Downloading… %d%%</string>
@@ -1293,6 +1295,8 @@ New dictionary:
     <string name="setup_status_missing">missing</string>
     <string name="setup_ai_provider_choice_title">Choose your AI provider</string>
     <string name="setup_ai_provider_choice_instruction">Voice input needs an AI provider before it can transcribe speech. Pick the service you want to use now, or keep the current provider and continue.</string>
+    <string name="setup_ai_provider_compare_local">On-device: private and works offline. One-time model download, then nothing leaves your device.</string>
+    <string name="setup_ai_provider_compare_cloud">Cloud: instant with no download, but needs your own API key and sends text off your device.</string>
     <string name="setup_ai_provider_current_provider">Current provider: %1$s</string>
     <string name="setup_ai_provider_select">Provider: %1$s</string>
     <string name="setup_ai_provider_key_title">Add your API key</string>
