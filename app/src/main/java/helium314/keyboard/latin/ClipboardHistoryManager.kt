@@ -18,8 +18,18 @@ import helium314.keyboard.latin.common.ColorType
 import helium314.keyboard.latin.common.isValidNumber
 import helium314.keyboard.latin.database.ClipboardDao
 import helium314.keyboard.latin.databinding.ClipboardSuggestionBinding
+import androidx.annotation.VisibleForTesting
 import helium314.keyboard.latin.utils.InputTypeUtils
+import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.ToolbarKey
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ClipboardHistoryManager(
         private val latinIME: LatinIME
@@ -28,20 +38,43 @@ class ClipboardHistoryManager(
     private lateinit var clipboardManager: ClipboardManager
     private var clipboardSuggestionView: View? = null
     private var clipboardDao: ClipboardDao? = null
+    private val scope = CoroutineScope(SupervisorJob() + loadDispatcher)
 
     fun onCreate() {
         clipboardManager = latinIME.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboardManager.addPrimaryClipChangedListener(this)
-        clipboardDao = ClipboardDao.getInstance(latinIME)
-        if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
-            clipboardDao?.clearOldClips(true)
-            fetchPrimaryClip()
-        } else {
-            clipboardDao?.clear()
+        // Constructing the DAO is cheap (opens no DB); the costly part is loading its cache
+        // (SQLite open + per-row AES-GCM decrypt). Run that on a background thread so it never
+        // blocks the IME main thread during cold start, which was dropping the first keystrokes.
+        val dao = ClipboardDao.getInstance(latinIME)
+        clipboardDao = dao
+        scope.launch {
+            try {
+                dao?.ensureCacheLoaded()
+                // withContext is a cancellation point: if onDestroy() cancelled the scope while the
+                // (non-cancellable) DB load was running, this throws before the block runs, so we
+                // never touch a torn-down IME.
+                withContext(applyDispatcher) {
+                    if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
+                        dao?.clearOldClips(true)
+                        fetchPrimaryClip()
+                    } else {
+                        dao?.clear()
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e // never swallow cancellation
+            } catch (t: Throwable) {
+                // The load runs outside ClipboardDao.getInstance()'s try/catch and on a coroutine
+                // with no handler, so an unhandled throw here would crash the IME process. Degrade to
+                // an empty clipboard history instead.
+                Log.e(TAG, "clipboard cache load failed", t)
+            }
         }
     }
 
     fun onDestroy() {
+        scope.cancel()
         clipboardManager.removePrimaryClipChangedListener(this)
     }
 
@@ -182,7 +215,14 @@ class ClipboardHistoryManager(
     }
 
     companion object {
+        private const val TAG = "ClipboardHistoryManager"
         private var dontShowCurrentSuggestion: Boolean = false
         const val RECENT_TIME_MILLIS = 3 * 60 * 1000L // 3 minutes (for clipboard suggestions)
+
+        // Dispatchers for the off-main-thread cache load + its main-thread apply step. Overridable
+        // in tests (set both to Dispatchers.Unconfined) so the load runs synchronously and doesn't
+        // race Robolectric's manual main-looper message pump. Production uses IO + Main.
+        @VisibleForTesting var loadDispatcher: CoroutineDispatcher = Dispatchers.IO
+        @VisibleForTesting var applyDispatcher: CoroutineDispatcher = Dispatchers.Main
     }
 }
