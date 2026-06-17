@@ -27,6 +27,7 @@ import helium314.keyboard.latin.utils.ScriptUtils
 import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.utils.getTimestampFormatter
 import helium314.keyboard.latin.utils.prefs
+import kotlinx.coroutines.Dispatchers
 import org.junit.runner.RunWith
 import org.mockito.Mockito
 import org.robolectric.Robolectric
@@ -64,9 +65,24 @@ class InputLogicTest {
     private val connectionTextBeforeComposingText get() = (beforeComposingReader.get(connection) as CharSequence).toString()
     private val composingReader = RichInputConnection::class.java.getDeclaredField("mComposingText").apply { isAccessible = true }
     private val connectionComposingText get() = (composingReader.get(connection) as CharSequence).toString()
+    // early-keystroke buffer (the "first few keystrokes don't respond" fix) — private LatinIME state
+    private val readyField = LatinIME::class.java.getDeclaredField("mInputConnectionReady").apply { isAccessible = true }
+    private var inputConnectionReady: Boolean
+        get() = readyField.getBoolean(latinIME)
+        set(value) = readyField.setBoolean(latinIME, value)
+    private val pendingBufferField = LatinIME::class.java.getDeclaredField("mPendingEarlyEvents").apply { isAccessible = true }
+    private val pendingBufferSize: Int get() {
+        val buffer = pendingBufferField.get(latinIME)
+        return buffer.javaClass.getMethod("getSize").invoke(buffer) as Int
+    }
+    private val onInputConnectionReadyMethod = LatinIME::class.java.getDeclaredMethod("onInputConnectionReady").apply { isAccessible = true }
 
     @BeforeTest
     fun setUp() {
+        // Run the clipboard background cache-load synchronously so its main-thread continuation
+        // doesn't race this test's manual message pump (handleMessages) and leave stray messages.
+        ClipboardHistoryManager.loadDispatcher = Dispatchers.Unconfined
+        ClipboardHistoryManager.applyDispatcher = Dispatchers.Unconfined
         latinIME = Robolectric.setupService(LatinIME::class.java)
         // start logging only after latinIME is created, avoids showing the stack traces if library is not found
         ShadowLog.setupLogging()
@@ -82,6 +98,51 @@ class InputLogicTest {
         assertEquals("c", composingText)
         latinIME.mHandler.onFinishInput()
         assertEquals("", composingText)
+    }
+
+    // --- early-keystroke buffering (the "first few keystrokes don't respond" fix) ---
+
+    @Test fun earlyKeystrokesBufferWhileNotReadyThenReplayInOrder() {
+        reset()
+        // Simulate the resetCaches-failed window. The gate MUST use this flag, not isConnected():
+        // in that window mIC is non-null-but-inert, so isConnected() would wrongly read true and the
+        // keystrokes would commit into a broken connection and be lost (the original bug).
+        inputConnectionReady = false
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('a'.code))
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('b'.code))
+        handleMessages()
+        assertEquals("", getText()) // nothing committed while not ready
+        assertEquals(2, pendingBufferSize)
+
+        // Connection becomes ready -> buffered keystrokes replay in press order.
+        onInputConnectionReadyMethod.invoke(latinIME)
+        handleMessages()
+        assertEquals("ab", getText())
+        assertEquals(0, pendingBufferSize)
+    }
+
+    @Test fun normalTypingIsNotBufferedWhenConnectionReady() {
+        reset()
+        assertEquals(true, inputConnectionReady) // onStartInputView success marks the connection ready
+        input('x') // input() asserts the commit actually happened
+        assertEquals("x", getText())
+        assertEquals(0, pendingBufferSize)
+    }
+
+    @Test fun bufferedKeystrokesAreDiscardedWhenADifferentFieldStarts() {
+        reset()
+        inputConnectionReady = false
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('a'.code))
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('b'.code))
+        handleMessages()
+        assertEquals(2, pendingBufferSize)
+
+        // A different field starts (restarting=false): the buffer must be dropped, never replayed
+        // into the new field — the cross-field-leak guard.
+        setText("")
+        handleMessages()
+        assertEquals("", getText())
+        assertEquals(0, pendingBufferSize)
     }
 
     @Test fun delete() {
