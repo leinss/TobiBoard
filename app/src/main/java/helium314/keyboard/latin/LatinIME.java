@@ -62,6 +62,7 @@ import helium314.keyboard.latin.common.CoordinateUtils;
 import helium314.keyboard.latin.common.InputPointers;
 import helium314.keyboard.latin.common.ViewOutlineProviderUtilsKt;
 import helium314.keyboard.latin.define.DebugFlags;
+import helium314.keyboard.latin.inputlogic.EarlyInputBuffer;
 import helium314.keyboard.latin.inputlogic.InputLogic;
 import helium314.keyboard.latin.personalization.PersonalizationHelper;
 import helium314.keyboard.latin.settings.Defaults;
@@ -217,6 +218,23 @@ public class LatinIME extends InputMethodService implements
 
     private final ClipboardHistoryManager mClipboardHistoryManager = new ClipboardHistoryManager(this);
 
+    // --- Early-keystroke buffering -------------------------------------------------------------
+    // Taps can arrive in the brief window after onStartInputView while the input connection caches
+    // are still being (re)established (the resetCaches-failed path in onStartInputViewInternal).
+    // Committing then would write to a broken connection and silently drop the character — the
+    // reported "first few keystrokes don't respond" bug. We buffer those events and replay them
+    // once the connection is ready. See onEvent() (the gate), onInputConnectionReady() (the flush
+    // trigger), replayPendingInputs() (re-dispatch) and EarlyInputBuffer (tested FIFO/cap policy).
+    // TODO: pick the cap. How many early taps are worth preserving before we start dropping?
+    //  Too small loses a fast typer's leading characters; too large risks replaying a stale burst.
+    private static final int MAX_PENDING_EARLY_EVENTS = 8;
+    private final EarlyInputBuffer<Event> mPendingEarlyEvents =
+            new EarlyInputBuffer<>(MAX_PENDING_EARLY_EVENTS);
+    // Whether the input connection is ready to accept commits. Driven by onStartInputViewInternal's
+    // resetCaches branches and the MSG_RESET_CACHES retry (see onInputConnectionReady/NotReady).
+    // Default true: before any onStartInputView there is nothing to buffer.
+    private boolean mInputConnectionReady = true;
+
     public static final class UIHandler extends LeakGuardHandlerWrapper<LatinIME> {
         private static final int MSG_UPDATE_SHIFT_STATE = 0;
         private static final int MSG_PENDING_IMS_CALLBACK = 1;
@@ -323,11 +341,16 @@ public class LatinIME extends InputMethodService implements
                         // If we were able to reset the caches, then we can reload the keyboard.
                         // Otherwise, we'll do it when we can.
                         latinIme.mKeyboardSwitcher.reloadMainKeyboard();
+                        // Connection is back: flush keystrokes buffered during the not-ready window.
+                        latinIme.onInputConnectionReady();
                     } else if (msg.arg2 == 0) {
                         // All retries exhausted and the input connection is still broken.
                         // Hide the keyboard so the framework issues a fresh onStartInput when
                         // the user next taps the field, re-establishing the connection.
                         Log.w(TAG, "Input connection reset failed after all retries; hiding keyboard to force reconnect.");
+                        // Those buffered keystrokes can't be delivered into a hidden keyboard; drop
+                        // them so they don't replay into a later, unrelated field.
+                        latinIme.discardPendingEarlyInputs();
                         latinIme.requestHideSelf(0);
                     }
                     break;
@@ -1312,6 +1335,13 @@ public class LatinIME extends InputMethodService implements
         final boolean inputTypeChanged = !currentSettingsValues.isSameInputType(editorInfo);
         final boolean isDifferentTextField = !restarting || inputTypeChanged;
 
+        if (isDifferentTextField) {
+            // A different field is starting: drop any keystrokes buffered for the previous field
+            // (the connection-not-ready buffer is per-session) so they can never replay into this
+            // one. Must run before the resetCaches success branch below calls onInputConnectionReady.
+            discardPendingEarlyInputs();
+        }
+
         StatsUtils.onStartInputView(editorInfo.inputType,
                 Settings.getValues().mDisplayOrientation,
                 !isDifferentTextField);
@@ -1356,6 +1386,10 @@ public class LatinIME extends InputMethodService implements
                 mHandler.postResetCaches(isDifferentTextField, 5 /* remainingTries */);
                 // mLastSelection{Start,End} are reset later in this method, no need to do it here
                 needToCallLoadKeyboardLater = true;
+                // Caches couldn't be established (mIC may be non-null but inert here, so this is the
+                // signal — not isConnected()). Keystrokes that arrive now are buffered in onEvent()
+                // and replayed once retryResetCaches reconnects (or discarded if it gives up).
+                onInputConnectionNotReady();
             } else {
                 // When rotating, and when input is starting again in a field from where the focus
                 // didn't move (the keyboard having been closed with the back key),
@@ -1366,10 +1400,16 @@ public class LatinIME extends InputMethodService implements
                     mHandler.postResumeSuggestions(true /* shouldDelay */);
                 }
                 needToCallLoadKeyboardLater = false;
+                // Connection is ready immediately; flush anything buffered from a prior not-ready
+                // window (normally empty).
+                onInputConnectionReady();
             }
         } else {
             // If we have a hardware keyboard we don't need to call loadKeyboard later anyway.
             needToCallLoadKeyboardLater = false;
+            // No software-connection reset path here; treat the connection as ready so software
+            // events (if any) are not buffered, and flush anything left over.
+            onInputConnectionReady();
         }
 
         if (isDifferentTextField) {
@@ -1457,6 +1497,9 @@ public class LatinIME extends InputMethodService implements
         // Remove pending messages related to update suggestions
         mHandler.cancelUpdateSuggestionStrip();
         clearPendingTextFixState();
+        // The input session is ending: drop any keystrokes buffered for it so they can't replay
+        // into a later, unrelated field.
+        discardPendingEarlyInputs();
         // Should do the following in onFinishInputInternal but until JB MR2 it's not called :(
         mInputLogic.finishInput();
         mKeyboardActionListener.resetMetaState();
@@ -1817,9 +1860,67 @@ public class LatinIME extends InputMethodService implements
         mKeyboardActionListener.onCodeInput(codePoint, x, y, isKeyRepeat);
     }
 
+    /**
+     * The input connection's caches could not be (re)established yet — the resetCaches-failed window
+     * in onStartInputViewInternal. We must use this explicit flag, NOT mConnection.isConnected():
+     * in that window reloadTextCache() has already set mIC to a non-null but inert connection
+     * (RichInputConnection#reloadTextCache), so isConnected() is true even though commits silently
+     * no-op. Keystrokes arriving while this is false are buffered (see onEvent) and replayed once
+     * onInputConnectionReady() fires.
+     */
+    private void onInputConnectionNotReady() {
+        mInputConnectionReady = false;
+    }
+
+    /** The input connection is (re)established; flush any keystrokes buffered while it was not. */
+    private void onInputConnectionReady() {
+        mInputConnectionReady = true;
+        replayPendingInputs();
+    }
+
+    /** Buffer a keystroke that arrived before the connection was ready (cap policy in the buffer). */
+    private void enqueueEarlyEvent(@NonNull final Event event) {
+        mPendingEarlyEvents.add(event);
+    }
+
+    /**
+     * Replay keystrokes buffered while the input connection was not ready, in press order, now that
+     * it is. Re-dispatches through onEvent() — the same path a live tap takes — so composing and
+     * suggestions apply as if typed now; onEvent() re-checks mInputConnectionReady, so any event
+     * re-buffers itself if the connection drops again mid-replay. Ordering / drain semantics live in
+     * EarlyInputBuffer.drain() (unit-tested); the gate + replay wiring is covered by InputLogicTest.
+     */
+    private void replayPendingInputs() {
+        for (final Event event : mPendingEarlyEvents.drain()) {
+            onEvent(event);
+        }
+    }
+
+    /**
+     * Drop buffered keystrokes that can no longer be delivered. Called when the keyboard is hiding
+     * (reset gave up) and when a different text field starts — so input typed into field A while its
+     * connection was not ready can never replay into an unrelated field B.
+     */
+    private void discardPendingEarlyInputs() {
+        mPendingEarlyEvents.clear();
+    }
+
     // This method is public for testability of LatinIME, but also in the future it should
     // completely replace #onCodeInput.
     public void onEvent(@NonNull final Event event) {
+        // Buffer text-producing keystrokes that arrive before the input connection is ready (the
+        // resetCaches-failed window) and replay them on reconnect — committing now is a silent no-op
+        // that loses the character. Voice / text-fix are connection-independent toggles, so they are
+        // never buffered. The gate sits before clearUndo() so a deferred keystroke does not dismiss a
+        // pending undo offer until it is actually applied on replay.
+        final int keyCode = event.getKeyCode();
+        final boolean isConnectionIndependentAction = keyCode == KeyCode.VOICE_INPUT
+                || keyCode == KeyCode.VOICE_STT_INPUT || keyCode == KeyCode.TEXT_FIX
+                || keyCode == KeyCode.TEXT_FIX_2;
+        if (!isConnectionIndependentAction && !mInputConnectionReady) {
+            enqueueEarlyEvent(event);
+            return;
+        }
         // Any real key event dismisses a pending "undo last insertion" offer.
         clearUndo();
         if (KeyCode.VOICE_INPUT == event.getKeyCode() || KeyCode.VOICE_STT_INPUT == event.getKeyCode()) {

@@ -6,6 +6,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.os.SystemClock
 import helium314.keyboard.latin.ClipboardHistoryEntry
+import helium314.keyboard.latin.define.DebugFlags
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.Log
 
@@ -39,38 +40,74 @@ class ClipboardDao private constructor(private val db: Database) {
     // own ENCRYPTED flag so plaintext (legacy / API < 23) and encrypted rows can coexist.
     private val encrypting = ClipboardCipher.isAvailable()
 
-    // cache is loaded at start and never dropped
-    private val cache = mutableListOf<ClipboardHistoryEntry>().apply {
-        db.readableDatabase.query(
-            TABLE,
-            arrayOf(COLUMN_ID, COLUMN_TIMESTAMP, COLUMN_PINNED, COLUMN_TEXT, COLUMN_USE_COUNT, COLUMN_ANNOTATION, COLUMN_ENCRYPTED),
-            null,
-            null,
-            null,
-            null,
-            "$COLUMN_PINNED, $COLUMN_TIMESTAMP DESC"
-        ).use {
-            while (it.moveToNext()) {
-                val isEncrypted = it.getInt(6) != 0
-                // A row flagged encrypted whose content won't decrypt (key lost / corrupt) is dropped
-                // rather than surfaced as ciphertext.
-                val text = if (isEncrypted)
-                    (it.getString(3)?.let { stored -> ClipboardCipher.decrypt(stored) } ?: continue)
-                else it.getString(3)
-                val storedAnnotation = it.getString(5)
-                val annotation = if (isEncrypted && storedAnnotation != null)
-                    ClipboardCipher.decrypt(storedAnnotation) else storedAnnotation
-                add(ClipboardHistoryEntry(
-                    id = it.getLong(0),
-                    timeStamp = it.getLong(1),
-                    isPinned = it.getInt(2) != 0,
-                    text = text,
-                    useCount = it.getInt(4),
-                    annotation = annotation,
-                ))
+    // The cache is loaded lazily on first access to the [cache] accessor and never dropped.
+    // The load (SQLite open + per-row AES-GCM decrypt) is the expensive part; call
+    // ensureCacheLoaded() from a background thread so it does not run on the IME main thread
+    // during LatinIME.onCreate() — that synchronous cost was swallowing the first keystrokes.
+    @Volatile private var loadedCache: MutableList<ClipboardHistoryEntry>? = null
+    private val cacheLoadLock = Any()
+
+    private val cache: MutableList<ClipboardHistoryEntry>
+        get() {
+            loadedCache?.let { return it }
+            synchronized(cacheLoadLock) {
+                loadedCache?.let { return it }
+                return readAllFromDb().also { loadedCache = it }
             }
         }
-        sort()
+
+    /**
+     * Forces the one-time cache load (DB query + decrypt). Idempotent and safe to call
+     * concurrently; intended to be invoked off the main thread so consumers that touch the cache
+     * later find it already populated instead of paying the load synchronously.
+     */
+    fun ensureCacheLoaded() {
+        cache // touching the accessor triggers the load if it hasn't happened yet
+    }
+
+    private fun readAllFromDb(): MutableList<ClipboardHistoryEntry> {
+        val started = if (DebugFlags.DEBUG_ENABLED) SystemClock.elapsedRealtime() else 0L
+        val list = mutableListOf<ClipboardHistoryEntry>()
+        // A SQLite open / migration / decrypt failure must degrade to an empty (or partial) cache,
+        // never propagate: ensureCacheLoaded() may run on a coroutine with no exception handler, so
+        // an uncaught throw here would crash the IME process.
+        try {
+            db.readableDatabase.query(
+                TABLE,
+                arrayOf(COLUMN_ID, COLUMN_TIMESTAMP, COLUMN_PINNED, COLUMN_TEXT, COLUMN_USE_COUNT, COLUMN_ANNOTATION, COLUMN_ENCRYPTED),
+                null,
+                null,
+                null,
+                null,
+                "$COLUMN_PINNED, $COLUMN_TIMESTAMP DESC"
+            ).use {
+                while (it.moveToNext()) {
+                    val isEncrypted = it.getInt(6) != 0
+                    // A row flagged encrypted whose content won't decrypt (key lost / corrupt) is dropped
+                    // rather than surfaced as ciphertext.
+                    val text = if (isEncrypted)
+                        (it.getString(3)?.let { stored -> ClipboardCipher.decrypt(stored) } ?: continue)
+                    else it.getString(3)
+                    val storedAnnotation = it.getString(5)
+                    val annotation = if (isEncrypted && storedAnnotation != null)
+                        ClipboardCipher.decrypt(storedAnnotation) else storedAnnotation
+                    list.add(ClipboardHistoryEntry(
+                        id = it.getLong(0),
+                        timeStamp = it.getLong(1),
+                        isPinned = it.getInt(2) != 0,
+                        text = text,
+                        useCount = it.getInt(4),
+                        annotation = annotation,
+                    ))
+                }
+            }
+            list.sort()
+        } catch (t: Throwable) {
+            Log.e(TAG, "failed to load clipboard cache; degrading to ${list.size} entries", t)
+        }
+        if (DebugFlags.DEBUG_ENABLED)
+            Log.d(TAG, "loaded ${list.size} clips in ${SystemClock.elapsedRealtime() - started} ms on ${Thread.currentThread().name}")
+        return list
     }
 
     fun addClip(timestamp: Long, pinned: Boolean, text: String) {
