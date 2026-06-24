@@ -4,7 +4,7 @@
 default_platform(:android)
 
 platform :android do
-  desc "Upload the signed release AAB + store listing to Google Play (TRACK defaults to internal)"
+  desc "Upload the signed release AAB + store listing to Google Play (TRACK defaults to internal, STATUS to live for tester tracks / draft for production)"
   lane :play do |options|
     gradle_path = File.expand_path("../app/build.gradle.kts", __dir__)
     version_code = File.read(gradle_path)[/versionCode\s*=\s*(\d+)/, 1].to_i
@@ -12,11 +12,19 @@ platform :android do
              .max_by { |f| File.mtime(f) }
     UI.user_error!("No release AAB found — run `make bundle-release` first.") if aab.nil?
 
+    track = options[:track] || "internal"
+    # release_status precedence: explicit STATUS wins; otherwise go live ("completed") on tester
+    # tracks (internal/alpha/beta) but stay "draft" on production so a full public rollout is always
+    # a deliberate choice. "auto"/empty (the Makefile's unset sentinel) means "use this default".
+    status = options[:status]
+    status = nil if status.nil? || status.to_s.strip.empty? || status == "auto"
+    status ||= (track == "production" ? "draft" : "completed")
+
     upload_to_play_store(
       package_name: "xyz.leinss.TobiBoard",
       json_key: ENV["PLAY_SERVICE_ACCOUNT_JSON"],
-      track: options[:track] || "internal",
-      release_status: "draft",      # uploads as draft; review + roll out in Play Console
+      track: track,
+      release_status: status,        # "completed" = live to that track; "draft" = stage for Play Console
       aab: aab,
       version_code: version_code,
       skip_upload_apk: true,
