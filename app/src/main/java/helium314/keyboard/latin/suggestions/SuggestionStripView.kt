@@ -91,6 +91,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         fun pickSuggestionManually(word: SuggestedWordInfo?)
         fun onCodeInput(primaryCode: Int, x: Int, y: Int, isKeyRepeat: Boolean)
         fun removeSuggestion(word: String?)
+        fun addToDictionary(word: String?)
         fun removeExternalSuggestions()
         fun onSwipeDownOnToolbar()
     }
@@ -614,40 +615,17 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility") // no need for View#performClick, we only return false mostly anyway
     private fun onLongClickSuggestion(wordView: TextView): Boolean {
-        var showIcon = true
-        if (wordView.tag is Int) {
-            val index = wordView.tag as Int
-            if (index < suggestedWords.size() && suggestedWords.getInfo(index).mSourceDict == Dictionary.DICTIONARY_USER_TYPED)
-                showIcon = false
-        }
-        if (showIcon) {
-            val icon = KeyboardIconsSet.instance.getNewDrawable(KeyboardIconsSet.NAME_BIN, context)!!
-            Settings.getValues().mColors.setColor(icon, ColorType.REMOVE_SUGGESTION_ICON)
-            val w = icon.intrinsicWidth
-            val h = icon.intrinsicHeight
-            wordView.setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null)
-            wordView.ellipsize = TextUtils.TruncateAt.END
-            val downOk = AtomicBoolean(false)
-            wordView.setOnTouchListener { _, motionEvent ->
-                if (motionEvent.action == MotionEvent.ACTION_UP && downOk.get()) {
-                    val x = motionEvent.x
-                    val y = motionEvent.y
-                    if (0 < x && x < w && 0 < y && y < h) {
-                        removeSuggestion(wordView)
-                        wordView.cancelLongPress()
-                        wordView.isPressed = false
-                        return@setOnTouchListener true
-                    }
-                } else if (motionEvent.action == MotionEvent.ACTION_DOWN) {
-                    val x = motionEvent.x
-                    val y = motionEvent.y
-                    if (0 < x && x < w && 0 < y && y < h) {
-                        downOk.set(true)
-                    }
-                }
-                false
+        val index = wordView.tag as? Int
+        val info = if (index != null && index < suggestedWords.size()) suggestedWords.getInfo(index) else null
+        if (info != null) {
+            if (info.mSourceDict == Dictionary.DICTIONARY_USER_TYPED) {
+                // The word is in no dictionary: offer to add it to the personal dictionary.
+                if (wordView.text.isNotBlank())
+                    showWordActionIcon(wordView, KeyboardIconsSet.NAME_ADD_TO_DICTIONARY) { addToDictionary(wordView) }
+            } else {
+                // The word comes from a dictionary: offer to remove it (existing behavior).
+                showWordActionIcon(wordView, KeyboardIconsSet.NAME_BIN) { removeSuggestion(wordView) }
             }
         }
         if (DebugFlags.DEBUG_ENABLED && (isShowingMoreSuggestionPanel || !showMoreSuggestions())) {
@@ -655,6 +633,37 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             return true
         }
         return showMoreSuggestions()
+    }
+
+    /** Draws [iconName] at the start of [wordView] and runs [action] when the icon area is tapped. */
+    @SuppressLint("ClickableViewAccessibility") // no need for View#performClick, we only return false mostly anyway
+    private fun showWordActionIcon(wordView: TextView, iconName: String, action: () -> Unit) {
+        val icon = KeyboardIconsSet.instance.getNewDrawable(iconName, context)!!
+        Settings.getValues().mColors.setColor(icon, ColorType.REMOVE_SUGGESTION_ICON)
+        val w = icon.intrinsicWidth
+        val h = icon.intrinsicHeight
+        wordView.setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null)
+        wordView.ellipsize = TextUtils.TruncateAt.END
+        val downOk = AtomicBoolean(false)
+        wordView.setOnTouchListener { _, motionEvent ->
+            if (motionEvent.action == MotionEvent.ACTION_UP && downOk.get()) {
+                val x = motionEvent.x
+                val y = motionEvent.y
+                if (0 < x && x < w && 0 < y && y < h) {
+                    action()
+                    wordView.cancelLongPress()
+                    wordView.isPressed = false
+                    return@setOnTouchListener true
+                }
+            } else if (motionEvent.action == MotionEvent.ACTION_DOWN) {
+                val x = motionEvent.x
+                val y = motionEvent.y
+                if (0 < x && x < w && 0 < y && y < h) {
+                    downOk.set(true)
+                }
+            }
+            false
+        }
     }
 
     private fun showMoreSuggestions(): Boolean {
@@ -683,6 +692,16 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             moreSuggestionsView.dismissPopupKeysPanel()
         }
         KeyboardSwitcher.getInstance().showToast(text, true)
+    }
+
+    private fun addToDictionary(wordView: TextView) {
+        val word = wordView.text.toString()
+        listener.addToDictionary(word)
+        moreSuggestionsView.dismissPopupKeysPanel()
+        // Drop the "+" icon and its tap handler; the word becomes valid on the next suggestions query.
+        wordView.setOnTouchListener(null)
+        wordView.setCompoundDrawables(null, null, null, null)
+        KeyboardSwitcher.getInstance().showToast(resources.getString(R.string.added_word_to_dictionary, word), false)
     }
 
     private fun removeSuggestion(wordView: TextView) {
