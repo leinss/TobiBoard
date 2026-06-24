@@ -84,6 +84,7 @@ class KeyboardIconsSet private constructor() {
         const val NAME_RESIZE_ONEHANDED_KEY = "resize_onehanded_key"
         const val NAME_TOOLBAR_KEY = "toolbar_key"
         const val NAME_BIN = "bin"
+        const val NAME_ADD_TO_DICTIONARY = "add_to_dictionary"
         const val NAME_TEXT_FIX_KEY = "text_fix_key"
         const val NAME_TEXT_FIX_2_KEY = "text_fix_2_key"
         const val NAME_STT_ACTION_KEY = "stt_action_key"
@@ -128,6 +129,7 @@ class KeyboardIconsSet private constructor() {
             NAME_RESIZE_ONEHANDED_KEY to        R.drawable.ic_arrow_horizontal,
             NAME_TOOLBAR_KEY to                 R.drawable.ic_arrow_right,
             NAME_BIN to                         R.drawable.ic_bin,
+            NAME_ADD_TO_DICTIONARY to           R.drawable.ic_plus,
             NAME_TEXT_FIX_KEY to                R.drawable.ic_text_fix,
             NAME_TEXT_FIX_2_KEY to              R.drawable.ic_text_fix_2,
             NAME_STT_ACTION_KEY to              R.drawable.ic_stt_voice,
@@ -192,6 +194,7 @@ class KeyboardIconsSet private constructor() {
             NAME_RESIZE_ONEHANDED_KEY to        R.drawable.ic_arrow_horizontal,
             NAME_TOOLBAR_KEY to                 R.drawable.ic_arrow_right,
             NAME_BIN to                         R.drawable.ic_bin,
+            NAME_ADD_TO_DICTIONARY to           R.drawable.ic_plus,
             NAME_TEXT_FIX_KEY to                R.drawable.ic_text_fix,
             NAME_TEXT_FIX_2_KEY to              R.drawable.ic_text_fix_2,
             NAME_STT_ACTION_KEY to              R.drawable.ic_stt_voice,
@@ -256,6 +259,7 @@ class KeyboardIconsSet private constructor() {
             NAME_RESIZE_ONEHANDED_KEY to        R.drawable.ic_arrow_horizontal_rounded,
             NAME_TOOLBAR_KEY to                 R.drawable.ic_arrow_right_rounded,
             NAME_BIN to                         R.drawable.ic_bin_rounded,
+            NAME_ADD_TO_DICTIONARY to           R.drawable.ic_plus,
             NAME_TEXT_FIX_KEY to                R.drawable.ic_text_fix,
             NAME_TEXT_FIX_2_KEY to              R.drawable.ic_text_fix_2,
             NAME_STT_ACTION_KEY to              R.drawable.ic_stt_voice,
