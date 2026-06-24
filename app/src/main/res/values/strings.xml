@@ -687,6 +687,8 @@ New dictionary:
     <string name="user_dict_word_already_present">This word is already present in the %s user dictionary. Please type another one.</string>
     <!-- User dictionary settings. Text button to add a word -->
     <string name="user_dict_add_word_button">Add a word</string>
+    <!-- Toast shown after adding a word to the personal dictionary from the suggestion strip. %s is the word. -->
+    <string name="added_word_to_dictionary">Added \"%s\" to dictionary</string>
     <!-- Option for choosing theme style -->
     <string name="theme_style">Style</string>
     <!-- Option for choosing icon style (same options as theme_style) -->
