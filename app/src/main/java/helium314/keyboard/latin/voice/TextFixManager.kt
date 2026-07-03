@@ -195,12 +195,16 @@ class TextFixManager(
             // Bail before any heavy work if a cancel raced in during the preflight.
             if (activeToken != token) return@launch
 
+            // Make the fix aware of the user's personal dictionary so it does not "correct" their
+            // custom words away. Reads the user-dictionary provider (I/O) — fine here on Dispatchers.IO.
+            val effectivePrompt = PersonalDictionaryPrompt.augment(context, prompt)
+
             val client: TextFixEngine = when (provider) {
-                AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalLiteRtEngine(context, prompt)
+                AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalLiteRtEngine(context, effectivePrompt)
                 AiProvider.OPENROUTER, AiProvider.PAYPERQ -> OpenRouterClient(
                     apiKey = apiKey,
                     model = model,
-                    systemPrompt = prompt,
+                    systemPrompt = effectivePrompt,
                     runtimeInstruction = null,
                     provider = provider,
                     useZeroDataRetention = useZdr,
