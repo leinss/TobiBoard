@@ -1,0 +1,4 @@
+- Add a word to your personal dictionary straight from the long-press Enter menu
+- Clearer "add to dictionary" icon (an open book with a plus)
+- Long-press Enter now shows just the handy actions (clipboard, voice, text fix, add word) without the confusing arrows
+- AI text fix now keeps the words you saved to your dictionary unchanged

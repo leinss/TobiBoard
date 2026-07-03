@@ -5,7 +5,6 @@
  */
 package helium314.keyboard.keyboard.internal.keyboard_parser.floris
 
-import android.view.inputmethod.EditorInfo
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -150,7 +149,7 @@ sealed interface KeyData : AbstractKeyData {
         }
 
         private fun getActionKeyPopupKeys(params: KeyboardParams): SimplePopups? =
-            getActionKeyPopupKeyString(params.mId)?.let { createActionPopupKeys(it, params) }?.takeIf { sp ->
+            getActionKeyPopupKeyString(params.mId).let { createActionPopupKeys(it, params) }.takeIf { sp ->
                 sp.popupKeys?.any { isActionPopupRealKey(it) } == true
             }
 
@@ -160,40 +159,18 @@ sealed interface KeyData : AbstractKeyData {
         // inside this specific popup list.
         private fun isActionPopupRealKey(entry: String): Boolean = entry.contains('|')
 
-        private fun getActionKeyPopupKeyString(keyboardId: KeyboardId): String? {
-            val action = keyboardId.imeAction()
-            val navigatePrev = keyboardId.navigatePrevious()
-            val navigateNext = keyboardId.navigateNext()
+        // TobiBoard: the long-press-Return popup is a quick-actions launcher (clipboard / voice /
+        // text-fix / add-to-dictionary), not a form-field navigator. The previous/next IME-navigation
+        // arrows were removed by user request — they were unlabeled and confusing — so the action set
+        // is shown regardless of the field's imeAction / navigate flags. Emoji is still dropped in
+        // password and number/email/date/time layouts, where an emoji shortcut on Return makes no
+        // sense (matching the prior behavior); everywhere else the emoji shortcut stays.
+        private fun getActionKeyPopupKeyString(keyboardId: KeyboardId): String {
             return when {
-                keyboardId.passwordInput() -> when {
-                    navigatePrev && action == EditorInfo.IME_ACTION_NEXT -> POPUP_KEYS_NAVIGATE_PREVIOUS
-                    action == EditorInfo.IME_ACTION_NEXT -> null
-                    navigateNext && action == EditorInfo.IME_ACTION_PREVIOUS -> POPUP_KEYS_NAVIGATE_NEXT
-                    action == EditorInfo.IME_ACTION_PREVIOUS -> null
-                    navigateNext && navigatePrev -> POPUP_KEYS_NAVIGATE_PREVIOUS_NEXT
-                    navigateNext -> POPUP_KEYS_NAVIGATE_NEXT
-                    navigatePrev -> POPUP_KEYS_NAVIGATE_PREVIOUS
-                    else -> null
-                }
+                keyboardId.passwordInput() -> POPUP_KEYS_ACTIONS
                 // could change definition of numbers to query a range, or have a pre-defined list, but not that crucial
-                keyboardId.isNumberLayout || keyboardId.mMode in listOf(KeyboardId.MODE_EMAIL, KeyboardId.MODE_DATE, KeyboardId.MODE_TIME, KeyboardId.MODE_DATETIME) -> when {
-                    action == EditorInfo.IME_ACTION_NEXT && navigatePrev -> POPUP_KEYS_NAVIGATE_PREVIOUS
-                    action == EditorInfo.IME_ACTION_NEXT -> null
-                    action == EditorInfo.IME_ACTION_PREVIOUS && navigateNext -> POPUP_KEYS_NAVIGATE_NEXT
-                    action == EditorInfo.IME_ACTION_PREVIOUS -> null
-                    navigateNext && navigatePrev -> POPUP_KEYS_NAVIGATE_PREVIOUS_NEXT
-                    navigateNext -> POPUP_KEYS_NAVIGATE_NEXT
-                    navigatePrev -> POPUP_KEYS_NAVIGATE_PREVIOUS
-                    else -> null
-                }
-                action == EditorInfo.IME_ACTION_NEXT && navigatePrev -> POPUP_KEYS_NAVIGATE_EMOJI_PREVIOUS
-                action == EditorInfo.IME_ACTION_NEXT -> POPUP_KEYS_NAVIGATE_EMOJI
-                action == EditorInfo.IME_ACTION_PREVIOUS && navigateNext -> POPUP_KEYS_NAVIGATE_EMOJI_NEXT
-                action == EditorInfo.IME_ACTION_PREVIOUS -> POPUP_KEYS_NAVIGATE_EMOJI
-                navigateNext && navigatePrev -> POPUP_KEYS_NAVIGATE_EMOJI_PREVIOUS_NEXT
-                navigateNext -> POPUP_KEYS_NAVIGATE_EMOJI_NEXT
-                navigatePrev -> POPUP_KEYS_NAVIGATE_EMOJI_PREVIOUS
-                else -> POPUP_KEYS_NAVIGATE_EMOJI
+                keyboardId.isNumberLayout || keyboardId.mMode in listOf(KeyboardId.MODE_EMAIL, KeyboardId.MODE_DATE, KeyboardId.MODE_TIME, KeyboardId.MODE_DATETIME) -> POPUP_KEYS_ACTIONS
+                else -> POPUP_KEYS_ACTIONS_EMOJI
             }
         }
 
@@ -343,14 +320,13 @@ sealed interface KeyData : AbstractKeyData {
                     && params.mId.mSubtype.layouts[LayoutType.FUNCTIONAL] != "functional_keys_tablet"
                     && params.mId.mMode in setOf(KeyboardId.MODE_URL, KeyboardId.MODE_EMAIL))
 
-        // could make arrays right away, but they need to be copied anyway as popupKeys arrays are modified when creating KeyParams
-        private const val POPUP_KEYS_NAVIGATE_PREVIOUS = "!fixedColumnOrder!4,!needsDividers!,!icon/previous_key|!code/key_action_previous,!icon/clipboard_action_key|!code/key_clipboard,!icon/shortcut_key|!code/key_voice_input,!icon/text_fix_key|!code/key_text_fix"
-        private const val POPUP_KEYS_NAVIGATE_NEXT = "!fixedColumnOrder!4,!needsDividers!,!icon/clipboard_action_key|!code/key_clipboard,!icon/shortcut_key|!code/key_voice_input,!icon/text_fix_key|!code/key_text_fix,!icon/next_key|!code/key_action_next"
-        private const val POPUP_KEYS_NAVIGATE_PREVIOUS_NEXT = "!fixedColumnOrder!5,!needsDividers!,!icon/previous_key|!code/key_action_previous,!icon/clipboard_action_key|!code/key_clipboard,!icon/shortcut_key|!code/key_voice_input,!icon/text_fix_key|!code/key_text_fix,!icon/next_key|!code/key_action_next"
-        private const val POPUP_KEYS_NAVIGATE_EMOJI_PREVIOUS = "!fixedColumnOrder!5,!needsDividers!,!icon/previous_key|!code/key_action_previous,!icon/clipboard_action_key|!code/key_clipboard,!icon/emoji_action_key|!code/key_emoji,!icon/shortcut_key|!code/key_voice_input,!icon/text_fix_key|!code/key_text_fix"
-        private const val POPUP_KEYS_NAVIGATE_EMOJI = "!fixedColumnOrder!4,!needsDividers!,!icon/clipboard_action_key|!code/key_clipboard,!icon/emoji_action_key|!code/key_emoji,!icon/shortcut_key|!code/key_voice_input,!icon/text_fix_key|!code/key_text_fix"
-        private const val POPUP_KEYS_NAVIGATE_EMOJI_NEXT = "!fixedColumnOrder!5,!needsDividers!,!icon/clipboard_action_key|!code/key_clipboard,!icon/emoji_action_key|!code/key_emoji,!icon/shortcut_key|!code/key_voice_input,!icon/text_fix_key|!code/key_text_fix,!icon/next_key|!code/key_action_next"
-        private const val POPUP_KEYS_NAVIGATE_EMOJI_PREVIOUS_NEXT = "!fixedColumnOrder!6,!needsDividers!,!icon/previous_key|!code/key_action_previous,!icon/clipboard_action_key|!code/key_clipboard,!icon/emoji_action_key|!code/key_emoji,!icon/shortcut_key|!code/key_voice_input,!icon/text_fix_key|!code/key_text_fix,!icon/next_key|!code/key_action_next"
+        // Quick-actions shown on long-press-Return. No prev/next IME-navigation arrows (removed by
+        // user request). The trailing add-to-dictionary entry is a fixed (non-reorderable) key, so it
+        // always appears; the clipboard/emoji/voice/text-fix entries are still reorderable/toggleable
+        // via applyActionPopupOrder, which recomputes the fixedColumnOrder count from the survivors.
+        // POPUP_KEYS_ACTIONS omits the emoji shortcut (password / number / email / date-time layouts).
+        private const val POPUP_KEYS_ACTIONS = "!fixedColumnOrder!4,!needsDividers!,!icon/clipboard_action_key|!code/key_clipboard,!icon/shortcut_key|!code/key_voice_input,!icon/text_fix_key|!code/key_text_fix,!icon/add_to_dictionary|!code/key_add_to_dictionary"
+        private const val POPUP_KEYS_ACTIONS_EMOJI = "!fixedColumnOrder!5,!needsDividers!,!icon/clipboard_action_key|!code/key_clipboard,!icon/emoji_action_key|!code/key_emoji,!icon/shortcut_key|!code/key_voice_input,!icon/text_fix_key|!code/key_text_fix,!icon/add_to_dictionary|!code/key_add_to_dictionary"
     }
 
     /** get the label, but also considers code, which can't be set separately for popup keys and thus goes into the label */
