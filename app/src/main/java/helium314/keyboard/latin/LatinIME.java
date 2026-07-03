@@ -1458,6 +1458,10 @@ public class LatinIME extends InputMethodService implements
         if (isInputViewShown()) {
             setNavigationBarColor();
             workaroundForHuaweiStatusBarIssue();
+            // The keyboard just became the focused IME, so it may now read the clipboard (Android
+            // 10+ blocks background reads). Catch up on any clip copied while it was hidden — the
+            // live OnPrimaryClipChanged callback can't read those. No-op unless history is enabled.
+            mClipboardHistoryManager.captureCurrentClipIfEnabled();
         }
     }
 

@@ -42,6 +42,7 @@ import helium314.keyboard.latin.Suggest;
 import helium314.keyboard.latin.Suggest.OnGetSuggestedWordsCallback;
 import helium314.keyboard.latin.SuggestedWords;
 import helium314.keyboard.latin.SuggestedWords.SuggestedWordInfo;
+import helium314.keyboard.latin.R;
 import helium314.keyboard.latin.WordComposer;
 import helium314.keyboard.latin.common.Constants;
 import helium314.keyboard.latin.common.InputPointers;
@@ -690,6 +691,33 @@ public final class InputLogic {
     }
 
     /**
+     * Adds the currently selected text (if any) or else the word at the cursor to the personal
+     * dictionary. Uses the selection when present so a full email or phrase can be added: its "."
+     * and "@" are word separators, so it would never appear as a single word/suggestion otherwise —
+     * which is exactly why the suggestion-strip long-press "+" can't reach it. Reuses the same
+     * {@link LatinIME#addToDictionary} path as that "+", and gives explicit toast feedback because,
+     * unlike the "+", this key does not visibly consume a suggestion chip.
+     */
+    private void addCurrentWordOrSelectionToDictionary(final SettingsValues settingsValues,
+            final String currentKeyboardScript) {
+        CharSequence word = mConnection.getSelectedText(0 /* no styles */);
+        if (TextUtils.isEmpty(word)) {
+            final TextRange range = mConnection.getWordRangeAtCursor(
+                    settingsValues.mSpacingAndPunctuations, currentKeyboardScript);
+            word = (range == null) ? null : range.mWord;
+        }
+        final String trimmed = (word == null) ? "" : word.toString().trim();
+        if (trimmed.isEmpty()) {
+            KeyboardSwitcher.getInstance().showToast(
+                    mLatinIME.getString(R.string.add_to_dictionary_nothing_selected), false);
+            return;
+        }
+        mLatinIME.addToDictionary(trimmed);
+        KeyboardSwitcher.getInstance().showToast(
+                mLatinIME.getString(R.string.added_word_to_dictionary, trimmed), false);
+    }
+
+    /**
      * Handle a functional key event.
      * <p>
      * A functional event is a special key, like delete, shift, emoji, or the settings key.
@@ -762,6 +790,9 @@ public final class InputLogic {
                 break;
             case KeyCode.CLIPBOARD_SELECT_WORD:
                 mConnection.selectWord(inputTransaction.getSettingsValues().mSpacingAndPunctuations, currentKeyboardScript);
+                break;
+            case KeyCode.ADD_TO_DICTIONARY:
+                addCurrentWordOrSelectionToDictionary(inputTransaction.getSettingsValues(), currentKeyboardScript);
                 break;
             case KeyCode.CLIPBOARD_COPY:
                 mConnection.copyText(true);

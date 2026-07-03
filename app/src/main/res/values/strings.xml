@@ -218,6 +218,10 @@
     <string name="clipboard_context_delete">Delete</string>
     <string name="clipboard_management">Manage clipboard history</string>
     <string name="clipboard_management_summary">Browse, search, annotate, and delete entries</string>
+    <!-- Shown in the empty clipboard view when clipboard history recording is turned off; tapping it turns the feature on -->
+    <string name="clipboard_history_disabled_hint">Clipboard history is off.\nTap to turn it on.</string>
+    <!-- Shown in the empty clipboard view when history is on but nothing has been saved yet -->
+    <string name="clipboard_history_empty_hint">Copy text while the keyboard is open to save it here.</string>
     <string name="clipboard_annotation_hint">Label (optional)</string>
     <string name="clipboard_annotation_dialog_title">Add label</string>
     <string name="clipboard_search_hint">Search clipboard history…</string>
@@ -356,6 +360,7 @@
     <string name="settings" tools:keep="@string/settings">Settings</string>
     <string name="select_all" tools:keep="@string/select_all" translatable="false">@android:string/selectAll</string>
     <string name="select_word" tools:keep="@string/select_word">Select word</string>
+    <string name="add_to_dictionary" tools:keep="@string/add_to_dictionary">Add to dictionary</string>
     <string name="one_handed" tools:keep="@string/one_handed">One-handed mode</string>
     <string name="split" tools:keep="@string/split">Split keyboard</string>
     <string name="full_left" tools:keep="@string/full_left">Full left</string>
@@ -619,6 +624,8 @@ language, hence "No language". -->
     <string name="setup_step3_title">"Congratulations, you're all set!"</string>
     <!-- Detailed instruction of the 3rd step in the setup wizard. %s is the application name. -->
     <string name="setup_step3_instruction">Now you can type in all your favorite apps with %s.</string>
+    <!-- Tip shown on the final setup step making the (opt-in, off-by-default) clipboard history feature discoverable. -->
+    <string name="setup_step3_tip_clipboard">Tip: turn on Clipboard history in Settings to save and reuse things you copy — it stays on your device, encrypted, and is off by default.</string>
     <!-- The label of the button that triggers the settings screen for the keyboard. -->
     <string name="setup_step3_action">Configure the keyboard</string>
     <!-- The label of the button that finishes the setup wizard. -->
@@ -695,6 +702,8 @@ New dictionary:
     <string name="user_dict_add_word_button">Add a word</string>
     <!-- Toast shown after adding a word to the personal dictionary from the suggestion strip. %s is the word. -->
     <string name="added_word_to_dictionary">Added \"%s\" to dictionary</string>
+    <!-- Toast shown when the "Add to dictionary" toolbar key is tapped but nothing is selected and there is no word at the cursor. -->
+    <string name="add_to_dictionary_nothing_selected">Select a word or place the cursor in one to add it</string>
     <!-- Option for choosing theme style -->
     <string name="theme_style">Style</string>
     <!-- Option for choosing icon style (same options as theme_style) -->

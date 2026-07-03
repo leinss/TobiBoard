@@ -31,6 +31,22 @@ public class ClipboardManagerCompat {
         return System.currentTimeMillis();
     }
 
+    /**
+     * Timestamp of the current primary clip read from its description (metadata) only. Reading the
+     * description does NOT trigger the OS clipboard-access notification the way reading the clip
+     * content does, so this is safe to poll when the keyboard becomes visible to detect whether the
+     * clip changed before paying the cost (and privacy toast) of an actual content read.
+     * Returns 0 when unavailable (no clip, or API &lt; 26 where clip timestamps don't exist).
+     */
+    public static long getPrimaryClipDescriptionTimestamp(ClipboardManager cm) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            final ClipDescription cd = cm.getPrimaryClipDescription();
+            if (cd != null)
+                return cd.getTimestamp();
+        }
+        return 0L;
+    }
+
     public static Boolean getClipSensitivity(final ClipDescription cd) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             return cd != null && cd.getExtras() != null && cd.getExtras().getBoolean("android.content.extra.IS_SENSITIVE");
