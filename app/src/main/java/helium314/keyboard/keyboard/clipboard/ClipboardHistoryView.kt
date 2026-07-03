@@ -153,6 +153,9 @@ class ClipboardHistoryView @JvmOverloads constructor(
         setupToolbarKeys()
         historyManager.prepareClipboardHistory()
         historyManager.setHistoryChangeListener(this)
+        // Grab whatever is currently on the system clipboard as the view opens, so a clip copied
+        // just before opening it shows up immediately (the listener above makes the insert appear).
+        historyManager.captureCurrentClipIfEnabled()
         clipboardAdapter.clipboardHistoryManager = historyManager
 
         val params = KeyDrawParams()
@@ -165,8 +168,10 @@ class ClipboardHistoryView @JvmOverloads constructor(
         placeholderView.apply {
             typeface = params.mTypeface
             setTextColor(params.mTextColor)
-            setTextSize(TypedValue.COMPLEX_UNIT_PX, params.mLabelSize.toFloat() * 2)
+            // A full-sentence hint, unlike the old shrug, so keep it at label size (not doubled).
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, params.mLabelSize.toFloat())
         }
+        updatePlaceholder()
         clipboardRecyclerView.apply {
             adapter = clipboardAdapter
             val keyboardWidth = ResourceUtils.getKeyboardWidth(context, settings.current)
@@ -194,6 +199,30 @@ class ClipboardHistoryView @JvmOverloads constructor(
         clipboardRecyclerView.adapter = null
         clipboardHistoryManager.setHistoryChangeListener(null)
         clipboardAdapter.clipboardHistoryManager = null
+    }
+
+    /**
+     * Sets the empty-view text depending on whether clipboard-history recording is on. When it is
+     * off the hint doubles as a one-tap enable action, so a user who opens the clipboard to an empty
+     * list learns *why* it is empty instead of seeing a bare shrug (the old placeholder).
+     */
+    private fun updatePlaceholder() {
+        if (Settings.getValues().mClipboardHistoryEnabled) {
+            placeholderView.setText(R.string.clipboard_history_empty_hint)
+            placeholderView.isClickable = false
+            placeholderView.setOnClickListener(null)
+        } else {
+            placeholderView.setText(R.string.clipboard_history_disabled_hint)
+            placeholderView.setOnClickListener {
+                val prefs = context.prefs()
+                prefs.edit().putBoolean(Settings.PREF_ENABLE_CLIPBOARD_HISTORY, true).apply()
+                // Reload SettingsValues so mClipboardHistoryEnabled flips immediately for the manager.
+                Settings.getInstance().onSharedPreferenceChanged(prefs, Settings.PREF_ENABLE_CLIPBOARD_HISTORY)
+                updatePlaceholder()
+                // Pick up whatever is on the clipboard right now so the list isn't empty after enabling.
+                if (::clipboardHistoryManager.isInitialized) clipboardHistoryManager.captureCurrentClipIfEnabled()
+            }
+        }
     }
 
     override fun onClick(view: View) {

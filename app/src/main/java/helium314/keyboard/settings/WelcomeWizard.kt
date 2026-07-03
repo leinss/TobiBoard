@@ -416,6 +416,15 @@ fun WelcomeWizard(
                         secondaryText = stringResource(R.string.setup_step3_action),
                         secondaryAction = close
                     )
+                    // Surface the opt-in clipboard-history feature here so users discover it exists;
+                    // it's off by default (privacy) and easy to miss otherwise.
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        stringResource(R.string.setup_step3_tip_clipboard),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                    )
                 }
             }
     }

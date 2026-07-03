@@ -39,6 +39,9 @@ class ClipboardHistoryManager(
     private var clipboardSuggestionView: View? = null
     private var clipboardDao: ClipboardDao? = null
     private val scope = CoroutineScope(SupervisorJob() + loadDispatcher)
+    // Description timestamp of the clip most recently read by captureCurrentClipIfEnabled(), used to
+    // skip redundant content reads (and their OS clipboard-access toast) on repeated keyboard shows.
+    private var lastCatchUpTimestamp = 0L
 
     fun onCreate() {
         clipboardManager = latinIME.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -83,6 +86,42 @@ class ClipboardHistoryManager(
         if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
             fetchPrimaryClip()
             dontShowCurrentSuggestion = false
+        }
+    }
+
+    /**
+     * Records the current system clipboard entry if history is enabled. Call this when the keyboard
+     * becomes visible (window shown / clipboard view opened): on Android 10+ an app may only read
+     * the clipboard while it is the focused IME, so a clip copied while the keyboard was hidden is
+     * NOT readable from the live [onPrimaryClipChanged] callback and would otherwise be lost — this
+     * catch-up read picks it up the moment the keyboard reappears.
+     *
+     * The content read (which triggers the OS clipboard-access notification on Android 12+) is
+     * skipped when the clip is unchanged since the last catch-up, using the description timestamp
+     * (metadata only, no access toast). The work runs on the background [scope] and only touches the
+     * cache after [ClipboardDao.ensureCacheLoaded], so it never blocks the IME main thread the way a
+     * cold synchronous cache load would (which used to swallow the first keystrokes).
+     */
+    fun captureCurrentClipIfEnabled() {
+        if (!latinIME.mSettings.current.mClipboardHistoryEnabled) return
+        val timeStamp = ClipboardManagerCompat.getPrimaryClipDescriptionTimestamp(clipboardManager)
+        // timeStamp == 0 means "unknown" (no clip, or API < 26): fall through and let addClip dedup
+        // by content. A known, unchanged timestamp means we already captured this clip — skip the
+        // content read so we don't re-trigger the clipboard-access toast on every keyboard show.
+        if (timeStamp != 0L && timeStamp == lastCatchUpTimestamp) return
+        lastCatchUpTimestamp = timeStamp
+        scope.launch {
+            try {
+                clipboardDao?.ensureCacheLoaded()
+                withContext(applyDispatcher) {
+                    if (latinIME.mSettings.current.mClipboardHistoryEnabled)
+                        fetchPrimaryClip()
+                }
+            } catch (e: CancellationException) {
+                throw e // never swallow cancellation
+            } catch (t: Throwable) {
+                Log.e(TAG, "clipboard catch-up capture failed", t)
+            }
         }
     }
 
