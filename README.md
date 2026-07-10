@@ -10,6 +10,8 @@
 
 Along the way: fixed the caps-lock-gets-stuck bug, fixed the keyboard-stops-typing bug, and hardened the input connection so you never have to hide-and-reshow the keyboard to get it working again.
 
+**[Project page → leinss.xyz/projects/TobiBoard](https://leinss.xyz/projects/TobiBoard/)**
+
 [<img src="https://user-images.githubusercontent.com/663460/26973090-f8fdc986-4d14-11e7-995a-e7c5e79ed925.png" alt="Get APK from GitHub" height="64">](https://github.com/leinss/TobiBoard/releases/latest)
 
 </div>
