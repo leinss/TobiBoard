@@ -38,23 +38,29 @@ Changelog: https://github.com/leinss/TobiBoard/releases
 AntiFeatures:
   NonFreeNet:
     en-US: The optional AI voice-to-text and text-fix features send audio or selected text to a user-chosen cloud provider (OpenRouter or PayPerQ) using the user's own API key. Both features are off by default; all core keyboard functions work fully offline.
+  NonFreeDep:
+    en-US: The on-device Text Fix feature loads a local LLM via Google's MediaPipe (com.google.mediapipe:tasks-genai), which ships prebuilt proprietary native libraries. The optional on-device voice-to-text uses the sherpa-onnx runtime shipped as a prebuilt AAR. Both are bundled in the APK. This is why the app is not (yet) submittable to F-Droid main or IzzyOnDroid, which reject non-free dependencies (see header).
 
 RepoType: git
 Repo: https://github.com/leinss/TobiBoard.git
 
 # F-Droid builds the tagged commit FROM SOURCE with a keyless (unsigned) release
 # build, which only succeeds on commits that gate the signing guard behind
-# REQUIRE_SIGNED_RELEASE (present since the 6.8.x line). Pinned to v6.8.5. A real
-# source build additionally needs the prebuilt-binary blocker above resolved.
+# REQUIRE_SIGNED_RELEASE (present since the 6.8.x line). Pinned to the latest
+# PUBLISHED release tag (v6.8.6). A real source build additionally needs the
+# prebuilt-binary blocker above resolved. Keep CurrentVersion in sync with the
+# latest published GitHub release tag (see `gh release view --repo leinss/TobiBoard`),
+# NOT with app/build.gradle.kts on main — main is often bumped ahead of a release
+# (e.g. 6.8.8/6808 on main while the latest release is 6.8.6/6806).
 Builds:
-  - versionName: 6.8.5
-    versionCode: 6805
-    commit: v6.8.5
+  - versionName: 6.8.6
+    versionCode: 6806
+    commit: v6.8.6
     ndk: 28.0.13004108
     gradle:
       - yes
 
 AutoUpdateMode: Version v%v
 UpdateCheckMode: Tags
-CurrentVersion: 6.8.5
-CurrentVersionCode: 6805
+CurrentVersion: 6.8.6
+CurrentVersionCode: 6806
