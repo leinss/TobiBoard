@@ -9,6 +9,7 @@ import helium314.keyboard.latin.common.codePointBefore
 import helium314.keyboard.latin.common.endsWithWordCodepoint
 import helium314.keyboard.latin.common.getFullEmojiAtEnd
 import helium314.keyboard.latin.common.getTouchedWordRange
+import helium314.keyboard.latin.common.getWhitespaceDelimitedTokenAtCursor
 import helium314.keyboard.latin.common.isEmoji
 import helium314.keyboard.latin.common.nonWordCodePointAndNoSpaceBeforeCursor
 import helium314.keyboard.latin.common.splitOnWhitespace
@@ -115,6 +116,33 @@ class StringUtilsTest {
         checkTextRange("@@@", "@@@", spUrl, script, 0, 6)
         checkTextRange("a...", "", spUrl, script, 0, 4)
         checkTextRange("@@@", "", spUrl, script, 0, 3)
+    }
+
+    // The explicit "add to dictionary" action captures the full token even with URL detection off
+    // (the default), which is exactly where getTouchedWordRange splits an email at "@"/"." and only
+    // returns a fragment. So all cases here use `sp` (URL detection off).
+    @Test fun `whitespace-delimited token at cursor keeps email and url separators`() {
+        val sp = SpacingAndPunctuations(ApplicationProvider.getApplicationContext<App>().resources, false)
+        // full email captured at the end of the field
+        assertEquals("newsletter@leinss.xyz", getWhitespaceDelimitedTokenAtCursor("mail: newsletter@leinss.xyz", "", sp))
+        // cursor in the middle of the email
+        assertEquals("newsletter@leinss.xyz", getWhitespaceDelimitedTokenAtCursor("mail: newsletter@lei", "nss.xyz", sp))
+        // email followed by more text
+        assertEquals("newsletter@leinss.xyz", getWhitespaceDelimitedTokenAtCursor("contact newsletter@leinss.xyz", " now", sp))
+        // trailing sentence punctuation is trimmed, interior separators kept
+        assertEquals("foo@bar.com", getWhitespaceDelimitedTokenAtCursor("write to foo@bar.com.", "", sp))
+        // wrapping brackets are trimmed
+        assertEquals("foo@bar.com", getWhitespaceDelimitedTokenAtCursor("(foo@bar.com", ")", sp))
+        // a URL keeps its scheme and path
+        assertEquals("https://leinss.xyz/x", getWhitespaceDelimitedTokenAtCursor("see https://leinss.xyz/x", "", sp))
+        // a plain word still works
+        assertEquals("quick", getWhitespaceDelimitedTokenAtCursor("the quick", " fox", sp))
+        // cursor surrounded by whitespace -> nothing to add
+        assertEquals("", getWhitespaceDelimitedTokenAtCursor("hello ", " world", sp))
+        // empty input
+        assertEquals("", getWhitespaceDelimitedTokenAtCursor("", "", sp))
+        // a run of only separators collapses to empty
+        assertEquals("", getWhitespaceDelimitedTokenAtCursor("...", "", sp))
     }
 
     @Test fun detectEmojisAtEnd() {

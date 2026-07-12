@@ -194,6 +194,42 @@ fun getTouchedWordRange(before: CharSequence, after: CharSequence, script: Strin
     )
 }
 
+/**
+ * Returns the whitespace-delimited token straddling the cursor, with any leading/trailing word
+ * separators trimmed off. Unlike [getTouchedWordRange], interior separators such as "@", "." and
+ * "_" are kept, so a full email address or URL is returned even when URL detection is off (the
+ * default) — [getTouchedWordRange] would otherwise split the token at those separators and yield
+ * only a fragment. Used by the explicit "add to dictionary" action, whose intent is to store
+ * exactly the token the user typed. Returns an empty string when the cursor is not adjacent to any
+ * non-whitespace text.
+ *
+ * @param before text immediately before the cursor
+ * @param after text immediately after the cursor
+ */
+fun getWhitespaceDelimitedTokenAtCursor(
+    before: CharSequence,
+    after: CharSequence,
+    spacingAndPunctuations: SpacingAndPunctuations
+): String {
+    // Extend backwards and forwards to the nearest whitespace (or the text boundary).
+    var start = before.length
+    while (start > 0 && !Character.isWhitespace(before[start - 1])) --start
+    var end = 0
+    while (end < after.length && !Character.isWhitespace(after[end])) ++end
+
+    val token = StringBuilder(before.length - start + end)
+        .append(before, start, before.length)
+        .append(after, 0, end)
+
+    // Trim outer word separators (e.g. sentence punctuation like a trailing "." or an opening
+    // bracket) while keeping the interior ones that make the token an email/URL.
+    var s = 0
+    var e = token.length
+    while (s < e && spacingAndPunctuations.isWordSeparator(token[s].code)) ++s
+    while (e > s && spacingAndPunctuations.isWordSeparator(token[e - 1].code)) --e
+    return token.substring(s, e)
+}
+
 // actually this should not be in STRING Utils, but only used for getTouchedWordRange
 private fun isPartOfCompositionForScript(codePoint: Int, spacingAndPunctuations: SpacingAndPunctuations, script: String) =
     spacingAndPunctuations.isWordConnector(codePoint) // We always consider word connectors part of compositions.
