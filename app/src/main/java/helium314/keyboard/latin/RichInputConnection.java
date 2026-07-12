@@ -942,6 +942,33 @@ public final class RichInputConnection implements PrivateCommandPerformer {
         return StringUtilsKt.getTouchedWordRange(before, after, script, spacingAndPunctuations);
     }
 
+    /**
+     * Returns the whitespace-delimited token at the cursor (email/URL-aware), or "" if the cursor
+     * is not adjacent to any text. Unlike {@link #getWordRangeAtCursor}, interior separators like
+     * "@" and "." are preserved, so a full email address or URL is captured for the explicit
+     * add-to-dictionary action even when URL detection is off (the default).
+     */
+    @NonNull public String getWhitespaceDelimitedTokenAtCursor(final SpacingAndPunctuations spacingAndPunctuations) {
+        mIC = mParent.getCurrentInputConnection();
+        if (!isConnected()) {
+            return "";
+        }
+        final CharSequence before = getTextBeforeCursorAndDetectLaggyConnection(
+                OPERATION_GET_WORD_RANGE_AT_CURSOR,
+                SLOW_INPUT_CONNECTION_ON_PARTIAL_RELOAD_MS,
+                NUM_CHARS_TO_GET_BEFORE_CURSOR,
+                InputConnection.GET_TEXT_WITH_STYLES);
+        final CharSequence after = getTextAfterCursorAndDetectLaggyConnection(
+                OPERATION_GET_WORD_RANGE_AT_CURSOR,
+                SLOW_INPUT_CONNECTION_ON_PARTIAL_RELOAD_MS,
+                NUM_CHARS_TO_GET_AFTER_CURSOR,
+                InputConnection.GET_TEXT_WITH_STYLES);
+        if (before == null || after == null) {
+            return "";
+        }
+        return StringUtilsKt.getWhitespaceDelimitedTokenAtCursor(before, after, spacingAndPunctuations);
+    }
+
     public boolean isCursorTouchingWord(final SpacingAndPunctuations spacingAndPunctuations,
             boolean checkTextAfter) {
         if (checkTextAfter && isCursorFollowedByWordCharacter(spacingAndPunctuations)) {
