@@ -691,20 +691,24 @@ public final class InputLogic {
     }
 
     /**
-     * Adds the currently selected text (if any) or else the word at the cursor to the personal
-     * dictionary. Uses the selection when present so a full email or phrase can be added: its "."
-     * and "@" are word separators, so it would never appear as a single word/suggestion otherwise —
-     * which is exactly why the suggestion-strip long-press "+" can't reach it. Reuses the same
-     * {@link LatinIME#addToDictionary} path as that "+", and gives explicit toast feedback because,
-     * unlike the "+", this key does not visibly consume a suggestion chip.
+     * Adds the currently selected text (if any) or else the whole whitespace-delimited token at the
+     * cursor to the personal dictionary. A full email or URL can be added directly: its "." and "@"
+     * are word separators, so it never appears as a single word/suggestion — which is exactly why
+     * the suggestion-strip long-press "+" can't reach it. The token capture keeps those interior
+     * separators (see {@link RichInputConnection#getWhitespaceDelimitedTokenAtCursor}) so the user
+     * need not select the token first. Reuses the same {@link LatinIME#addToDictionary} path as that
+     * "+", and gives explicit toast feedback because, unlike the "+", this key does not visibly
+     * consume a suggestion chip.
      */
-    private void addCurrentWordOrSelectionToDictionary(final SettingsValues settingsValues,
-            final String currentKeyboardScript) {
+    private void addCurrentWordOrSelectionToDictionary(final SettingsValues settingsValues) {
         CharSequence word = mConnection.getSelectedText(0 /* no styles */);
         if (TextUtils.isEmpty(word)) {
-            final TextRange range = mConnection.getWordRangeAtCursor(
-                    settingsValues.mSpacingAndPunctuations, currentKeyboardScript);
-            word = (range == null) ? null : range.mWord;
+            // No selection: capture the whole whitespace-delimited token at the cursor, so a full
+            // email/URL ("newsletter@leinss.xyz") is added rather than only the trailing fragment
+            // that the "." and "@" word separators would otherwise leave (getWordRangeAtCursor
+            // splits on them unless URL detection is on, which is off by default). This mirrors what
+            // the selection path already does, without requiring the user to select the token first.
+            word = mConnection.getWhitespaceDelimitedTokenAtCursor(settingsValues.mSpacingAndPunctuations);
         }
         final String trimmed = (word == null) ? "" : word.toString().trim();
         if (trimmed.isEmpty()) {
@@ -792,7 +796,7 @@ public final class InputLogic {
                 mConnection.selectWord(inputTransaction.getSettingsValues().mSpacingAndPunctuations, currentKeyboardScript);
                 break;
             case KeyCode.ADD_TO_DICTIONARY:
-                addCurrentWordOrSelectionToDictionary(inputTransaction.getSettingsValues(), currentKeyboardScript);
+                addCurrentWordOrSelectionToDictionary(inputTransaction.getSettingsValues());
                 break;
             case KeyCode.CLIPBOARD_COPY:
                 mConnection.copyText(true);
