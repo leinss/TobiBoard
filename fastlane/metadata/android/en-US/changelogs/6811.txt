@@ -1,0 +1,2 @@
+- Fixed on-device voice typing: pressing accept now inserts your dictated text instead of doing nothing
+- Fixed the On-device models settings icon showing dark in dark mode
