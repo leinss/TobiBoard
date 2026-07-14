@@ -1,0 +1,1 @@
+- Fixed on-device voice typing: the speech recognizer failed to load in release builds, so dictation never produced text. It now loads and transcribes correctly.
