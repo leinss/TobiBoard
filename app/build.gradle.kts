@@ -48,8 +48,8 @@ android {
         applicationId = "xyz.leinss.TobiBoard"
         minSdk = 21
         targetSdk = 35
-        versionCode = 6812
-        versionName = "6.8.12"
+        versionCode = 6813
+        versionName = "6.8.13"
         buildConfigField("boolean", "ALLOW_USER_SUPPLIED_JNI", "false")
         buildConfigField("boolean", "ENABLE_GESTURE_DATA_GATHERING", "false")
         manifestPlaceholders["gestureDataProviderEnabled"] = "false"
