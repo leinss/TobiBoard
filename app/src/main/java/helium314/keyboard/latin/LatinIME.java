@@ -2403,12 +2403,14 @@ public class LatinIME extends InputMethodService implements
     }
 
     private void cancelVoiceRecordingIfCapturing() {
-        // Also abort an in-flight upload: when the user dismisses the keyboard mid-transcription
-        // (Back key, app switch, finishInputView), they expect the network request to stop, not
-        // to insert text into a stale field a few seconds later.
+        // Abort an in-flight cloud upload: when the user dismisses the keyboard mid-transcription
+        // (Back key, app switch, finishInputView), they expect the network request to stop, not to
+        // insert text into a stale field a few seconds later. An on-device transcription is spared
+        // by cancelForLifecycle — it's fast and offline, so a transient window-hide must not silently
+        // drop the user's utterance. Explicit cancel (the X button) and onDestroy still abort it.
         if (mVoiceInputManager != null
                 && mVoiceInputManager.getState() != VoiceInputManager.State.IDLE) {
-            mVoiceInputManager.cancelRecording();
+            mVoiceInputManager.cancelForLifecycle();
         }
     }
 
