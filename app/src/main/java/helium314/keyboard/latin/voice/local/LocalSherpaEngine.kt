@@ -32,8 +32,16 @@ internal class LocalSherpaEngine(private val context: Context) : SttEngine {
 
     override fun transcribe(audioFile: File): String {
         if (cancelled) return ""
-        val recognizer = SharedRecognizer.acquire(context)
-            ?: throw IOException("Parakeet model not downloaded — open Settings → On-device models.")
+        val recognizer = try {
+            SharedRecognizer.acquire(context)
+        } catch (e: LocalModelLoadException) {
+            // The recognizer wouldn't build. Verify the on-disk model and self-heal a corrupt one
+            // (deletes it + forces a fresh download); rethrows either way so we never proceed with a
+            // broken model. Slow (hashes the model) but this only runs on an actual failure.
+            SharedRecognizer.verifyAndHeal(context, e)
+        } ?: throw LocalModelLoadException(
+            IOException("Parakeet model files not on disk — open Settings → On-device models.")
+        )
         val wave = WaveReader.readWaveFromFile(audioFile.absolutePath)
         val stream = recognizer.createStream()
         return try {
@@ -95,11 +103,33 @@ private object SharedRecognizer {
                 // Files are present (isReady passed) but the native handle would not build — e.g. a
                 // corrupt model or an incompatible native library. Surface it as a typed load
                 // failure so safeUserFacingError shows the re-download hint instead of swallowing
-                // the cause and leaving the user with a generic "Transcription failed".
-                Log.e(TAG, "Failed to initialise OfflineRecognizer", t)
+                // the cause. Put the exception type + message ON the message line (not only in the
+                // stack) so it survives the in-app log export, which collapses stack traces.
+                Log.e(TAG, "Failed to initialise OfflineRecognizer: ${t.javaClass.name}: ${t.message}", t)
                 throw LocalModelLoadException(t)
             }
         }
+    }
+
+    /**
+     * Called after [acquire] failed to build the recognizer. Hashes the on-disk model against its
+     * pinned sizes + SHA-256: if any file is corrupt/truncated the model is deleted and marked
+     * NotDownloaded so the UI forces a fresh download (self-heal) — this recovers users whose model
+     * predates SHA pinning or whose download was incomplete. If every file is intact the failure is
+     * a genuine model/runtime incompatibility that re-downloading can't fix; the files are kept for
+     * inspection. Always throws — the caller can't get a recognizer either way.
+     */
+    fun verifyAndHeal(context: Context, cause: LocalModelLoadException): Nothing {
+        val corrupt = ModelStorage.findCorruptFiles(context, model)
+        if (corrupt.isNotEmpty()) {
+            Log.e(TAG, "On-device model corrupt (bad size/SHA): $corrupt — invalidating; re-download required")
+            release()
+            ModelStorage.delete(context, model)
+            ModelDownloadRepository.update(model.id, DownloadState.NotDownloaded)
+            throw LocalModelLoadException(java.io.IOException("Model corrupt: $corrupt (invalidated for re-download)"))
+        }
+        Log.e(TAG, "On-device model bytes verified intact but recognizer init failed — re-download will NOT help; likely a model/runtime incompatibility")
+        throw cause
     }
 
     fun release() {
