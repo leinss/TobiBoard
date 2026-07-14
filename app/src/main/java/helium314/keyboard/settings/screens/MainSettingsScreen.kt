@@ -92,7 +92,7 @@ fun MainSettingsScreen(
                 Preference(
                     name = stringResource(R.string.local_models_title),
                     onClick = onClickLocalModels,
-                    icon = R.drawable.ic_launcher_monochrome
+                    icon = R.drawable.ic_settings_local_models
                 ) { NextScreenIcon() }
                 if (JniUtils.sHaveGestureLib)
                     Preference(
