@@ -33,6 +33,19 @@ class SafeUserFacingErrorTest {
     }
 
     @Test
+    fun localModelLoadExceptionMapsToTheReDownloadHintOnTheVoiceSttPathToo() {
+        // The on-device STT engine (LocalSherpaEngine) now throws LocalModelLoadException when the
+        // native recognizer fails to build; with the voice fallback resId it must still surface the
+        // actionable re-download hint, not the generic "Transcription failed".
+        val message = safeUserFacingError(
+            context,
+            LocalModelLoadException(RuntimeException("recognizer init failed")),
+            R.string.voice_error_transcription_failed,
+        )
+        assertEquals(context.getString(R.string.text_fix_error_local_load_failed), message)
+    }
+
+    @Test
     fun unrecognisedExceptionFallsBackToTheProvidedResId() {
         // A bare IOException (e.g. the not-downloaded race) must NOT be mapped to the load-failed
         // hint — it falls back to the generic resId so the mapping stays narrow.
