@@ -53,6 +53,15 @@ class VoiceInputManager(
         private const val MAX_RECONNECT_ATTEMPTS = 3
         private const val RECONNECT_WAIT_MS_PER_ATTEMPT = 30_000L
         private const val RECONNECT_POLL_MS = 2_000L
+
+        /**
+         * True when a lifecycle-driven cancel (window hidden / input view finishing) should be
+         * ignored so an in-progress on-device transcription can finish and commit. Pure, so it is
+         * unit-tested without the recording/coroutine machinery. Cloud uploads and any state other
+         * than TRANSCRIBING are never spared — they keep the cancel-on-dismiss behaviour.
+         */
+        internal fun letLocalTranscriptionFinish(state: State, provider: AiProvider?): Boolean =
+            state == State.TRANSCRIBING && provider == AiProvider.LOCAL
     }
 
     enum class State { IDLE, RECORDING, TRANSCRIBING }
@@ -96,6 +105,9 @@ class VoiceInputManager(
     @Volatile private var stopFinalizeJob: Job? = null
     @Volatile private var isStopFinalizing = false
     @Volatile private var currentUseDedicatedStt = false
+    // The provider backing the in-flight transcription, so a lifecycle-driven cancel can spare a
+    // local decode (see cancelForLifecycle). Only meaningful while state == TRANSCRIBING.
+    @Volatile private var currentProvider: AiProvider? = null
 
     fun getState() = state
 
@@ -267,6 +279,7 @@ class VoiceInputManager(
 
         val prefs = context.prefs()
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
+        currentProvider = provider
         val apiKey = if (provider.isCloud) {
             SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
         } else ""
@@ -418,6 +431,23 @@ class VoiceInputManager(
         }
     }
 
+    /**
+     * Cancel triggered by the IME window hiding or the input view finishing — NOT the user tapping
+     * the cancel (X) button or the IME being destroyed. An on-device transcription already in
+     * progress is allowed to finish and commit: it's fast (~1 s) and offline, so aborting it here
+     * just silently discards the user's utterance (there is no network request to stop). A live
+     * recording and any cloud upload are still cancelled, so a dismissed keyboard doesn't leak a
+     * pending network request that inserts text into a stale field seconds later.
+     */
+    @Synchronized
+    fun cancelForLifecycle() {
+        if (letLocalTranscriptionFinish(state, currentProvider)) {
+            Log.i(TAG, "Lifecycle cancel ignored; letting local transcription finish")
+            return
+        }
+        cancelRecording()
+    }
+
     /** Cancel either a live recording or an in-flight upload. */
     @Synchronized
     fun cancelRecording() {
@@ -435,11 +465,15 @@ class VoiceInputManager(
                 callbacks.onFinished()
             }
             State.TRANSCRIBING -> {
+                // Always logged (not DEBUG-gated) so a transcription dropped before it commits is
+                // diagnosable from a release build's log.
+                Log.i(TAG, "Cancelling in-flight transcription (provider=$currentProvider)")
                 activeTranscriptionToken.incrementAndGet()
                 transcriptionClient?.cancel()
                 transcriptionJob?.cancel()
                 transcriptionJob = null
                 transcriptionClient = null
+                currentProvider = null
                 currentUseDedicatedStt = false
                 // The transcription thread's finally block will handle file deletion; only
                 // reach in here if it couldn't start.
@@ -538,6 +572,7 @@ class VoiceInputManager(
             }
             transcriptionJob = null
             transcriptionClient = null
+            currentProvider = null
             currentUseDedicatedStt = false
             state = State.IDLE
             callbacks.onFinished()

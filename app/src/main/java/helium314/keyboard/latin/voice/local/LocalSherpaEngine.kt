@@ -57,7 +57,16 @@ internal class LocalSherpaEngine(private val context: Context) : SttEngine {
          * call from any thread (spawns its own worker), no-op if the model isn't on disk.
          */
         fun warmUp(context: Context) {
-            Thread { SharedRecognizer.acquire(context) }.start()
+            // acquire() now throws LocalModelLoadException on a native-init failure; swallow it on
+            // the pre-warm path (already logged) so a bad model can't crash this fire-and-forget
+            // worker. The next real transcribe re-attempts and surfaces the error to the user.
+            Thread {
+                try {
+                    SharedRecognizer.acquire(context)
+                } catch (_: Throwable) {
+                    // Logged in acquire(); nothing actionable here.
+                }
+            }.start()
         }
     }
 }
@@ -83,8 +92,12 @@ private object SharedRecognizer {
                 recognizer = rec
                 rec
             } catch (t: Throwable) {
+                // Files are present (isReady passed) but the native handle would not build — e.g. a
+                // corrupt model or an incompatible native library. Surface it as a typed load
+                // failure so safeUserFacingError shows the re-download hint instead of swallowing
+                // the cause and leaving the user with a generic "Transcription failed".
                 Log.e(TAG, "Failed to initialise OfflineRecognizer", t)
-                null
+                throw LocalModelLoadException(t)
             }
         }
     }
