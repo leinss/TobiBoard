@@ -20,4 +20,8 @@ internal interface Cancellable {
  */
 internal interface SttEngine : Cancellable {
     fun transcribe(audioFile: File): String
+
+    /** Total tokens reported by the most recent response, or 0 for engines (e.g. on-device) that
+     *  have no token accounting. Read by the caller right after [transcribe] to feed the usage meter. */
+    val lastResponseTokens: Int get() = 0
 }

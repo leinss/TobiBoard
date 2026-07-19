@@ -520,7 +520,7 @@ class VoiceInputManager(
      * back-out cancels the job, the awaited delay throws, and the caller's finally deletes the audio.
      */
     private suspend fun transcribeWithReconnect(
-        client: OpenRouterClient,
+        client: SttEngine,
         wavFile: File,
         offlineRetryEnabled: Boolean,
     ): String {

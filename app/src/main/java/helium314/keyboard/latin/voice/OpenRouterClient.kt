@@ -47,7 +47,7 @@ class OpenRouterClient(
      *  and TextFixManager honor this by constructing a fresh client per request — reusing one client
      *  across concurrent or back-to-back requests would race or stale this count. */
     @Volatile
-    var lastResponseTokens: Int = 0
+    override var lastResponseTokens: Int = 0
         private set
 
     companion object {

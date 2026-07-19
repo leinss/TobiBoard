@@ -9,4 +9,8 @@ package helium314.keyboard.latin.voice
  */
 internal interface TextFixEngine : Cancellable {
     fun fixText(userText: String): String
+
+    /** Total tokens reported by the most recent response, or 0 for engines (e.g. on-device) that
+     *  have no token accounting. Read by the caller right after [fixText] to feed the usage meter. */
+    val lastResponseTokens: Int get() = 0
 }
