@@ -533,6 +533,11 @@ class KeyboardState(private val switchActions: SwitchActions) {
         if (alphabetShiftState.isShiftLocked) {
             setShiftLocked(false)
             switchActions.cancelDoubleTapShiftKeyTimer()
+            // Mark the key as pressing so a reentrant onUpdateShiftState (fired by InputLogic
+            // between onEvent and onReleaseKey) doesn't mistake this for an idle key and apply
+            // auto-caps on top of the just-cleared lock; onReleaseShift needs this to land back
+            // on plain ALPHABET instead of AUTOMATIC_SHIFTED.
+            shiftKeyState.onPress()
             return
         }
         isInDoubleTapShiftKey = switchActions.isInDoubleTapShiftKeyTimeout
