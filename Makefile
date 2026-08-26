@@ -465,6 +465,14 @@ publish-checklist: ## Print the release + store-publishing checklist
 publish-play: bundle-release ## Upload signed AAB to Google Play (TRACK=internal|production; STATUS=completed|draft, default live for tester tracks / draft for production)
 	@command -v fastlane >/dev/null || { echo "Install fastlane: brew install fastlane (or: gem install fastlane)"; exit 1; }
 	@test -n "$$PLAY_SERVICE_ACCOUNT_JSON" || { echo "Set PLAY_SERVICE_ACCOUNT_JSON=/path/to/play-service-account.json — see docs/PLAY_PUBLISHING.md"; exit 1; }
+	@# Play rejects release notes over 500 characters, and it does so only after uploading the
+	@# whole AAB — several minutes in. Fail here instead, while the fix is one edit away.
+	@code=$$(grep -oE 'versionCode = [0-9]+' app/build.gradle.kts | grep -oE '[0-9]+'); \
+	  notes="fastlane/metadata/android/en-US/changelogs/$$code.txt"; \
+	  test -f "$$notes" || { echo "✗ Missing changelog $$notes — run 'make bump-<patch|minor>' and fill in the stub."; exit 1; }; \
+	  n=$$(wc -c < "$$notes" | tr -d ' '); \
+	  if [ "$$n" -gt 500 ]; then echo "✗ $$notes is $$n characters; Play allows 500. Shorten it and re-run."; exit 1; fi; \
+	  echo "✓ changelog $$code: $$n/500 characters"
 	fastlane android play track:$(or $(TRACK),internal) status:$(or $(STATUS),auto)
 
 .PHONY: store-listing

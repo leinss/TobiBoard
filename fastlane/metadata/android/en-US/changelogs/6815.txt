@@ -1,4 +1,4 @@
 - Fixed the keyboard crashing when a voice transcription failed, which took your recording with it.
-- A failed transcription now keeps the recording and offers Retry, so a long dictation is no longer lost. The clip is deleted as soon as a retry succeeds, and expires on its own after two minutes.
-- The recording timer now shows the time limit alongside the elapsed time, and warns in the last ten seconds.
-- New optional setting: also copy each finished transcription to the clipboard, as a safety net for long dictations.
+- A failed transcription now keeps the recording and offers Retry, so a long dictation is no longer lost. The clip is deleted once a retry succeeds, and expires after two minutes.
+- The recording timer now shows the time limit next to the elapsed time.
+- New optional setting: also copy each finished transcription to the clipboard.
