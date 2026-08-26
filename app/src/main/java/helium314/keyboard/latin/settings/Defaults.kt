@@ -211,6 +211,7 @@ object Defaults {
     const val PREF_VOICE_OFFLINE_RETRY = false
     const val PREF_VOICE_LANGUAGE_HINT = true
     const val PREF_VOICE_SPACE_HEURISTIC = true
+    const val PREF_VOICE_COPY_TO_CLIPBOARD = false
     const val PREF_VOICE_HAPTIC_FEEDBACK = true
     const val PREF_VOICE_AUTO_POLISH_ENABLED = false
     // Polish level values: "natural" (bypass), "light", "fixed", "rephrased", "corrected", "polished".

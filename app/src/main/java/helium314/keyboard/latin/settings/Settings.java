@@ -91,6 +91,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_VOICE_OFFLINE_RETRY = "voice_offline_retry";
     public static final String PREF_VOICE_LANGUAGE_HINT = "voice_language_hint";
     public static final String PREF_VOICE_SPACE_HEURISTIC = "voice_space_heuristic";
+    public static final String PREF_VOICE_COPY_TO_CLIPBOARD = "voice_copy_to_clipboard";
     public static final String PREF_VOICE_HAPTIC_FEEDBACK = "voice_haptic_feedback";
     public static final String PREF_VOICE_AUTO_POLISH_ENABLED = "voice_auto_polish_enabled";
     public static final String PREF_VOICE_POLISH_LEVEL = "voice_polish_level";

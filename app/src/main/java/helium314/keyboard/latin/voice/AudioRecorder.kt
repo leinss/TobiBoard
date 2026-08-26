@@ -41,7 +41,9 @@ import kotlinx.coroutines.launch
  */
 class AudioRecorder(
     private val outputFile: File,
-    private val maxDurationMs: Long = 90_000L,
+    /** Recording stops itself and transcribes what it has once this is reached. Exposed so the
+     *  overlay can show the ceiling alongside the elapsed time. */
+    val maxDurationMs: Long = 90_000L,
     /** If >0, stop after this many contiguous ms of silence once the user has spoken at least once. */
     private val autoStopSilenceMs: Long = 0L,
     /**

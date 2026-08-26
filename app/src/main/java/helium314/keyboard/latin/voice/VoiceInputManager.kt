@@ -17,6 +17,7 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,10 @@ class VoiceInputManager(
         // Only sweep recordings old enough that they cannot belong to an in-flight session — a
         // rapid stop→record could otherwise delete the previous recording's file mid-finalize.
         private const val ORPHAN_RECORDING_MAX_AGE_MS = 60_000L
+        // How long a failed clip is kept so the user can tap Retry. Deliberately short: audio is the
+        // most sensitive thing this app touches, so it is deleted the moment a retry succeeds and
+        // expires on its own otherwise. Long enough to read an error and tap once.
+        private const val RETRY_AUDIO_RETENTION_MS = 120_000L
         // Offline auto-retry bounds: wait up to MAX_RECONNECT_ATTEMPTS windows of
         // RECONNECT_WAIT_MS_PER_ATTEMPT each, polling connectivity every RECONNECT_POLL_MS.
         private const val MAX_RECONNECT_ATTEMPTS = 3
@@ -77,7 +82,11 @@ class VoiceInputManager(
         fun onTranscribing()
         fun onFinished()
         fun onTranscriptionResult(text: String)
-        fun onError(message: String)
+        /**
+         * [canRetry] means the audio survived and [retryLastTranscription] would re-run it, so the
+         * error should be shown with a Retry action rather than as a bare toast.
+         */
+        fun onError(message: String, canRetry: Boolean)
         fun onMaxDurationReached()
         /** Called when a transcription is paused, waiting for the network to come back. */
         fun onWaitingForNetwork() {}
@@ -95,7 +104,19 @@ class VoiceInputManager(
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Last-resort backstop. Without it, any Throwable escaping a [backgroundScope] coroutine reaches
+     * the default handler and kills the whole IME process, taking the user's recording with it. The
+     * on-device decode path runs sherpa-onnx over JNI ([helium314.keyboard.latin.voice.local.LocalSherpaEngine]),
+     * which can raise Errors (OutOfMemoryError, UnsatisfiedLinkError) that a `catch (e: Exception)`
+     * does not see. Note this cannot save a genuine native abort inside the shared library.
+     */
+    private val crashGuard = CoroutineExceptionHandler { _, t ->
+        Log.e(TAG, "Uncaught failure in a voice coroutine", t)
+        mainHandler.post { failCurrentAttempt(context.getString(R.string.voice_error_transcription_failed)) }
+    }
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + crashGuard)
     private var audioRecorder: AudioRecorder = AudioRecorder(outputFile = File(cacheAudioDir(), "rec_placeholder.wav"))
     @Volatile private var state = State.IDLE
     private var currentAudioFile: File? = null
@@ -108,6 +129,10 @@ class VoiceInputManager(
     // The provider backing the in-flight transcription, so a lifecycle-driven cancel can spare a
     // local decode (see cancelForLifecycle). Only meaningful while state == TRANSCRIBING.
     @Volatile private var currentProvider: AiProvider? = null
+    // The one failed clip kept for [retryLastTranscription]. Held only as long as
+    // RETRY_AUDIO_RETENTION_MS and dropped the moment it is no longer useful; see purgeRetryAudio.
+    private val retryAudio = RetryAudioRetention()
+    private val purgeRetryAudioRunnable = Runnable { purgeRetryAudio() }
 
     fun getState() = state
 
@@ -116,6 +141,9 @@ class VoiceInputManager(
 
     /** Exposed so UI can render an elapsed-time counter. */
     fun getCurrentDurationMs(): Long = audioRecorder.currentDurationMs
+
+    /** Recording ceiling for the active recorder, so the overlay can show elapsed against limit. */
+    fun getMaxDurationMs(): Long = audioRecorder.maxDurationMs
 
     /** Maps the mic-sensitivity preference to a linear capture gain. "normal" leaves audio untouched. */
     private fun micSensitivityGain(value: String?): Float = when (value) {
@@ -182,6 +210,9 @@ class VoiceInputManager(
             prefs.getString(Settings.PREF_VOICE_MIC_SENSITIVITY, Defaults.PREF_VOICE_MIC_SENSITIVITY)
         )
 
+        // A new dictation supersedes the failed one, so the retained clip is dead weight, so drop it
+        // before the sweep rather than letting it sit out its retention window.
+        purgeRetryAudio()
         // Fresh cache file per recording; older ones are swept on every start so a process
         // killed mid-recording can't leak audio across sessions.
         sweepOrphanRecordings()
@@ -246,7 +277,7 @@ class VoiceInputManager(
             currentUseDedicatedStt = false
             state = State.IDLE
             callbacks.onFinished()
-            callbacks.onError(context.getString(R.string.voice_error_no_audio))
+            callbacks.onError(context.getString(R.string.voice_error_no_audio), false)
             return
         }
         if (BuildConfig.DEBUG) {
@@ -261,7 +292,7 @@ class VoiceInputManager(
             currentUseDedicatedStt = false
             state = State.IDLE
             callbacks.onFinished()
-            callbacks.onError(context.getString(R.string.voice_error_too_short))
+            callbacks.onError(context.getString(R.string.voice_error_too_short), false)
             return
         }
         if (audioRecorder.lastMeanAmplitude < MIN_SPEECH_MEAN_AMPLITUDE) {
@@ -270,13 +301,22 @@ class VoiceInputManager(
             currentUseDedicatedStt = false
             state = State.IDLE
             callbacks.onFinished()
-            callbacks.onError(context.getString(R.string.voice_error_silent))
+            callbacks.onError(context.getString(R.string.voice_error_silent), false)
             return
         }
 
         state = State.TRANSCRIBING
         callbacks.onTranscribing()
+        beginTranscription(wavFile)
+    }
 
+    /**
+     * Runs transcription over [wavFile]. Split out of [onRecordingFinalized] so
+     * [retryLastTranscription] can re-enter it with a retained clip. Callers must already have set
+     * `state = TRANSCRIBING` and notified [Callbacks.onTranscribing].
+     */
+    @Synchronized
+    private fun beginTranscription(wavFile: File) {
         val prefs = context.prefs()
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
         currentProvider = provider
@@ -345,7 +385,7 @@ class VoiceInputManager(
                 currentUseDedicatedStt = false
                 state = State.IDLE
                 callbacks.onFinished()
-                callbacks.onError(context.getString(R.string.voice_error_no_model))
+                callbacks.onError(context.getString(R.string.voice_error_no_model), false)
                 return
             }
             resolved
@@ -369,15 +409,24 @@ class VoiceInputManager(
         }
         val requestToken = activeTranscriptionToken.incrementAndGet()
         transcriptionClient = client
+        val useDedicatedSttForRetry = useDedicatedStt
 
         transcriptionJob = backgroundScope.launch(CoroutineName("VoiceTranscription")) {
+            // Set on any failure path, so the finally below keeps the clip for one Retry instead of
+            // deleting it. A success or an explicit cancel leaves it false and the audio goes.
+            var keepForRetry = false
             try {
                 val transcription = sanitizeTranscription(transcribeWithReconnect(client, wavFile, offlineRetryEnabled))
                 UsageTracker.record(client.lastResponseTokens)
                 if (transcription.isBlank()) {
+                    keepForRetry = true
+                    // Retain before reporting: finishTranscription only posts to the main thread,
+                    // and that post asks hasRetryableRecording() whether to offer Retry.
+                    retainForRetry(wavFile, useDedicatedSttForRetry)
                     finishTranscription(
                         requestToken = requestToken,
                         error = context.getString(R.string.voice_error_transcription_failed),
+                        canRetry = true,
                     )
                     return@launch
                 }
@@ -418,17 +467,85 @@ class VoiceInputManager(
             } catch (e: InterruptedException) {
                 if (BuildConfig.DEBUG) Log.i(TAG, "Transcription cancelled")
                 finishTranscription(requestToken = requestToken)
-            } catch (e: Exception) {
-                Log.e(TAG, "Transcription failed", e)
+            } catch (t: Throwable) {
+                // Throwable, not Exception: the on-device decode goes through sherpa-onnx JNI, which
+                // can raise Errors (OutOfMemoryError, UnsatisfiedLinkError). Those used to escape
+                // this handler and kill the IME process mid-dictation.
+                Log.e(TAG, "Transcription failed", t)
+                keepForRetry = true
+                // Retain before reporting, for the same ordering reason as the blank-result path.
+                retainForRetry(wavFile, useDedicatedSttForRetry)
                 finishTranscription(
                     requestToken = requestToken,
-                    error = safeUserFacingError(context, e, R.string.voice_error_transcription_failed),
+                    error = safeUserFacingError(context, t, R.string.voice_error_transcription_failed),
+                    canRetry = true,
                 )
             } finally {
-                // Best-effort: delete the audio after the request, whether it succeeded or not.
-                if (wavFile.exists()) wavFile.delete()
+                // Success or an explicit cancel: the clip has served its purpose, delete it now.
+                if (!keepForRetry && wavFile.exists()) wavFile.delete()
             }
         }
+    }
+
+    /** True while a failed clip is still on disk and [retryLastTranscription] would do something. */
+    @Synchronized
+    fun hasRetryableRecording(): Boolean = retryAudio.hasRetainable()
+
+    /**
+     * Re-runs transcription over the clip kept by the last failed attempt. Returns false when there
+     * is nothing to retry (expired, already consumed, or a recording is in flight), so the caller
+     * can drop its Retry affordance.
+     */
+    @Synchronized
+    fun retryLastTranscription(): Boolean {
+        if (state != State.IDLE) return false
+        // consume() hands ownership to this attempt without deleting: the transcription path deletes
+        // on success and re-retains on another failure. Disarm the expiry first so it cannot delete
+        // the file out from under the in-flight attempt.
+        mainHandler.removeCallbacks(purgeRetryAudioRunnable)
+        val consumed = retryAudio.consume() ?: return false
+        currentAudioFile = consumed.file
+        currentUseDedicatedStt = consumed.useDedicatedStt
+        state = State.TRANSCRIBING
+        callbacks.onTranscribing()
+        beginTranscription(consumed.file)
+        return true
+    }
+
+    /**
+     * Keeps [wavFile] so one Retry is possible, replacing any previously retained clip, and arms the
+     * expiry timer. At most one clip is ever held, for at most [RETRY_AUDIO_RETENTION_MS].
+     */
+    @Synchronized
+    private fun retainForRetry(wavFile: File, useDedicatedStt: Boolean) {
+        retryAudio.retain(wavFile, useDedicatedStt)
+        if (!retryAudio.hasRetainable()) return
+        mainHandler.removeCallbacks(purgeRetryAudioRunnable)
+        mainHandler.postDelayed(purgeRetryAudioRunnable, RETRY_AUDIO_RETENTION_MS)
+    }
+
+    /** Deletes the retained clip now and disarms the expiry timer. Safe to call repeatedly. */
+    @Synchronized
+    private fun purgeRetryAudio() {
+        mainHandler.removeCallbacks(purgeRetryAudioRunnable)
+        retryAudio.purge()
+    }
+
+    /**
+     * Resets to IDLE and reports [message] after a failure that bypassed the normal error path (the
+     * [crashGuard] backstop). Keeps whatever clip is retained so Retry still works.
+     */
+    @Synchronized
+    private fun failCurrentAttempt(message: String) {
+        if (state == State.IDLE) return
+        activeTranscriptionToken.incrementAndGet()
+        transcriptionJob = null
+        transcriptionClient = null
+        currentProvider = null
+        currentUseDedicatedStt = false
+        state = State.IDLE
+        callbacks.onFinished()
+        callbacks.onError(message, hasRetryableRecording())
     }
 
     /**
@@ -489,6 +606,9 @@ class VoiceInputManager(
     /** Cancel any in-flight work and tear down the background scope. Call from IME onDestroy. */
     fun release() {
         cancelRecording()
+        // Nothing can retry once the manager is gone, so don't leave a clip on disk for its full
+        // retention window.
+        purgeRetryAudio()
         audioRecorder.release()
         backgroundScope.cancel()
     }
@@ -505,6 +625,9 @@ class VoiceInputManager(
             cacheAudioDir().listFiles()?.forEach { file ->
                 if (file.name.startsWith("rec_") && file.extension.equals("wav", ignoreCase = true)
                     && file.lastModified() < cutoff
+                    // The retained clip has its own expiry; the age sweep must not delete it out
+                    // from under a Retry the user is about to tap.
+                    && !retryAudio.isRetained(file)
                 ) {
                     file.delete()
                 }
@@ -565,6 +688,7 @@ class VoiceInputManager(
         requestToken: Long,
         result: String? = null,
         error: String? = null,
+        canRetry: Boolean = false,
     ) {
         mainHandler.post {
             if (activeTranscriptionToken.get() != requestToken) {
@@ -577,9 +701,14 @@ class VoiceInputManager(
             state = State.IDLE
             callbacks.onFinished()
             if (!result.isNullOrEmpty()) {
+                // The attempt produced text, so nothing is left to retry. Drop the audio now rather
+                // than waiting for the retention timer.
+                purgeRetryAudio()
                 callbacks.onTranscriptionResult(result)
             } else if (!error.isNullOrEmpty()) {
-                callbacks.onError(error)
+                // The finally in the transcription job runs after this post is queued, so re-check
+                // the file rather than trusting canRetry alone.
+                callbacks.onError(error, canRetry && hasRetryableRecording())
             }
         }
     }
