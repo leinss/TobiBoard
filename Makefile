@@ -6,9 +6,12 @@ SHELL := /bin/bash
 PKG := xyz.leinss.TobiBoard
 PKG_DEBUG := $(PKG).debug
 IME_COMPONENT := $(PKG_DEBUG)/helium314.keyboard.latin.LatinIME
-APK_DEBUG_NO_MINIFY := app/build/outputs/apk/debugNoMinify/TobiBoard_6.6.0-debugNoMinify.apk
-APK_DEBUG := app/build/outputs/apk/debug/TobiBoard_6.6.0-debug.apk
-APK_RELEASE := app/build/outputs/apk/release/TobiBoard_6.6.0-release.apk
+# Gradle names the APK after versionName (base.archivesBaseName in app/build.gradle.kts), so read it
+# from there rather than hardcoding: a pinned version silently breaks install on every version bump.
+VERSION_NAME := $(shell sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
+APK_DEBUG_NO_MINIFY := app/build/outputs/apk/debugNoMinify/TobiBoard_$(VERSION_NAME)-debugNoMinify.apk
+APK_DEBUG := app/build/outputs/apk/debug/TobiBoard_$(VERSION_NAME)-debug.apk
+APK_RELEASE := app/build/outputs/apk/release/TobiBoard_$(VERSION_NAME)-release.apk
 
 AVD_NAME ?= tobiboard_pixel6_api34
 # google_apis (vs aosp_atd) gives us a properly rendering framebuffer on macOS:

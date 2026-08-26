@@ -118,6 +118,8 @@ public class LatinIME extends InputMethodService implements
     private static final int EXTENDED_TOUCHABLE_REGION_HEIGHT = 100;
     private static final int PERIOD_FOR_AUDIO_AND_HAPTIC_FEEDBACK_IN_KEY_REPEAT = 2;
     private static final int PENDING_IMS_CALLBACK_DURATION_MILLIS = 800;
+    /** Spacing between the 5 input-connection reset retries, so they span ~250 ms, not ~0. */
+    static final long RESET_CACHES_RETRY_DELAY_MILLIS = 50;
     static final long DELAY_WAIT_FOR_DICTIONARY_LOAD_MILLIS = TimeUnit.SECONDS.toMillis(2);
     static final long DELAY_DEALLOCATE_MEMORY_MILLIS = TimeUnit.SECONDS.toMillis(10);
 
@@ -344,14 +346,19 @@ public class LatinIME extends InputMethodService implements
                         // Connection is back: flush keystrokes buffered during the not-ready window.
                         latinIme.onInputConnectionReady();
                     } else if (msg.arg2 == 0) {
-                        // All retries exhausted and the input connection is still broken.
-                        // Hide the keyboard so the framework issues a fresh onStartInput when
-                        // the user next taps the field, re-establishing the connection.
-                        Log.w(TAG, "Input connection reset failed after all retries; hiding keyboard to force reconnect.");
-                        // Those buffered keystrokes can't be delivered into a hidden keyboard; drop
-                        // them so they don't replay into a later, unrelated field.
-                        latinIme.discardPendingEarlyInputs();
-                        latinIme.requestHideSelf(0);
+                        // All retries exhausted and the input connection is still broken. Fail OPEN:
+                        // ungate input and flush the buffer through the normal path. Worst case a
+                        // keystroke is lost, exactly as upstream behaves.
+                        //
+                        // We used to requestHideSelf(0) here to force the framework into a fresh
+                        // onStartInput. That assumed the user must re-tap the field to get the
+                        // keyboard back. False for a composer that keeps focus while the IME hides
+                        // (e.g. an in-app chat bubble): Android does not re-show the IME on its own
+                        // and an app that only calls showSoftInput on a focus *change* never asks
+                        // again, so the keyboard was gone for good. Leaving it up is recoverable;
+                        // hiding it is not.
+                        Log.w(TAG, "Input connection reset failed after all retries; ungating input and keeping the keyboard visible.");
+                        latinIme.onInputConnectionReady();
                     }
                     break;
                 case MSG_WAIT_FOR_DICTIONARY_LOAD:
@@ -396,8 +403,11 @@ public class LatinIME extends InputMethodService implements
 
         public void postResetCaches(final boolean tryResumeSuggestions, final int remainingTries) {
             removeMessages(MSG_RESET_CACHES);
-            sendMessage(obtainMessage(MSG_RESET_CACHES, tryResumeSuggestions ? 1 : 0,
-                    remainingTries, null));
+            // Delayed, not immediate: retryResetCachesAndReturnSuccess reposts on failure, so with
+            // sendMessage all remaining tries drained in a single message-loop burst microseconds
+            // apart and a connection that needed a few tens of ms to come back was declared dead.
+            sendMessageDelayed(obtainMessage(MSG_RESET_CACHES, tryResumeSuggestions ? 1 : 0,
+                    remainingTries, null), RESET_CACHES_RETRY_DELAY_MILLIS);
         }
 
         public void postWaitForDictionaryLoad() {
@@ -1502,8 +1512,13 @@ public class LatinIME extends InputMethodService implements
         mHandler.cancelUpdateSuggestionStrip();
         clearPendingTextFixState();
         // The input session is ending: drop any keystrokes buffered for it so they can't replay
-        // into a later, unrelated field.
+        // into a later, unrelated field, and re-open the gate. A not-ready flag left set here would
+        // outlive the session and silently swallow every keystroke of the next one, because the
+        // only thing that clears it is a full onStartInputViewInternal, which does not always run
+        // (early returns on a null EditorInfo / keyboard view, or the MSG_PENDING_IMS_CALLBACK skip
+        // in UIHandler.onStartInputView).
         discardPendingEarlyInputs();
+        mInputConnectionReady = true;
         // Should do the following in onFinishInputInternal but until JB MR2 it's not called :(
         mInputLogic.finishInput();
         mKeyboardActionListener.resetMetaState();
@@ -1922,6 +1937,9 @@ public class LatinIME extends InputMethodService implements
                 || keyCode == KeyCode.VOICE_STT_INPUT || keyCode == KeyCode.TEXT_FIX
                 || keyCode == KeyCode.TEXT_FIX_2;
         if (!isConnectionIndependentAction && !mInputConnectionReady) {
+            // Logged at warn so a stuck gate is visible in a plain logcat on a release build.
+            Log.w(TAG, "input connection not ready, buffering keystroke (pending="
+                    + mPendingEarlyEvents.getSize() + ")");
             enqueueEarlyEvent(event);
             return;
         }

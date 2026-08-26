@@ -145,6 +145,44 @@ class InputLogicTest {
         assertEquals(0, pendingBufferSize)
     }
 
+    @Test fun exhaustedResetRetriesUngateInputInsteadOfHidingTheKeyboard() {
+        reset()
+        inputConnectionReady = false
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('a'.code))
+        handleMessages()
+        assertEquals(1, pendingBufferSize)
+
+        // The last retry (remainingTries == 0) still finds the connection inert. We must NOT
+        // requestHideSelf here: a composer that keeps focus while the IME hides never asks for the
+        // keyboard back, so it was gone for good. Fail open instead.
+        failingTextReads = 1
+        latinIME.mHandler.postResetCaches(false, 0)
+        handleMessages()
+
+        assertEquals(true, inputConnectionReady)
+        assertEquals(0, pendingBufferSize)
+        assertEquals("a", getText()) // the buffered keystroke landed rather than being dropped
+    }
+
+    @Test fun finishingTheInputViewClearsAStaleNotReadyGate() {
+        reset()
+        inputConnectionReady = false
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('a'.code))
+        handleMessages()
+        assertEquals(1, pendingBufferSize)
+
+        // A not-ready flag left set past the end of the session would silently swallow every
+        // keystroke of the next one, because only a full onStartInputViewInternal clears it and that
+        // does not always run.
+        latinIME.onFinishInputViewInternal(true)
+        assertEquals(true, inputConnectionReady)
+        assertEquals(0, pendingBufferSize)
+
+        setText("")
+        input('b')
+        assertEquals("b", getText())
+    }
+
     @Test fun delete() {
         reset()
         setText("hello there ")
@@ -810,6 +848,7 @@ class InputLogicTest {
         batchEdit = 0
         currentInputType = InputType.TYPE_CLASS_TEXT
         lastAddedWord = ""
+        failingTextReads = 0
 
         // reset settings
         latinIME.prefs().edit { clear() }
@@ -1014,6 +1053,8 @@ private var currentScript = ScriptUtils.SCRIPT_LATIN
 private val messages = mutableListOf<Message>() // for latinIME / ShadowInputMethodService
 private val delayedMessages = mutableListOf<Message>() // for latinIME / ShadowInputMethodService
 // inputconnection stuff
+// How many upcoming text reads should fail, i.e. how long the connection stays inert (see ic below)
+private var failingTextReads = 0
 private var batchEdit = 0
 private var text = ""
 private var selectionStart = 0
@@ -1034,7 +1075,15 @@ private val composingText get() = if (composingStart == -1 || composingEnd == -1
 private val ic = object : InputConnection {
     // pretty clear (though this may be slow depending on the editor)
     // bad return value here is likely the cause for that weird bug improved/fixed by fixIncorrectLength
-    override fun getTextBeforeCursor(p0: Int, p1: Int): CharSequence = textBeforeCursor.take(p0)
+    override fun getTextBeforeCursor(p0: Int, p1: Int): CharSequence? {
+        // Simulate the inert-connection window: the framework hands back a non-null InputConnection
+        // whose text reads return null, which is what makes resetCachesUponCursorMove fail.
+        if (failingTextReads > 0) {
+            failingTextReads--
+            return null
+        }
+        return textBeforeCursor.take(p0)
+    }
     // pretty clear (though this may be slow depending on the editor)
     override fun getTextAfterCursor(p0: Int, p1: Int): CharSequence = textAfterCursor.take(p0)
     // pretty clear

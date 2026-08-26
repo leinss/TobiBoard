@@ -66,6 +66,18 @@ class KeyboardState(private val switchActions: SwitchActions) {
     private var modeBeforeNumpad = Mode.ALPHABET
     private var isSymbolShifted = false
     private var prevMainKeyboardWasShiftLocked = false
+
+    /**
+     * Whether the symbols layout was on its shifted (second) layer when we left it *for the numpad*,
+     * so that returning to symbols from the numpad lands on the same layer.
+     *
+     * Deliberately NOT remembered across a return to the alphabet layout: users read the symbols key
+     * as "give me symbols", not "give me where I left off", so [setAlphabetKeyboard] clears this and
+     * the next switch to symbols always starts on the first layer. Previously
+     * [resetKeyboardStateToAlphabet] (fired by an app restarting input on the same field, e.g. a chat
+     * composer clearing itself on send) and the numpad's force-return-to-alpha path both left it set,
+     * so a later symbols key silently opened the second layer.
+     */
     private var prevSymbolsKeyboardWasShifted = false
     private var recapitalizeMode: RecapitalizeMode? = null
     private var oneShotManualShiftPending = false
@@ -213,7 +225,9 @@ class KeyboardState(private val switchActions: SwitchActions) {
             if (prevSymbolsKeyboardWasShifted) setSymbolsShiftedKeyboard() else setSymbolsKeyboard()
             prevSymbolsKeyboardWasShifted = false
         } else {
-            prevSymbolsKeyboardWasShifted = isSymbolShifted
+            // Returning to alphabet always forgets the symbols shift layer: setAlphabetKeyboard
+            // clears prevSymbolsKeyboardWasShifted, so the next switch to symbols starts on the
+            // first layer.
             setAlphabetKeyboard(autoCapsFlags, recapitalizeMode)
             if (prevMainKeyboardWasShiftLocked) setShiftLocked(true)
             prevMainKeyboardWasShiftLocked = false
@@ -228,7 +242,6 @@ class KeyboardState(private val switchActions: SwitchActions) {
         }
         if (mode == Mode.ALPHABET) return
 
-        prevSymbolsKeyboardWasShifted = isSymbolShifted
         setAlphabetKeyboard(autoCapsFlags, recapitalizeMode)
         if (prevMainKeyboardWasShiftLocked) {
             setShiftLocked(true)
@@ -252,6 +265,11 @@ class KeyboardState(private val switchActions: SwitchActions) {
         switchActions.setAlphabetKeyboard()
         mode = Mode.ALPHABET
         isSymbolShifted = false
+        // Single owner of the "remembered symbols shift layer" reset: landing on alphabet by any
+        // route (tap, chord/slide release, restartInput, numpad + space) forgets it, so the next
+        // switch to symbols starts on the first layer. The numpad round-trip in toggleNumpad does
+        // not pass through here, so its genuine same-mode restore still works.
+        prevSymbolsKeyboardWasShifted = false
         this.recapitalizeMode = null
         oneShotManualShiftPending = false
         switchState = SwitchState.ALPHA
@@ -447,12 +465,9 @@ class KeyboardState(private val switchActions: SwitchActions) {
             // Switch back to the previous keyboard mode if the user chords the mode change key and
             // another key, then releases the mode change key.
             toggleAlphabetAndSymbols(autoCapsFlags, recapitalizeMode)
-        } else if (!withSliding) {
-            // If the mode change key is being released without sliding, we should forget the
-            // previous symbols keyboard shift state and simply switch back to symbols layout
-            // (never symbols shifted) next time the mode gets changed to symbols layout.
-            prevSymbolsKeyboardWasShifted = false
         }
+        // No prevSymbolsKeyboardWasShifted reset needed here: setAlphabetKeyboard owns it, so both
+        // the tap and the chord/slide release already forgot the symbols shift layer.
         symbolKeyState.onRelease()
     }
 
