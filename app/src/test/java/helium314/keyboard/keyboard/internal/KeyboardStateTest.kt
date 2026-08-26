@@ -184,6 +184,99 @@ class KeyboardStateTest {
         assertEquals(Layout.ALPHABET, actions.layout)
     }
 
+    // --- symbols layer must never stay stuck on the shifted (second) page ---
+
+    @Test
+    fun symbolsShiftedIsForgottenAfterPlainReturnToAlphabet() {
+        load()
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        assertEquals(Layout.SYMBOLS, actions.layout)
+        tap(KeyCode.SHIFT)
+        assertEquals(Layout.SYMBOLS_SHIFTED, actions.layout)
+        typeSymbol('€')
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        assertEquals(Layout.ALPHABET, actions.layout)
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        assertEquals(Layout.SYMBOLS, actions.layout)
+    }
+
+    @Test
+    fun symbolsShiftedIsForgottenWhenTheAbcKeyReleaseIsSwallowedByAFingerDrag() {
+        load()
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        tap(KeyCode.SHIFT)
+        assertEquals(Layout.SYMBOLS_SHIFTED, actions.layout)
+
+        // SYMBOL_ALPHA is a modifier key (KeyCode.isModifier), so PointerTracker drops its release
+        // when the finger drifts off the key while down, a sloppy everyday tap. The reset used to
+        // live only in onReleaseAlphaSymbol, so the shifted page stayed remembered.
+        state.onPressKey(KeyCode.SYMBOL_ALPHA, true, Constants.TextUtils.CAP_MODE_OFF, null)
+        state.onEvent(
+            Event.createSoftwareKeypressEvent(KeyCode.SYMBOL_ALPHA, 0, 0, 0, false),
+            Constants.TextUtils.CAP_MODE_OFF, null
+        )
+        state.onFinishSlidingInput(Constants.TextUtils.CAP_MODE_OFF, null)
+        assertEquals(Layout.ALPHABET, actions.layout)
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        assertEquals(Layout.SYMBOLS, actions.layout)
+    }
+
+    @Test
+    fun symbolsShiftedIsForgottenWhenTheAppRestartsInputOnTheSameField() {
+        load()
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        tap(KeyCode.SHIFT)
+        assertEquals(Layout.SYMBOLS_SHIFTED, actions.layout)
+
+        // A chat composer that clears itself on send makes the framework restart input on the same
+        // field; LatinIME answers with resetKeyboardStateToAlphabet. This used to record the shifted
+        // page and never clear it, so the next symbols key opened the second layer.
+        state.onResetKeyboardStateToAlphabet(Constants.TextUtils.CAP_MODE_OFF, null)
+        assertEquals(Layout.ALPHABET, actions.layout)
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        assertEquals(Layout.SYMBOLS, actions.layout)
+    }
+
+    @Test
+    fun symbolsShiftedIsForgottenWhenTheNumpadForcesAReturnToAlphabet() {
+        load()
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        tap(KeyCode.SHIFT)
+        assertEquals(Layout.SYMBOLS_SHIFTED, actions.layout)
+
+        state.toggleNumpad(false, Constants.TextUtils.CAP_MODE_OFF, null, false, true)
+        assertEquals(Layout.NUMPAD, actions.layout)
+        // Space in the numpad with "alphabet after numpad and space" enabled.
+        state.toggleNumpad(false, Constants.TextUtils.CAP_MODE_OFF, null, true, false)
+        assertEquals(Layout.ALPHABET, actions.layout)
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        assertEquals(Layout.SYMBOLS, actions.layout)
+    }
+
+    @Test
+    fun numpadStillReturnsToTheSymbolsPageItCameFrom() {
+        load()
+
+        tap(KeyCode.SYMBOL_ALPHA)
+        tap(KeyCode.SHIFT)
+        assertEquals(Layout.SYMBOLS_SHIFTED, actions.layout)
+
+        // The one restore that must survive: numpad and back, without passing through alphabet.
+        state.toggleNumpad(false, Constants.TextUtils.CAP_MODE_OFF, null, false, true)
+        assertEquals(Layout.NUMPAD, actions.layout)
+        state.toggleNumpad(false, Constants.TextUtils.CAP_MODE_OFF, null, false, false)
+        assertEquals(Layout.SYMBOLS_SHIFTED, actions.layout)
+    }
+
     private fun load() {
         state.onLoadKeyboard(Constants.TextUtils.CAP_MODE_OFF, null, false)
         actions.resetHistory()
@@ -198,6 +291,9 @@ class KeyboardStateTest {
         state.onEvent(Event.createSoftwareKeypressEvent(code, 0, 0, 0, false), autoCapsFlags, null)
         state.onReleaseKey(code, false, autoCapsFlags, null)
     }
+
+    /** Type a printable non-space character, i.e. what a symbols key produces. */
+    private fun typeSymbol(symbol: Char) = typeLetter(symbol, Constants.TextUtils.CAP_MODE_OFF)
 
     private fun typeLetter(letter: Char, autoCapsFlags: Int) {
         state.onPressKey(letter.code, true, autoCapsFlags, null)
@@ -237,12 +333,28 @@ class KeyboardStateTest {
             everShiftLocked = true
         }
 
-        override fun setEmojiKeyboard() {}
-        override fun setClipboardKeyboard() {}
-        override fun setNumpadKeyboard() {}
+        override fun setEmojiKeyboard() {
+            layout = Layout.EMOJI
+        }
+
+        override fun setClipboardKeyboard() {
+            layout = Layout.CLIPBOARD
+        }
+
+        override fun setNumpadKeyboard() {
+            layout = Layout.NUMPAD
+        }
+
         override fun toggleNumpad(withSliding: Boolean, autoCapsFlags: Int, recapitalizeMode: RecapitalizeMode?, forceReturnToAlpha: Boolean) {}
-        override fun setSymbolsKeyboard() {}
-        override fun setSymbolsShiftedKeyboard() {}
+
+        override fun setSymbolsKeyboard() {
+            layout = Layout.SYMBOLS
+        }
+
+        override fun setSymbolsShiftedKeyboard() {
+            layout = Layout.SYMBOLS_SHIFTED
+        }
+
         override fun requestUpdatingShiftState(autoCapsFlags: Int, recapitalizeMode: RecapitalizeMode?) {}
         override fun startDoubleTapShiftKeyTimer() {}
         var inDoubleTapTimeout = false
@@ -258,5 +370,10 @@ class KeyboardStateTest {
         AUTOMATIC_SHIFTED,
         SHIFT_LOCKED,
         SHIFT_LOCK_SHIFTED,
+        SYMBOLS,
+        SYMBOLS_SHIFTED,
+        NUMPAD,
+        EMOJI,
+        CLIPBOARD,
     }
 }
