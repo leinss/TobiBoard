@@ -1196,6 +1196,14 @@ New dictionary:
     <string name="voice_error_transcription_failed">Transcription failed</string>
     <string name="voice_error_rate_limited">AI provider rate limit reached — try again in a moment</string>
     <string name="voice_max_duration_reached">Maximum recording length reached — transcribing&#8230;</string>
+    <!-- Recording timer: elapsed time followed by the recording limit, e.g. "0:30 / 1:30" -->
+    <string name="voice_timer_elapsed_of_limit"><xliff:g id="elapsed">%1$s</xliff:g> / <xliff:g id="limit">%2$s</xliff:g></string>
+    <string name="voice_retry">Retry</string>
+    <string name="voice_retry_a11y">Retry transcription of the last recording</string>
+    <string name="voice_retry_unavailable">Recording is no longer available</string>
+    <string name="voice_copy_to_clipboard">Copy transcription to clipboard</string>
+    <string name="voice_copy_to_clipboard_summary">Also place each finished transcription on the clipboard, so it survives if the text lands in the wrong place</string>
+    <string name="voice_copied_to_clipboard">Transcription copied to clipboard</string>
     <string name="voice_error_secure_storage_unavailable">Secure storage is unavailable on this device</string>
     <string name="voice_mic_rationale_title">Microphone access</string>
     <string name="voice_mic_rationale_message">TobiBoard records audio only while you hold the voice button. The recording is sent over HTTPS to your selected AI provider for transcription using the API key you supply; it is not proxied by any TobiBoard server. You can revoke microphone access at any time from Android\'s app settings.</string>

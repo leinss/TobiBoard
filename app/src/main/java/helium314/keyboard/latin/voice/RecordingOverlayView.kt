@@ -27,6 +27,13 @@ import kotlin.reflect.KMutableProperty0
  */
 class RecordingOverlayView(context: Context) : LinearLayout(context) {
 
+    companion object {
+        /** How long before the ceiling the timer switches to its warning tint. */
+        private const val NEAR_LIMIT_WARNING_MS = 10_000L
+        /** Fixed amber: the theme text colour it would otherwise derive from is what we contrast against. */
+        private const val NEAR_LIMIT_COLOR = 0xFFFFA000.toInt()
+    }
+
     private val meterView: AmplitudeMeterView
     private val timerText: TextView
     private val statusText: TextView
@@ -44,6 +51,15 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
 
     /** Supplier for live amplitude (0..32767) and elapsed ms. Set by the controller. */
     var telemetryProvider: (() -> Pair<Double, Long>)? = null
+
+    /**
+     * Supplier for the recording ceiling in ms. When set, the timer reads "0:30 / 1:30" instead of a
+     * bare elapsed count, so the limit is visible while dictating rather than a surprise at the end.
+     */
+    var maxDurationMsProvider: (() -> Long)? = null
+
+    /** Timer colour at rest, kept so the near-limit warning tint can be reverted. */
+    private var timerNormalColor = 0
 
     init {
         orientation = HORIZONTAL
@@ -102,7 +118,8 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
 
     fun setColors(textColor: Int) {
         statusText.setTextColor(textColor)
-        timerText.setTextColor((textColor and 0x00FFFFFF) or 0xAA000000.toInt())
+        timerNormalColor = (textColor and 0x00FFFFFF) or 0xAA000000.toInt()
+        timerText.setTextColor(timerNormalColor)
         meterView.meterColor = textColor
         // Stop button (✓ submit) is the primary action: stronger ring + full-opacity glyph.
         (stopButton.background as? GradientDrawable)
@@ -152,7 +169,22 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
                 val telemetry = telemetryProvider?.invoke()
                 if (telemetry != null) {
                     meterView.setAmplitude(telemetry.first)
-                    timerText.text = formatElapsed(telemetry.second)
+                    val elapsed = telemetry.second
+                    val limit = maxDurationMsProvider?.invoke() ?: 0L
+                    if (limit > 0L) {
+                        timerText.text = context.getString(
+                            R.string.voice_timer_elapsed_of_limit,
+                            formatElapsed(elapsed),
+                            formatElapsed(limit),
+                        )
+                        // Warn while there is still time to wrap up a sentence, rather than cutting
+                        // the user off mid-word. Recording auto-submits at the limit either way.
+                        val nearLimit = limit - elapsed <= NEAR_LIMIT_WARNING_MS
+                        timerText.setTextColor(if (nearLimit) NEAR_LIMIT_COLOR else timerNormalColor)
+                    } else {
+                        timerText.text = formatElapsed(elapsed)
+                        timerText.setTextColor(timerNormalColor)
+                    }
                 }
                 tickHandler.postDelayed(this, 80L)
             }

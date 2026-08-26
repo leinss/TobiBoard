@@ -79,6 +79,17 @@ class UndoBarView(context: Context) : LinearLayout(context) {
         label.text = text
     }
 
+    /**
+     * Re-purposes the bar as a generic message + one-action strip. Used for the "transcription
+     * failed, Retry" case, which wants the same layout and pill but no Report action (there is no
+     * AI output to report).
+     */
+    fun setPrimaryAction(text: String, contentDescription: String, showReport: Boolean) {
+        undoButton.text = text
+        undoButton.contentDescription = contentDescription
+        reportButton.visibility = if (showReport) VISIBLE else GONE
+    }
+
     fun setColors(textColor: Int) {
         label.setTextColor(textColor)
         // Muted so Report reads as a secondary action next to the filled Undo pill.

@@ -9,6 +9,8 @@ package helium314.keyboard.latin;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -686,6 +688,8 @@ public class LatinIME extends InputMethodService implements
                     mSuggestionStripView.setVoiceTelemetryProvider(() ->
                         new kotlin.Pair<>(mVoiceInputManager.getCurrentAmplitude(),
                             mVoiceInputManager.getCurrentDurationMs()));
+                    mSuggestionStripView.setVoiceMaxDurationProvider(
+                        () -> mVoiceInputManager.getMaxDurationMs());
                     mSuggestionStripView.showRecordingOverlay();
                 }
             }
@@ -700,6 +704,7 @@ public class LatinIME extends InputMethodService implements
             public void onFinished() {
                 if (mSuggestionStripView != null) {
                     mSuggestionStripView.setVoiceTelemetryProvider(null);
+                    mSuggestionStripView.setVoiceMaxDurationProvider(null);
                     mSuggestionStripView.hideRecordingOverlay();
                 }
             }
@@ -708,15 +713,23 @@ public class LatinIME extends InputMethodService implements
             public void onTranscriptionResult(@NonNull final String text) {
                 if (isVoiceHapticEnabled())
                     AudioAndHapticFeedbackManager.getInstance().vibrateVoiceSuccess();
+                // Copy before inserting: if the insert lands in the wrong field or the connection is
+                // gone, the clipboard is the user's remaining copy of what they dictated.
+                copyTranscriptionToClipboardIfEnabled(text);
                 onTextInput(text);
                 armUndo(text, "", getString(R.string.voice_undo_inserted));
             }
 
             @Override
-            public void onError(@NonNull final String message) {
+            public void onError(@NonNull final String message, final boolean canRetry) {
                 if (isVoiceHapticEnabled())
                     AudioAndHapticFeedbackManager.getInstance().vibrateVoiceError();
                 Toast.makeText(LatinIME.this, message, Toast.LENGTH_LONG).show();
+                // A toast fades; a lost dictation needs something to tap. Offer Retry on the strip
+                // for as long as the failed clip is retained.
+                if (canRetry && mSuggestionStripView != null) {
+                    mSuggestionStripView.showRetryBar(message, LatinIME.this::retryVoiceTranscription);
+                }
             }
 
             @Override
@@ -936,6 +949,42 @@ public class LatinIME extends InputMethodService implements
         if (mTextFixManager != null) mTextFixManager.cancel();
         if (mSuggestionStripView != null) mSuggestionStripView.hideTextFixOverlay();
         clearUndo();
+    }
+
+    /**
+     * Re-runs transcription over the clip retained by the last failed attempt. If the retention
+     * window already expired the clip is gone, so say so rather than failing silently.
+     */
+    private void retryVoiceTranscription() {
+        if (mSuggestionStripView != null) mSuggestionStripView.hideUndoBar();
+        if (mVoiceInputManager == null || !mVoiceInputManager.retryLastTranscription()) {
+            Toast.makeText(this, R.string.voice_retry_unavailable, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * Opt-in safety net for dictation: also place the finished transcription on the system
+     * clipboard, so a long dictation is not lost if the insert goes somewhere unexpected. Off by
+     * default because it overwrites whatever the user had copied.
+     */
+    private void copyTranscriptionToClipboardIfEnabled(final String text) {
+        if (text == null || text.isEmpty()) return;
+        try {
+            // Read straight from prefs, matching how the other voice options are consumed
+            // (VoiceInputManager does the same) rather than widening SettingsValues for one flag.
+            if (!DeviceProtectedUtils.getSharedPreferences(this)
+                    .getBoolean(Settings.PREF_VOICE_COPY_TO_CLIPBOARD, Defaults.PREF_VOICE_COPY_TO_CLIPBOARD)) {
+                return;
+            }
+            final ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm == null) return;
+            cm.setPrimaryClip(ClipData.newPlainText("TobiBoard", text));
+            Toast.makeText(this, R.string.voice_copied_to_clipboard, Toast.LENGTH_SHORT).show();
+        } catch (final Exception e) {
+            // Some OEM/managed profiles refuse clipboard writes from an IME. Never let the safety
+            // net take down the insertion it was meant to protect.
+            Log.w(TAG, "Could not copy transcription to clipboard", e);
+        }
     }
 
     /**

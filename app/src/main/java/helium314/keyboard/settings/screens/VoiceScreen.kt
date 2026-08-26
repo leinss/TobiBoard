@@ -165,6 +165,7 @@ internal fun buildVoiceScreenItems(
     // Language hint only feeds cloud STT — Parakeet v3-int8 auto-detects en/de/es/fr.
     if (voiceInputEnabled && cloud) Settings.PREF_VOICE_LANGUAGE_HINT else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_SPACE_HEURISTIC else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_COPY_TO_CLIPBOARD else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_HAPTIC_FEEDBACK else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_MIC_SENSITIVITY else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,
@@ -414,6 +415,9 @@ fun createVoiceSettings(context: Context) = listOf(
     },
     Setting(context, Settings.PREF_VOICE_SPACE_HEURISTIC, R.string.voice_space_heuristic, R.string.voice_space_heuristic_summary) {
         SwitchPreference(it, Defaults.PREF_VOICE_SPACE_HEURISTIC)
+    },
+    Setting(context, Settings.PREF_VOICE_COPY_TO_CLIPBOARD, R.string.voice_copy_to_clipboard, R.string.voice_copy_to_clipboard_summary) {
+        SwitchPreference(it, Defaults.PREF_VOICE_COPY_TO_CLIPBOARD)
     },
     Setting(context, Settings.PREF_VOICE_HAPTIC_FEEDBACK, R.string.voice_haptic_feedback, R.string.voice_haptic_feedback_summary) {
         SwitchPreference(it, Defaults.PREF_VOICE_HAPTIC_FEEDBACK)

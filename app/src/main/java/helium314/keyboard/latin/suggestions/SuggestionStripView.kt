@@ -318,6 +318,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var onStopRecording: Runnable? = null
     private var onCancelRecording: Runnable? = null
     private var voiceTelemetryProvider: (() -> Pair<Double, Long>)? = null
+    private var voiceMaxDurationProvider: (() -> Long)? = null
     // The voice and text-fix overlays force the toolbar closed so the overlay (which lives
     // inside `suggestionsStrip`) is actually visible. Capture the prior state so we can
     // restore it when the overlay dismisses — users who had the toolbar pinned open expect
@@ -336,6 +337,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         voiceTelemetryProvider = provider
     }
 
+    /** Recording ceiling in ms, so the overlay timer can read "0:30 / 1:30". Null hides the limit. */
+    fun setVoiceMaxDurationProvider(provider: (() -> Long)?) {
+        voiceMaxDurationProvider = provider
+    }
+
     fun showRecordingOverlay() {
         // The overlay is hosted inside `suggestionsStrip`. If the user opened the toolbar (the
         // chevron), `suggestionsStrip` is hidden behind `toolbarContainer` — and the overlay
@@ -348,6 +354,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         overlay.onStopClick = { onStopRecording?.run() }
         overlay.onCancelClick = { onCancelRecording?.run() }
         overlay.telemetryProvider = voiceTelemetryProvider
+        overlay.maxDurationMsProvider = voiceMaxDurationProvider
         overlay.showRecording()
         setExternalSuggestionView(overlay, false)
         recordingOverlay = overlay
@@ -466,6 +473,25 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         bar.setLabel(labelText)
         bar.onUndoClick = { onUndo.run() }
         bar.onReportClick = { launchAiOutputReport(aiOutput) }
+        setExternalSuggestionView(bar, false)
+        undoBar = bar
+    }
+
+    /**
+     * Shows a failed-transcription message with a Retry action, reusing the undo bar's layout and
+     * teardown (so [hideUndoBar] clears either one). A toast alone was not enough here: the user has
+     * just lost a dictation and needs somewhere to tap, not a message that fades.
+     */
+    fun showRetryBar(labelText: String, onRetry: Runnable) {
+        val bar = UndoBarView(context)
+        bar.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+        bar.setLabel(labelText)
+        bar.setPrimaryAction(
+            context.getString(R.string.voice_retry),
+            context.getString(R.string.voice_retry_a11y),
+            showReport = false,
+        )
+        bar.onUndoClick = { onRetry.run() }
         setExternalSuggestionView(bar, false)
         undoBar = bar
     }
