@@ -1,0 +1,2 @@
+- TobiBoard now targets Android 16 (API level 36).
+- No functional changes to typing, voice input or the AI text fix.
