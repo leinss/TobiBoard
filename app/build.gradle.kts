@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    compileSdk = 35
+    compileSdk = 36
 
     val configuredKeystore = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let {
         val candidate = File(it)
@@ -47,7 +47,7 @@ android {
     defaultConfig {
         applicationId = "xyz.leinss.TobiBoard"
         minSdk = 21
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 6815
         versionName = "6.8.15"
         buildConfigField("boolean", "ALLOW_USER_SUPPLIED_JNI", "false")
@@ -216,7 +216,7 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.17.0")
-    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("androidx.test:runner:1.6.2")
     testImplementation("androidx.test:core:1.6.1")
 
