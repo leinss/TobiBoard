@@ -56,6 +56,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -85,6 +88,13 @@ import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.dialogs.TextInputDialog
 import kotlinx.coroutines.delay
+
+// The numbered row and the two action shapes carry no text of their own that tells them apart:
+// which circle is current and which button is the forward action are expressed by colour only.
+// These tags let a UI test address them without changing what the user sees.
+const val WIZARD_STEP_INDICATOR_TAG = "wizardStepIndicator"
+const val WIZARD_PRIMARY_ACTION_TAG = "wizardPrimaryAction"
+const val WIZARD_SECONDARY_ACTION_TAG = "wizardSecondaryAction"
 
 @Composable
 fun WelcomeWizard(
@@ -230,7 +240,10 @@ fun WelcomeWizard(
                     shape = CircleShape,
                     color = if (isSelected) primaryActionColor else actionContainerColor.copy(alpha = 0.5f),
                     contentColor = if (isSelected) primaryActionContentColor else textColorDim,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier
+                        .size(28.dp)
+                        .semantics(mergeDescendants = true) { selected = isSelected }
+                        .testTag(WIZARD_STEP_INDICATOR_TAG)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
@@ -253,7 +266,7 @@ fun WelcomeWizard(
                 containerColor = primaryActionColor,
                 contentColor = primaryActionContentColor
             ),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().testTag(WIZARD_PRIMARY_ACTION_TAG)
         ) {
             Icon(
                 icon,
@@ -276,7 +289,7 @@ fun WelcomeWizard(
             shape = RoundedCornerShape(20.dp),
             border = BorderStroke(1.dp, primaryActionColor.copy(alpha = 0.45f)),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = primaryActionColor),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().testTag(WIZARD_SECONDARY_ACTION_TAG)
         ) {
             if (icon != null) Icon(icon, null, Modifier.padding(end = 8.dp).size(20.dp))
             Text(actionText, Modifier.weight(1f), textAlign = TextAlign.Center)

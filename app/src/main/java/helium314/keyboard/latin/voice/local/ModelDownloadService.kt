@@ -15,35 +15,30 @@ import androidx.core.app.NotificationCompat
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.voice.isNetworkAvailable
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Foreground service that owns long-running model downloads, so they survive the IME
  * process being dismissed. The UI starts downloads via [start] and cancels via
  * [cancel]; progress is observed through [ModelDownloadRepository.states].
  *
- * Downloads run serially: a second [start] request while one is in flight waits on
- * [downloadMutex] and shows as [DownloadState.Queued] until the running one finishes.
- * Concurrency would add bandwidth contention without user benefit (only one model is
- * actively useful at a time anyway). Cancelling a queued download works the same as
- * cancelling a running one: its job is cancelled while suspended on the mutex.
+ * Downloads run serially, one at a time, through [SerialDownloadQueue]: a second [start]
+ * request while one is in flight shows as [DownloadState.Queued] until the running one
+ * finishes. Cancelling a queued download works the same as cancelling a running one.
  */
 internal class ModelDownloadService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val jobs = ConcurrentHashMap<String, Job>()
     // One download at a time. The class comment promised this from the start, but every start()
     // launched straight into the shared scope, so two models fought over bandwidth and disk.
-    private val downloadMutex = Mutex()
+    private val queue = SerialDownloadQueue(
+        scope = scope,
+        onState = { modelId, state -> ModelDownloadRepository.update(modelId, state) },
+        onIdle = { stopForegroundAndService() },
+    )
     private val downloader = ModelDownloader()
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -81,7 +76,7 @@ internal class ModelDownloadService : Service() {
             stopForegroundIfIdle()
             return
         }
-        if (jobs.containsKey(modelId)) return // already downloading: that job keeps us foreground
+        if (queue.isPending(modelId)) return // already downloading: that job keeps us foreground
         // A new attempt supersedes whatever the last one failed with.
         ModelDownloadRepository.clearFailure(applicationContext, modelId)
         if (ModelStorage.isReady(this, model)) {
@@ -105,23 +100,9 @@ internal class ModelDownloadService : Service() {
             return
         }
 
-        val job = scope.launch {
-            try {
-                // Reported before the wait so a second model does not sit on the previous state
-                // (usually NotDownloaded) for as long as the running download takes.
-                ModelDownloadRepository.update(modelId, DownloadState.Queued)
-                downloadMutex.withLock {
-                    val targetDir = ModelStorage.dirFor(applicationContext, model)
-                    downloader.download(targetDir, model, authToken) { state ->
-                        ModelDownloadRepository.update(modelId, state)
-                        updateNotification(modelId, model.displayName, state)
-                    }
-                }
-            } catch (e: CancellationException) {
-                // User cancel / service teardown: the Cancelled state is already set by
-                // cancelDownload()/onDestroy(). Never swallow cancellation — rethrow it.
-                throw e
-            } catch (e: Exception) {
+        queue.enqueue(
+            modelId = modelId,
+            onFailure = { e ->
                 // A genuine failure (network, disk, verification) — surface it as Failed with a
                 // reason so the UI shows the error + retry, instead of masquerading as Cancelled.
                 Log.e(TAG, "download failed for $modelId", e)
@@ -130,12 +111,14 @@ internal class ModelDownloadService : Service() {
                     model.displayName,
                     downloadFailureReason(e, getString(R.string.voice_error_no_network), getString(R.string.local_model_download_error_generic)),
                 )
-            } finally {
-                jobs.remove(modelId)
-                if (jobs.isEmpty()) stopForegroundAndService()
+            },
+        ) {
+            val targetDir = ModelStorage.dirFor(applicationContext, model)
+            downloader.download(targetDir, model, authToken) { state ->
+                ModelDownloadRepository.update(modelId, state)
+                updateNotification(modelId, model.displayName, state)
             }
         }
-        jobs[modelId] = job
     }
 
     /**
@@ -164,13 +147,11 @@ internal class ModelDownloadService : Service() {
 
     /** Tear down the foreground notification + service if no download is currently running. */
     private fun stopForegroundIfIdle() {
-        if (jobs.isEmpty()) stopForegroundAndService()
+        if (queue.isIdle) stopForegroundAndService()
     }
 
     private fun cancelDownload(modelId: String) {
-        jobs.remove(modelId)?.cancel()
-        ModelDownloadRepository.update(modelId, DownloadState.Cancelled)
-        if (jobs.isEmpty()) stopForegroundAndService()
+        queue.cancel(modelId)
     }
 
     private fun promoteToForeground(modelId: String, displayName: String, percent: Int) {

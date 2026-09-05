@@ -321,8 +321,20 @@ test-managed: $(SHERPA_ONNX_AAR) ## Run instrumentation tests on the Gradle Mana
 	./gradlew :app:pixel6Api34DebugAndroidTest
 
 .PHONY: test-connected
+# testBuildType is debugNoMinify, so the connected task is named after that variant. Spelling it
+# out rather than relying on Gradle abbreviating connectedDebugAndroidTest to it.
 test-connected: $(SHERPA_ONNX_AAR) ## Run instrumentation tests on whatever device adb sees
-	./gradlew :app:connectedDebugAndroidTest
+	./gradlew :app:connectedDebugNoMinifyAndroidTest
+
+# The other instrumentation tests load native STT models and take minutes, so the runner selects
+# on @UiFlowTest. A package filter cannot separate them: the IME flow test belongs in
+# helium314.keyboard.latin, which has the model tests as a subpackage.
+UI_TEST_ANNOTATION := helium314.keyboard.UiFlowTest
+
+.PHONY: test-ui
+test-ui: $(SHERPA_ONNX_AAR) ## Run the UI flow suite only (wizard, settings screens, IME) on a connected device
+	ANDROID_SERIAL=$(ADB_SIM_SERIAL) ./gradlew :app:connectedDebugNoMinifyAndroidTest \
+		-Pandroid.testInstrumentationRunnerArguments.annotation=$(UI_TEST_ANNOTATION)
 
 ## --- composite flows ------------------------------------------------------
 
