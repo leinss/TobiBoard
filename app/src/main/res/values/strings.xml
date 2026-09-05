@@ -226,6 +226,8 @@
     <string name="clipboard_encryption_failed">Clipboard history could not encrypt this item, so it was not saved</string>
     <!-- Shown once when the device keystore cannot provide a key, so clips are stored unencrypted -->
     <string name="clipboard_encryption_unavailable">This device cannot encrypt clipboard history, so it is stored unencrypted</string>
+    <!-- Shown once when the device has a keystore but it cannot provide a key, so nothing is saved -->
+    <string name="clipboard_encryption_broken">This device\'s keystore is not working, so clipboard history cannot be saved</string>
     <!-- Shown once when stored clips can no longer be decrypted and had to be removed -->
     <string name="clipboard_entries_unreadable"><xliff:g id="count">%1$d</xliff:g> clipboard entries could no longer be decrypted and were removed</string>
     <!-- Same, but the rows were kept: the key could not be shown to work, so the failure may be temporary -->
@@ -369,6 +371,7 @@
     <string name="select_all" tools:keep="@string/select_all" translatable="false">@android:string/selectAll</string>
     <string name="select_word" tools:keep="@string/select_word">Select word</string>
     <string name="add_to_dictionary" tools:keep="@string/add_to_dictionary">Add to dictionary</string>
+    <string name="text_fix" tools:keep="@string/text_fix">AI text fix</string>
     <string name="one_handed" tools:keep="@string/one_handed">One-handed mode</string>
     <string name="split" tools:keep="@string/split">Split keyboard</string>
     <string name="full_left" tools:keep="@string/full_left">Full left</string>
@@ -387,6 +390,17 @@
     <string name="redo" tools:keep="@string/redo">Redo</string>
     <string name="close_history" tools:keep="@string/close_history">Close clipboard history</string>
     <string name="emoji" tools:keep="@string/emoji">Emoji</string>
+    <!-- Shown when the clipboard key is tapped with clipboard history off and an empty clipboard -->
+    <string name="clipboard_nothing_to_paste">Nothing to paste</string>
+    <!-- Short captions drawn under the icons in the Return-key long-press popup, so the icons are
+         not five unlabelled glyphs. Keep each to one short word: they are drawn inside a key. -->
+    <string name="popup_caption_clipboard">Clipboard</string>
+    <string name="popup_caption_voice">Voice</string>
+    <string name="popup_caption_emoji">Emoji</string>
+    <string name="popup_caption_stt">STT</string>
+    <string name="popup_caption_text_fix">Fix</string>
+    <string name="popup_caption_text_fix_2">Fix 2</string>
+    <string name="popup_caption_add_to_dictionary">Dictionary</string>
     <!-- Title of the setting to set clipboard toolbar keys -->
     <string name="clipboard_toolbar_keys">Select clipboard toolbar keys</string>
     <!-- Title of the setting to set pinned toolbar keys -->
@@ -1138,7 +1152,7 @@ New dictionary:
     <!-- Voice Input -->
     <string name="voice_input_title">Voice Input</string>
     <string name="voice_input_enabled">Enable Voice Input</string>
-    <string name="voice_input_enabled_summary">Long-press Return to record and transcribe. Runs on this device by default; a cloud provider needs an API key you supply.</string>
+    <string name="voice_input_enabled_summary">Long-press Return, slide onto the microphone and release to record. Or tap the microphone key on the toolbar to start, and tap it again to stop. Runs on this device by default; a cloud provider needs an API key you supply.</string>
     <string name="ai_provider">AI Provider</string>
     <string name="ai_provider_openrouter">OpenRouter</string>
     <string name="ai_provider_payperq">PayPerQ</string>
@@ -1149,7 +1163,7 @@ New dictionary:
     <string name="voice_local_model_not_downloaded">Not downloaded — tap to open On-device models</string>
     <string name="setup_model_download_title">Download on-device model</string>
     <string name="setup_model_download_instruction">The Parakeet speech-recognition model runs entirely on your device with no cloud account needed, and transcribes English, German, Spanish and French.</string>
-    <string name="setup_model_download_size">~%d MB — Wi-Fi recommended</string>
+    <string name="setup_model_download_size"><xliff:g id="size">%1$s</xliff:g> · Wi-Fi recommended</string>
     <string name="setup_model_download_action">Download now</string>
     <string name="setup_model_download_continue_downloading">Continue while it downloads</string>
     <string name="setup_model_download_continue_later">Continue, download later</string>
@@ -1162,7 +1176,7 @@ New dictionary:
     <string name="text_fix_error_local_not_ready"><xliff:g id="model">%1$s</xliff:g> is not downloaded. Open Settings → On-device models.</string>
     <string name="text_fix_error_local_load_failed">On-device model failed to load — it may be corrupt. Re-download it in Settings → On-device models.</string>
     <string name="openrouter_api_key">OpenRouter API Key</string>
-    <string name="openrouter_api_key_summary">Required before long-pressing Return to use voice input with your OpenRouter account</string>
+    <string name="openrouter_api_key_summary">Required before voice input can use your OpenRouter account</string>
     <string name="payperq_api_key">PayPerQ API Key</string>
     <string name="payperq_api_key_summary">Required before using voice input or Text Fix with your PayPerQ account</string>
     <string name="openrouter_zdr_enabled">Use zero data retention</string>
@@ -1320,7 +1334,7 @@ New dictionary:
     <string name="local_model_delete">Delete</string>
     <string name="local_model_state_not_downloaded">Not downloaded</string>
     <string name="local_model_state_queued">Queued…</string>
-    <string name="local_model_state_downloading">File <xliff:g id="index">%1$d</xliff:g>/<xliff:g id="count">%2$d</xliff:g>: <xliff:g id="file">%3$s</xliff:g> · <xliff:g id="percent">%4$d</xliff:g>%%</string>
+    <string name="local_model_state_downloading">File <xliff:g id="index">%1$d</xliff:g>/<xliff:g id="count">%2$d</xliff:g> · <xliff:g id="percent">%3$d</xliff:g>%%</string>
     <string name="local_model_state_verifying">Verifying <xliff:g id="file">%1$s</xliff:g>…</string>
     <string name="local_model_state_ready">Ready</string>
     <string name="local_model_state_cancelled">Cancelled</string>
@@ -1351,7 +1365,6 @@ New dictionary:
     <string name="setup_ai_provider_choice_instruction">Voice input needs an AI provider before it can transcribe speech. Pick the service you want to use now, or keep the current provider and continue.</string>
     <string name="setup_ai_provider_compare_local">On-device: private and works offline. One-time model download, then nothing leaves your device.</string>
     <string name="setup_ai_provider_compare_cloud">Cloud: instant with no download, but needs your own API key and sends text off your device.</string>
-    <string name="setup_ai_provider_current_provider">Current provider: %1$s</string>
     <string name="setup_ai_provider_select">Provider: %1$s</string>
     <string name="setup_ai_provider_key_title">Add your API key</string>
     <string name="setup_ai_provider_key_instruction">%1$s needs an API key to process voice input. The key is stored securely on this device and can be changed later in Voice settings.</string>
@@ -1374,7 +1387,7 @@ New dictionary:
     <!-- Text Fix -->
     <string name="settings_screen_text_fix">Text Fix</string>
     <string name="text_fix_enabled">Enable Text Fix</string>
-    <string name="text_fix_enabled_summary">Long-press Return to fix the text in the field, or just your selection if you made one. Runs on this device by default; a cloud provider needs an API key you supply.</string>
+    <string name="text_fix_enabled_summary">Long-press Return, slide onto the wand and release to fix the text in the field, or just your selection if you made one. You can also put an AI text fix key on the toolbar in Settings, Toolbar. Runs on this device by default; a cloud provider needs an API key you supply.</string>
     <string name="text_fix_enable_privacy_title">Enable Text Fix?</string>
     <string name="text_fix_enable_privacy_message">Text Fix sends your text over HTTPS to your selected AI provider using the API key you supply.</string>
     <string name="text_fix_enable_privacy_message_local">Text Fix rewrites your text with the on-device model. Nothing is uploaded and no API key is needed. Switching to a cloud provider later will send your text off this device.</string>

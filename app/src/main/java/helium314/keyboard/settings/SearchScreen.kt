@@ -107,6 +107,9 @@ fun <T: Any?> SearchScreen(
     itemContent: @Composable (T) -> Unit,
     icon: @Composable (() -> Unit)? = null,
     menu: List<Pair<String, () -> Unit>>? = null,
+    // Placeholder for the search field. Screens that search something other than the settings list
+    // say so here, otherwise the field is an unlabelled box.
+    searchHint: String? = null,
     content: @Composable (ColumnScope.() -> Unit)? = null,
 ) {
     // searchText and showSearch should have the same remember or rememberSaveable
@@ -174,7 +177,8 @@ fun <T: Any?> SearchScreen(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = MaterialTheme.colorScheme.surface
-                        )
+                        ),
+                        placeholder = searchHint,
                     )
                 }
             }
@@ -217,6 +221,7 @@ fun ExpandableSearchField(
     onSearchChange: (TextFieldValue) -> Unit,
     modifier: Modifier = Modifier,
     colors: TextFieldColors = TextFieldDefaults.colors(),
+    placeholder: String? = null,
 ) {
     val focusRequester = remember { FocusRequester() }
 
@@ -229,6 +234,7 @@ fun ExpandableSearchField(
             onValueChange = onSearchChange,
             modifier = modifier.focusRequester(focusRequester),
             leadingIcon = { SearchIcon() },
+            placeholder = placeholder?.let { { Text(it) } },
             trailingIcon = { IconButton(onClick = {
                 if (search.text.isBlank()) onDismiss()
                 else onSearchChange(TextFieldValue())

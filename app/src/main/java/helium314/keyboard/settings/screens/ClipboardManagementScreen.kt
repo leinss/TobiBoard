@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import helium314.keyboard.latin.ClipboardHistoryEntry
@@ -44,30 +45,44 @@ fun ClipboardManagementScreen(onClickBack: () -> Unit) {
 
     var editingAnnotationFor by remember { mutableStateOf<ClipboardHistoryEntry?>(null) }
 
-    SearchScreen(
+    // Explicit Any: the list holds entries plus, when it would be empty, one EmptyState marker.
+    SearchScreen<Any>(
         onClickBack = onClickBack,
         title = { Text(stringResource(R.string.clipboard_management)) },
+        searchHint = stringResource(R.string.clipboard_search_hint),
+        // SearchScreen draws exactly what this returns, so an empty result needs a row of its
+        // own: without one the screen is a title bar and nothing else, with no explanation.
         filteredItems = { query ->
-            if (query.isBlank()) entries
+            val matches = if (query.isBlank()) entries
             else entries.filter { entry ->
                 entry.text.contains(query, ignoreCase = true) ||
                     entry.annotation?.contains(query, ignoreCase = true) == true
             }
+            matches.ifEmpty {
+                listOf(
+                    if (query.isBlank()) EmptyState.NoHistory else EmptyState.NoMatches
+                )
+            }
         },
-        itemContent = { entry ->
-            ClipboardEntryItem(
-                entry = entry,
-                onPin = {
-                    dao?.togglePinned(entry.id)
-                    revision++
-                },
-                onAnnotate = { editingAnnotationFor = entry },
-                onDelete = {
-                    dao?.deleteById(entry.id)
-                    revision++
+        itemContent = { item ->
+            when (item) {
+                is EmptyState -> EmptyStateMessage(item)
+                is ClipboardHistoryEntry -> {
+                    ClipboardEntryItem(
+                        entry = item,
+                        onPin = {
+                            dao?.togglePinned(item.id)
+                            revision++
+                        },
+                        onAnnotate = { editingAnnotationFor = item },
+                        onDelete = {
+                            dao?.deleteById(item.id)
+                            revision++
+                        }
+                    )
+                    HorizontalDivider()
                 }
-            )
-            HorizontalDivider()
+            }
         },
     )
 
@@ -92,6 +107,25 @@ fun ClipboardManagementScreen(onClickBack: () -> Unit) {
             onDismissRequest = { editingAnnotationFor = null },
         )
     }
+}
+
+/** The two reasons the list can be empty: nothing was ever copied, or the search matched nothing. */
+private enum class EmptyState { NoHistory, NoMatches }
+
+@Composable
+private fun EmptyStateMessage(state: EmptyState) {
+    Text(
+        text = stringResource(
+            when (state) {
+                EmptyState.NoHistory -> R.string.clipboard_history_empty_hint
+                EmptyState.NoMatches -> R.string.clipboard_no_results
+            }
+        ),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 48.dp),
+    )
 }
 
 @Composable

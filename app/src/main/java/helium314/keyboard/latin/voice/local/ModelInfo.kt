@@ -22,6 +22,23 @@ internal interface ModelInfo {
     /** Optional model page the user must visit (e.g. to accept a licence / "Agree to access"). */
     val licenseUrl: String? get() = null
     val totalBytes: Long get() = files.sumOf { it.sizeBytes }
+    /**
+     * Download size as shown to the user, or null when unknown. Every surface that names a size
+     * must read this, so the wizard and the models screen cannot drift apart.
+     */
+    val sizeLabel: String? get() = formatModelSize(totalBytes)
+}
+
+/**
+ * Format a download size in decimal MB/GB, the unit HuggingFace reports and the one the
+ * downloader verifies against. Binary units (MiB) would print a second, smaller number for
+ * the same file. Returns null for a size of zero or less.
+ */
+internal fun formatModelSize(bytes: Long): String? = when {
+    bytes <= 0 -> null
+    bytes >= 1_000_000_000 -> "%.1f GB".format(bytes / 1_000_000_000.0)
+    bytes >= 1_000_000 -> "%.0f MB".format(bytes / 1_000_000.0)
+    else -> "%.0f KB".format(bytes / 1_000.0)
 }
 
 internal data class ModelFile(
@@ -34,7 +51,7 @@ internal data class ModelFile(
 internal sealed interface SttModelInfo : ModelInfo {
     /**
      * Sherpa-onnx export of NVIDIA Parakeet TDT 0.6 B v3, INT8-quantised (multilingual:
-     * en/de/es/fr). Four files totalling ~660 MB. Hashes come from the HuggingFace LFS
+     * en/de/es/fr). Four files totalling 670 MB. Hashes come from the HuggingFace LFS
      * `oid` field; `tokens.txt` is not LFS-tracked, so its SHA-256 was computed by hand
      * (`curl … | shasum -a 256`) and pinned below.
      *

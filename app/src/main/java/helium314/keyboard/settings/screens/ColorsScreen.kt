@@ -14,12 +14,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -127,9 +134,54 @@ fun ColorsScreen(
         val uri = result.data?.data ?: return@rememberLauncherForActivityResult
         ctx.getActivity()?.contentResolver?.openOutputStream(uri)?.writer()?.use { it.write(getColorString(prefs, newThemeName.text)) }
     }
+    // Shared by the search results and by the blank-search list below.
+    @Composable
+    fun ColorRow(colorSetting: ColorSetting?) {
+        if (colorSetting == null)
+            Text( // not a colorSetting, but still best done as part of the list
+                stringResource(R.string.all_colors_warning),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        else
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clickable { chosenColorString = Json.encodeToString(colorSetting) }
+            ) {
+                Spacer(
+                    modifier = Modifier
+                        .background(Color(colorSetting.displayColor()), shape = CircleShape)
+                        .size(50.dp)
+                )
+                Column(Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp)) {
+                    Text(colorSetting.displayName)
+                    if (colorSetting.auto == true)
+                        CompositionLocalProvider(
+                            LocalTextStyle provides MaterialTheme.typography.bodyMedium,
+                            LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Text(stringResource(R.string.auto_user_color))
+                        }
+                }
+                if (colorSetting.auto != null)
+                    Switch(colorSetting.auto, onCheckedChange = { checked ->
+                        val oldUserColors = KeyboardTheme.readUserColors(prefs, newThemeName.text)
+                        val newUserColors = (oldUserColors + ColorSetting(colorSetting.name, checked, colorSetting.color))
+                            .reversed().distinctBy { it.displayName }
+                        KeyboardTheme.writeUserColors(prefs, newThemeName.text, newUserColors)
+                    })
+            }
+    }
+
+    // Hoisted out of the title slot so the explanation can be drawn below the app bar: a
+    // TextField supportingText inside the title slot gets clipped.
+    var nameValid by rememberSaveable { mutableStateOf(true) }
     SearchScreen(
         title = {
-            var nameValid by rememberSaveable { mutableStateOf(true) }
             var nameField by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(newThemeName) }
             TextField(
                 value = nameField,
@@ -142,7 +194,6 @@ fun ColorsScreen(
                     nameField = it
                 },
                 isError = !nameValid,
-//                supportingText = { if (!nameValid) Text(stringResource(R.string.name_invalid)) } // todo: this is cutting off bottom half of the actual text...
                 trailingIcon = { if (!nameValid) CloseIcon(R.string.name_invalid) },
                 singleLine = true,
                 textStyle = contentTextDirectionStyle,
@@ -172,45 +223,26 @@ fun ColorsScreen(
             if (moreColors == 2) result.toMutableList<ColorSetting?>().apply { add(0, null) }
             else result
         },
-        itemContent = { colorSetting ->
-            if (colorSetting == null)
-                Text( // not a colorSetting, but still best done as part of the list
-                    stringResource(R.string.all_colors_warning),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        itemContent = { ColorRow(it) },
+        content = {
+            // The name field lives in the app-bar title slot, where a TextField supportingText is
+            // clipped. The explanation goes here instead, directly below the bar.
+            if (!nameValid)
+                Text(
+                    stringResource(R.string.name_invalid),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
-            else
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clickable { chosenColorString = Json.encodeToString(colorSetting) }
-                ) {
-                    Spacer(
-                        modifier = Modifier
-                            .background(Color(colorSetting.displayColor()), shape = CircleShape)
-                            .size(50.dp)
-                    )
-                    Column(Modifier
-                        .weight(1f)
-                        .padding(horizontal = 16.dp)) {
-                        Text(colorSetting.displayName)
-                        if (colorSetting.auto == true)
-                            CompositionLocalProvider(
-                                LocalTextStyle provides MaterialTheme.typography.bodyMedium,
-                                LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant
-                            ) {
-                                Text(stringResource(R.string.auto_user_color))
-                            }
-                    }
-                    if (colorSetting.auto != null)
-                        Switch(colorSetting.auto, onCheckedChange = { checked ->
-                            val oldUserColors = KeyboardTheme.readUserColors(prefs, newThemeName.text)
-                            val newUserColors = (oldUserColors + ColorSetting(colorSetting.name, checked, colorSetting.color))
-                                .reversed().distinctBy { it.displayName }
-                            KeyboardTheme.writeUserColors(prefs, newThemeName.text, newUserColors)
-                        })
+            val rows: List<ColorSetting?> =
+                if (moreColors == 2) listOf<ColorSetting?>(null) + shownColors else shownColors
+            Scaffold(
+                contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
+            ) { innerPadding ->
+                LazyColumn(contentPadding = innerPadding) {
+                    items(rows) { ColorRow(it) }
                 }
+            }
         }
     )
     if (chosenColor != null) {

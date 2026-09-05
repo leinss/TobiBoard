@@ -76,12 +76,29 @@ public class PopupKeysKeyboardView extends KeyboardView implements PopupKeysPane
         }
     }
 
+    /**
+     * Captions for the action keys shown on the Return-key and comma-key long-press popups.
+     * Without them the popup is a row of unlabelled glyphs and the two microphones (the
+     * chat-audio voice button and the speech-to-text button) are indistinguishable.
+     */
+    private static int captionResForCode(final int code) {
+        if (code == KeyCode.CLIPBOARD) return R.string.popup_caption_clipboard;
+        if (code == KeyCode.VOICE_INPUT) return R.string.popup_caption_voice;
+        if (code == KeyCode.VOICE_STT_INPUT) return R.string.popup_caption_stt;
+        if (code == KeyCode.EMOJI) return R.string.popup_caption_emoji;
+        if (code == KeyCode.TEXT_FIX) return R.string.popup_caption_text_fix;
+        if (code == KeyCode.TEXT_FIX_2) return R.string.popup_caption_text_fix_2;
+        if (code == KeyCode.ADD_TO_DICTIONARY) return R.string.popup_caption_add_to_dictionary;
+        return 0;
+    }
+
     @Override
     protected void onDrawKeyTopVisuals(@NonNull final Key key, @NonNull final Canvas canvas,
             @NonNull final Paint paint, @NonNull final KeyDrawParams params) {
         if (!key.isSpacer() || !(key instanceof PopupKeysKeyboard.PopupKeyDivider)
                 || mDivider == null) {
             super.onDrawKeyTopVisuals(key, canvas, paint, params);
+            drawActionCaption(key, canvas, paint, params);
             return;
         }
         final int keyWidth = key.getDrawWidth();
@@ -91,6 +108,35 @@ public class PopupKeysKeyboardView extends KeyboardView implements PopupKeysPane
         final int iconX = (keyWidth - iconWidth) / 2; // Align horizontally center
         final int iconY = (keyHeight - iconHeight) / 2; // Align vertically center
         drawIcon(canvas, mDivider, iconX, iconY, iconWidth, iconHeight);
+    }
+
+    private void drawActionCaption(@NonNull final Key key, @NonNull final Canvas canvas,
+            @NonNull final Paint paint, @NonNull final KeyDrawParams params) {
+        // Only icon-only keys get a caption; a key that already draws a label needs none.
+        if (key.getLabel() != null) return;
+        final int captionRes = captionResForCode(key.getCode());
+        if (captionRes == 0) return;
+        final String caption = getContext().getString(captionRes);
+        if (caption.isEmpty()) return;
+        final int keyWidth = key.getDrawWidth();
+        final int keyHeight = key.getHeight();
+        // Smaller than a hint letter: the icon is drawn centred, so the caption only has the
+        // bottom strip of the key to itself.
+        final float captionSize = params.mHintLetterSize * 0.85f;
+        paint.setTypeface(params.mTypeface);
+        paint.setTextSize(captionSize);
+        paint.setColor(params.mHintLabelColor);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.clearShadowLayer();
+        // Shrink to fit rather than let the word run past the key edge; the popup keys are narrow.
+        final float textWidth = paint.measureText(caption);
+        if (textWidth > keyWidth * 0.94f) {
+            paint.setTextSize(captionSize * (keyWidth * 0.94f) / textWidth);
+        }
+        // Sit the caption flush with the bottom edge, below the vertically centred icon.
+        final float baseline = keyHeight - paint.descent();
+        canvas.drawText(caption, 0, caption.length(), keyWidth * 0.5f, baseline, paint);
+        paint.setTextSize(params.mHintLetterSize);
     }
 
     @Override
