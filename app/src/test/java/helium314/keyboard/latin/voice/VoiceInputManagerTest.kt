@@ -2,6 +2,7 @@
 package helium314.keyboard.latin.voice
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -22,6 +23,35 @@ class VoiceInputManagerTest {
                 AiProvider.LOCAL,
             )
         )
+    }
+
+    @Test
+    fun aLocalModelStillLoadingIsAlsoSparedFromLifecycleCancel() {
+        // PREPARING is the on-device load that precedes the decode. Cancelling it would throw away
+        // the utterance for the same reason TRANSCRIBING is spared, and the load does not stop anyway.
+        assertTrue(
+            VoiceInputManager.letLocalTranscriptionFinish(
+                VoiceInputManager.State.PREPARING,
+                AiProvider.LOCAL,
+            )
+        )
+    }
+
+    @Test
+    fun onDeviceTranscriptionStartsInPreparingAndCloudDoesNot() {
+        assertEquals(
+            VoiceInputManager.State.PREPARING,
+            VoiceInputManager.initialTranscribingState(AiProvider.LOCAL),
+        )
+        assertEquals(
+            VoiceInputManager.State.TRANSCRIBING,
+            VoiceInputManager.initialTranscribingState(AiProvider.OPENROUTER),
+        )
+    }
+
+    @Test
+    fun theOnDeviceTranscriptionPathHasACeiling() {
+        assertTrue(VoiceInputManager.LOCAL_TIMEOUT_MS > 0L)
     }
 
     @Test

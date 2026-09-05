@@ -86,6 +86,15 @@ class AudioRecorder(
     @Volatile var lastMeanAmplitude: Double = 0.0
         private set
 
+    /**
+     * True when the capture loop ended on a hardware or disk failure rather than on the user
+     * stopping, the duration ceiling or the silence auto-stop. The WAV is still finalized, but it
+     * is missing the tail of what the user said, and a transcript of it is indistinguishable from
+     * a complete one. Callers must refuse to transcribe when this is set. Reset by [start].
+     */
+    @Volatile var lastCaptureTruncated: Boolean = false
+        private set
+
     /** Rolling mean amplitude of the most recent audio chunk, read-safe from any thread. */
     @Volatile var currentAmplitude: Double = 0.0
         private set
@@ -98,6 +107,7 @@ class AudioRecorder(
     var onAutoStopSilence: (() -> Unit)? = null
 
     fun start(): Boolean {
+        lastCaptureTruncated = false
         val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
         if (bufferSize == AudioRecord.ERROR_BAD_VALUE || bufferSize == AudioRecord.ERROR) {
             Log.e(TAG, "Invalid buffer size: $bufferSize")
@@ -198,6 +208,7 @@ class AudioRecorder(
                         pcmBytesWritten += read
                     } catch (e: java.io.IOException) {
                         Log.e(TAG, "Failed to write PCM chunk", e)
+                        lastCaptureTruncated = true
                         isRecording = false
                         break
                     }
@@ -225,11 +236,13 @@ class AudioRecorder(
                 read == 0 -> Unit
                 read == AudioRecord.ERROR_DEAD_OBJECT -> {
                     Log.e(TAG, "AudioRecord dead object, recording aborted")
+                    lastCaptureTruncated = true
                     isRecording = false
                     break
                 }
                 else -> {
                     Log.e(TAG, "AudioRecord read error: $read")
+                    lastCaptureTruncated = true
                     isRecording = false
                 }
             }

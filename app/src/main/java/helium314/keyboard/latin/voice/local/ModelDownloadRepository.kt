@@ -30,13 +30,19 @@ internal object ModelDownloadRepository {
      * Reconcile the cached state with on-disk reality for every registered model. Run
      * at app start so the UI doesn't briefly show "Not downloaded" for models that are
      * actually ready.
+     *
+     * A [DownloadState.Failed] is kept unless the model turned out to be on disk after all. Disk
+     * cannot tell a failure apart from a download that was never started, so overwriting it with
+     * [DownloadState.NotDownloaded] threw away the only record of why the download stopped.
      */
     fun rehydrate(context: Context) {
+        val previous = _states.value
         val snapshot = ModelRegistry.ALL.associate { model ->
-            model.id to if (ModelStorage.isReady(context, model)) {
-                DownloadState.Ready
-            } else {
-                DownloadState.NotDownloaded
+            val prior = previous[model.id]
+            model.id to when {
+                ModelStorage.isReady(context, model) -> DownloadState.Ready
+                prior is DownloadState.Failed -> prior
+                else -> DownloadState.NotDownloaded
             }
         }
         _states.value = snapshot

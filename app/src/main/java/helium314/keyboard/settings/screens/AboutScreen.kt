@@ -138,7 +138,7 @@ fun createAboutSettings(context: Context) = listOf(
             description = it.description,
             onClick = {
                 val intent = Intent()
-                intent.data = Links.WIKI_URL.toUri()
+                intent.data = Links.DOCS_URL.toUri()
                 intent.action = Intent.ACTION_VIEW
                 ctx.startActivity(intent)
             },

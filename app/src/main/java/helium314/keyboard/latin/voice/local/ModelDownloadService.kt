@@ -14,6 +14,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.utils.Log
+import helium314.keyboard.latin.voice.isNetworkAvailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -80,12 +81,17 @@ internal class ModelDownloadService : Service() {
             return
         }
 
+        // Without this the first thing the user sees is a raw UnknownHostException in the
+        // Failed reason, which reads as a bug in the app rather than "you are offline".
+        if (!isNetworkAvailable(this)) {
+            failDownload(modelId, model.displayName, getString(R.string.voice_error_no_network))
+            stopForegroundIfIdle()
+            return
+        }
+
         val authToken = if (model.requiresAuth) HfAuth.currentToken(this) else null
         if (model.requiresAuth && authToken == null) {
-            ModelDownloadRepository.update(
-                modelId,
-                DownloadState.Failed(getString(R.string.local_model_auth_required)),
-            )
+            failDownload(modelId, model.displayName, getString(R.string.local_model_auth_required))
             stopForegroundIfIdle()
             return
         }
@@ -105,12 +111,10 @@ internal class ModelDownloadService : Service() {
                 // A genuine failure (network, disk, verification) — surface it as Failed with a
                 // reason so the UI shows the error + retry, instead of masquerading as Cancelled.
                 Log.e(TAG, "download failed for $modelId", e)
-                ModelDownloadRepository.update(
+                failDownload(
                     modelId,
-                    DownloadState.Failed(
-                        e.message?.takeUnless { it.isBlank() }
-                            ?: getString(R.string.local_model_download_error_generic),
-                    ),
+                    model.displayName,
+                    downloadFailureReason(e, getString(R.string.voice_error_no_network), getString(R.string.local_model_download_error_generic)),
                 )
             } finally {
                 jobs.remove(modelId)
@@ -118,6 +122,30 @@ internal class ModelDownloadService : Service() {
             }
         }
         jobs[modelId] = job
+    }
+
+    /**
+     * Record the failure and tell the user about it. A model download outlives the settings screen,
+     * so without a notification a failure that happens after the user navigates away is invisible
+     * until they come back and wonder why nothing downloaded.
+     */
+    private fun failDownload(modelId: String, displayName: String, reason: String) {
+        ModelDownloadRepository.update(modelId, DownloadState.Failed(reason))
+        postFailureNotification(modelId, displayName, reason)
+    }
+
+    private fun postFailureNotification(modelId: String, displayName: String, reason: String) {
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(getString(R.string.local_model_download_failed_title, displayName))
+            .setContentText(reason)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(reason))
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setAutoCancel(true)
+            .setOngoing(false)
+            .build()
+        // A distinct id: stopForeground(STOP_FOREGROUND_REMOVE) clears NOTIFICATION_ID, which would
+        // otherwise take the failure message with it a moment after it appeared.
+        NotificationManagerCompat(this).notify(NOTIFICATION_ID_FAILED + modelId.hashCode(), notification)
     }
 
     /** Tear down the foreground notification + service if no download is currently running. */
@@ -213,6 +241,18 @@ internal class ModelDownloadService : Service() {
         private const val TAG = "ModelDownloadService"
         private const val CHANNEL_ID = "tobiboard.local-model-downloads"
         private const val NOTIFICATION_ID = 4242
+        private const val NOTIFICATION_ID_FAILED = 4300
+
+        /**
+         * The sentence shown for a failed download. A [java.net.UnknownHostException] carries only
+         * the hostname it could not resolve, so surfacing `e.message` gave the user
+         * "huggingface.co" and nothing else. Pure, so it is unit-tested.
+         */
+        internal fun downloadFailureReason(e: Throwable, offlineMessage: String, genericMessage: String): String = when (e) {
+            is java.net.UnknownHostException, is java.net.SocketTimeoutException, is java.net.ConnectException ->
+                offlineMessage
+            else -> e.message?.takeUnless { it.isBlank() } ?: genericMessage
+        }
         private const val ACTION_START = "helium314.keyboard.action.MODEL_DOWNLOAD_START"
         private const val ACTION_CANCEL = "helium314.keyboard.action.MODEL_DOWNLOAD_CANCEL"
         private const val EXTRA_MODEL_ID = "model_id"

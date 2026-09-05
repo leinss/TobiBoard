@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import androidx.annotation.StringRes
 import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.permissions.PermissionsUtil
@@ -58,6 +59,8 @@ class VoiceInputManager(
         private const val MAX_RECONNECT_ATTEMPTS = 3
         private const val RECONNECT_WAIT_MS_PER_ATTEMPT = 30_000L
         private const val RECONNECT_POLL_MS = 2_000L
+        /** Ceiling on one on-device transcription, model load included. */
+        internal const val LOCAL_TIMEOUT_MS = 180_000L
 
         /**
          * True when a lifecycle-driven cancel (window hidden / input view finishing) should be
@@ -66,7 +69,7 @@ class VoiceInputManager(
          * than TRANSCRIBING are never spared — they keep the cancel-on-dismiss behaviour.
          */
         internal fun letLocalTranscriptionFinish(state: State, provider: AiProvider?): Boolean =
-            state == State.TRANSCRIBING && provider == AiProvider.LOCAL
+            (state == State.TRANSCRIBING || state == State.PREPARING) && provider == AiProvider.LOCAL
 
         /**
          * True when a finished transcription may still be committed. An on-device decode is
@@ -87,9 +90,52 @@ class VoiceInputManager(
          */
         internal fun transcriptionMayCommit(startedIn: String?, current: String?): Boolean =
             startedIn == null || current == null || startedIn == current
+
+        /**
+         * Why a finished recording must not be transcribed, or null when it is usable.
+         *
+         * [truncated] is checked before the length and loudness gates: a capture the microphone
+         * or the disk cut short is missing the tail of what the user said, and a transcript of the
+         * surviving prefix reads exactly like a complete one. It used to be transcribed as if whole.
+         *
+         * Pure, so it is unit-tested without the recording machinery.
+         */
+        /**
+         * The state a request starts in. Only the on-device provider has a model to load, so only
+         * it gets [State.PREPARING]; a cloud request goes straight to [State.TRANSCRIBING].
+         * Pure, so it is unit-tested.
+         */
+        internal fun initialTranscribingState(provider: AiProvider): State =
+            if (provider == AiProvider.LOCAL) State.PREPARING else State.TRANSCRIBING
+
+        internal fun rejectionFor(
+            hasAudioFile: Boolean,
+            truncated: Boolean,
+            durationMs: Long,
+            meanAmplitude: Double,
+        ): RecordingRejection? = when {
+            !hasAudioFile -> RecordingRejection.NO_AUDIO
+            truncated -> RecordingRejection.TRUNCATED
+            durationMs < MIN_RECORDING_DURATION_MS -> RecordingRejection.TOO_SHORT
+            meanAmplitude < MIN_SPEECH_MEAN_AMPLITUDE -> RecordingRejection.NO_SPEECH
+            else -> null
+        }
     }
 
-    enum class State { IDLE, RECORDING, TRANSCRIBING }
+    /** A finished recording that cannot be transcribed, and the sentence explaining why. */
+    enum class RecordingRejection(@param:StringRes val messageResId: Int) {
+        NO_AUDIO(R.string.voice_error_no_audio),
+        TRUNCATED(R.string.voice_error_recording_truncated),
+        TOO_SHORT(R.string.voice_error_too_short),
+        NO_SPEECH(R.string.voice_error_silent),
+    }
+
+    /**
+     * PREPARING covers the on-device model load that precedes a decode; TRANSCRIBING covers the
+     * decode itself. They used to be one state, so a cold sherpa init (seconds) and a warm decode
+     * were shown identically.
+     */
+    enum class State { IDLE, RECORDING, PREPARING, TRANSCRIBING }
 
     /**
      * Snapshot of text immediately adjacent to the cursor, used for spacing heuristics.
@@ -100,6 +146,8 @@ class VoiceInputManager(
     interface Callbacks {
         fun onRecordingStarted()
         fun onTranscribing()
+        /** On-device model load has started, before any decoding. Defaults to [onTranscribing]. */
+        fun onPreparing() = onTranscribing()
         fun onFinished()
         fun onTranscriptionResult(text: String)
         /**
@@ -114,6 +162,13 @@ class VoiceInputManager(
          * error should be shown with a Retry action rather than as a bare toast.
          */
         fun onError(message: String, canRetry: Boolean)
+        /**
+         * A recording that produced no usable audio (see [RecordingRejection]). There is nothing to
+         * retry — the clip is gone — so the user needs an offer to record again, not a Retry. A
+         * toast alone was missed: the overlay disappears at the same moment and the screen goes back
+         * to looking exactly as it did before the user spoke.
+         */
+        fun onRecordingRejected(message: String) = onError(message, false)
         fun onMaxDurationReached()
         /** Called when a transcription is paused, waiting for the network to come back. */
         fun onWaitingForNetwork() {}
@@ -121,9 +176,10 @@ class VoiceInputManager(
          * Called instead of a toast when voice can't start because a required setup step is
          * missing (model not downloaded, feature not enabled, no API key). [settingsDestination]
          * is the nav-route string the settings activity should open to (e.g. "local_models",
-         * "voice"). The IME should hide itself and launch settings at that destination.
+         * "voice"). [reason] names the missing step in one sentence and must be shown before the
+         * keyboard hides: settings opening on its own is indistinguishable from a crash.
          */
-        fun onOpenSettings(settingsDestination: String) {}
+        fun onOpenSettings(settingsDestination: String, reason: String) {}
         /**
          * True when the focused field is a password / no-learning / incognito field, decided by
          * [SensitiveField] so this matches the text-fix guard exactly. Defaults to true: a caller
@@ -177,6 +233,20 @@ class VoiceInputManager(
 
     fun getState() = state
 
+    /** Names the missing setup step, then hands the settings destination over. See [SetupGap]. */
+    private fun openSettingsFor(gap: SetupGap) {
+        callbacks.onOpenSettings(gap.settingsDestination, context.getString(gap.messageResId))
+    }
+
+    /** Moves out of PREPARING once the engine reports its model is loaded. Any thread. */
+    private fun markTranscribing(requestToken: Long) {
+        mainHandler.post {
+            if (activeTranscriptionToken.get() != requestToken || state != State.PREPARING) return@post
+            state = State.TRANSCRIBING
+            callbacks.onTranscribing()
+        }
+    }
+
     /** Exposed so UI can render a live amplitude meter. */
     fun getCurrentAmplitude(): Double = audioRecorder.currentAmplitude
 
@@ -201,7 +271,7 @@ class VoiceInputManager(
         val prefs = context.prefs()
 
         if (!prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)) {
-            callbacks.onOpenSettings(SETTINGS_VOICE)
+            openSettingsFor(SetupGap.VOICE_DISABLED)
             return
         }
 
@@ -218,12 +288,12 @@ class VoiceInputManager(
         if (provider.isCloud) {
             // SecretStore is only needed for cloud API keys; LOCAL voice input never touches it.
             if (!SecretStore.isSecureStorageAvailable(context)) {
-                callbacks.onOpenSettings(SETTINGS_VOICE)
+                openSettingsFor(SetupGap.VOICE_NO_SECURE_STORAGE)
                 return
             }
             val apiKey = SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
             if (apiKey.isBlank()) {
-                callbacks.onOpenSettings(SETTINGS_VOICE)
+                openSettingsFor(SetupGap.VOICE_NO_API_KEY)
                 return
             }
         }
@@ -241,13 +311,13 @@ class VoiceInputManager(
         if (provider == AiProvider.LOCAL && !helium314.keyboard.latin.voice.local.ModelStorage.isReady(
                 context, helium314.keyboard.latin.voice.local.SttModelInfo.ParakeetTdt06b
         )) {
-            callbacks.onOpenSettings(SETTINGS_LOCAL_MODELS)
+            openSettingsFor(SetupGap.VOICE_MODEL_NOT_DOWNLOADED)
             return
         }
 
         if (currentUseDedicatedStt && provider != AiProvider.OPENROUTER) {
             currentUseDedicatedStt = false
-            callbacks.onOpenSettings(SETTINGS_VOICE)
+            openSettingsFor(SetupGap.VOICE_STT_NEEDS_OPENROUTER)
             return
         }
 
@@ -321,43 +391,32 @@ class VoiceInputManager(
             return
         }
 
-        if (wavFile == null || !wavFile.exists() || wavFile.length() <= 44L) {
-            wavFile?.delete()
-            currentAudioFile = null
-            currentUseDedicatedStt = false
-            state = State.IDLE
-            callbacks.onFinished()
-            callbacks.onError(context.getString(R.string.voice_error_no_audio), false)
-            return
-        }
-        if (BuildConfig.DEBUG) {
+        val hasAudio = wavFile != null && wavFile.exists() && wavFile.length() > 44L
+        if (hasAudio && BuildConfig.DEBUG) {
             Log.i(
                 TAG,
-                "Uploading voice clip: durationMs=${audioRecorder.lastDurationMs}, meanAmplitude=${audioRecorder.lastMeanAmplitude}, bytes=${wavFile.length()}"
+                "Uploading voice clip: durationMs=${audioRecorder.lastDurationMs}, meanAmplitude=${audioRecorder.lastMeanAmplitude}, truncated=${audioRecorder.lastCaptureTruncated}, bytes=${wavFile!!.length()}"
             )
         }
-        if (audioRecorder.lastDurationMs < MIN_RECORDING_DURATION_MS) {
-            wavFile.delete()
+        val rejection = rejectionFor(
+            hasAudioFile = hasAudio,
+            truncated = audioRecorder.lastCaptureTruncated,
+            durationMs = audioRecorder.lastDurationMs,
+            meanAmplitude = audioRecorder.lastMeanAmplitude,
+        )
+        if (rejection != null) {
+            wavFile?.takeIf { it.exists() }?.delete()
             currentAudioFile = null
             currentUseDedicatedStt = false
             state = State.IDLE
             callbacks.onFinished()
-            callbacks.onError(context.getString(R.string.voice_error_too_short), false)
-            return
-        }
-        if (audioRecorder.lastMeanAmplitude < MIN_SPEECH_MEAN_AMPLITUDE) {
-            wavFile.delete()
-            currentAudioFile = null
-            currentUseDedicatedStt = false
-            state = State.IDLE
-            callbacks.onFinished()
-            callbacks.onError(context.getString(R.string.voice_error_silent), false)
+            callbacks.onRecordingRejected(context.getString(rejection.messageResId))
             return
         }
 
         state = State.TRANSCRIBING
         callbacks.onTranscribing()
-        beginTranscription(wavFile)
+        beginTranscription(wavFile!!)
     }
 
     /**
@@ -370,6 +429,9 @@ class VoiceInputManager(
         val prefs = context.prefs()
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
         currentProvider = provider
+        // The on-device path builds a recognizer before it decodes anything; the cloud path does not.
+        state = initialTranscribingState(provider)
+        if (state == State.PREPARING) callbacks.onPreparing()
         transcriptionEditorSessionId = callbacks.getEditorSessionId()
         val apiKey = if (provider.isCloud) {
             SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
@@ -445,8 +507,13 @@ class VoiceInputManager(
         val prompt = resolveVoicePrompt(savedPrompt, localeHint, transcriptionDictionary, expectedLanguages)
         val spacingContext = if (spaceHeuristicEnabled) callbacks.getSpacingContext() else null
 
+        // Claimed before the engine is built so the engine's model-ready callback can carry it and
+        // a newer request cannot be mistaken for this one.
+        val requestToken = activeTranscriptionToken.incrementAndGet()
         val client: SttEngine = when (provider) {
-            AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalSherpaEngine(context)
+            AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalSherpaEngine(
+                context, onModelReady = { markTranscribing(requestToken) },
+            )
             AiProvider.OPENROUTER, AiProvider.PAYPERQ -> OpenRouterClient(
                 apiKey = apiKey,
                 model = model,
@@ -458,7 +525,6 @@ class VoiceInputManager(
                 transcriptionLanguage = localeHint?.toOpenRouterSttLanguage(),
             )
         }
-        val requestToken = activeTranscriptionToken.incrementAndGet()
         transcriptionClient = client
         val useDedicatedSttForRetry = useDedicatedStt
 
@@ -467,7 +533,18 @@ class VoiceInputManager(
             // deleting it. A success or an explicit cancel leaves it false and the audio goes.
             var keepForRetry = false
             try {
-                val transcription = sanitizeTranscription(transcribeWithReconnect(client, wavFile, offlineRetryEnabled))
+                val transcription = sanitizeTranscription(
+                    if (provider == AiProvider.LOCAL) {
+                        // The on-device path has no ceiling of its own: the sherpa build and decode
+                        // are native calls that never give up. The timeout does not stop them, it
+                        // stops the user waiting behind a label that will never change.
+                        kotlinx.coroutines.withTimeout(LOCAL_TIMEOUT_MS) {
+                            transcribeWithReconnect(client, wavFile, offlineRetryEnabled)
+                        }
+                    } else {
+                        transcribeWithReconnect(client, wavFile, offlineRetryEnabled)
+                    }
+                )
                 UsageTracker.record(client.lastResponseTokens)
                 if (transcription.isBlank()) {
                     keepForRetry = true
@@ -512,6 +589,16 @@ class VoiceInputManager(
                 } else transcription
                 val finalText = applySpacing(polished, spacingContext)
                 finishTranscription(requestToken = requestToken, result = finalText)
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                // Must precede the CancellationException branch: a timeout is one.
+                Log.w(TAG, "On-device transcription timed out after $LOCAL_TIMEOUT_MS ms")
+                keepForRetry = true
+                retainForRetry(wavFile, useDedicatedSttForRetry)
+                finishTranscription(
+                    requestToken = requestToken,
+                    error = context.getString(R.string.voice_error_timeout),
+                    canRetry = true,
+                )
             } catch (e: CancellationException) {
                 if (BuildConfig.DEBUG) Log.i(TAG, "Transcription cancelled")
                 finishTranscription(requestToken = requestToken)
@@ -641,7 +728,7 @@ class VoiceInputManager(
                 state = State.IDLE
                 callbacks.onFinished()
             }
-            State.TRANSCRIBING -> {
+            State.PREPARING, State.TRANSCRIBING -> {
                 // Always logged (not DEBUG-gated) so a transcription dropped before it commits is
                 // diagnosable from a release build's log.
                 Log.i(TAG, "Cancelling in-flight transcription (provider=$currentProvider)")

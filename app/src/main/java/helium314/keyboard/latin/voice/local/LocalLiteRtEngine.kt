@@ -21,6 +21,13 @@ import java.io.IOException
 internal class LocalLiteRtEngine(
     private val context: Context,
     private val systemPrompt: String,
+    /**
+     * Fired on the background thread once the native handle exists and generation is about to
+     * start. The caller uses it to move out of its "preparing" state: on a cold start the load is
+     * seconds and the generation that follows is not, so one label for both made a first run look
+     * exactly like a hung one.
+     */
+    private val onModelReady: (() -> Unit)? = null,
 ) : TextFixEngine {
 
     @Volatile private var cancelled = false
@@ -36,6 +43,7 @@ internal class LocalLiteRtEngine(
         // endUse unpins and honors any release that was deferred while we were running.
         val inference = SharedLlm.beginUse(context)
             ?: throw IOException("On-device text-fix model not downloaded — open Settings → On-device models.")
+        onModelReady?.invoke()
         try {
             val prompt = formatGemmaChat(systemPrompt, userText)
             if (cancelled) return ""

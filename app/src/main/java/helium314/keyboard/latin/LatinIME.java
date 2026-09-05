@@ -701,6 +701,11 @@ public class LatinIME extends InputMethodService implements
             }
 
             @Override
+            public void onPreparing() {
+                if (mSuggestionStripView != null) mSuggestionStripView.showPreparingOverlay();
+            }
+
+            @Override
             public void onFinished() {
                 if (mSuggestionStripView != null) {
                     mSuggestionStripView.setVoiceTelemetryProvider(null);
@@ -735,6 +740,18 @@ public class LatinIME extends InputMethodService implements
                 // for as long as the failed clip is retained.
                 if (canRetry && mSuggestionStripView != null) {
                     mSuggestionStripView.showRetryBar(message, LatinIME.this::retryVoiceTranscription);
+                }
+            }
+
+            @Override
+            public void onRecordingRejected(@NonNull final String message) {
+                if (isVoiceHapticEnabled())
+                    AudioAndHapticFeedbackManager.getInstance().vibrateVoiceError();
+                Toast.makeText(LatinIME.this, message, Toast.LENGTH_LONG).show();
+                // The overlay vanishes at the same moment, so a toast on its own is easy to miss:
+                // the screen goes back to looking exactly as it did before the user spoke.
+                if (mSuggestionStripView != null) {
+                    mSuggestionStripView.showRecordAgainBar(message, LatinIME.this::recordVoiceAgain);
                 }
             }
 
@@ -791,7 +808,10 @@ public class LatinIME extends InputMethodService implements
             }
 
             @Override
-            public void onOpenSettings(@NonNull final String settingsDestination) {
+            public void onOpenSettings(@NonNull final String settingsDestination, @NonNull final String reason) {
+                // Say what is missing before the keyboard disappears. Hiding and opening settings
+                // with no message is indistinguishable from a crash.
+                Toast.makeText(LatinIME.this, reason, Toast.LENGTH_LONG).show();
                 requestHideSelf(0);
                 final Intent intent = new Intent();
                 intent.setClass(LatinIME.this, SettingsActivity2.class);
@@ -858,6 +878,16 @@ public class LatinIME extends InputMethodService implements
             }
 
             @Override
+            public void onPreparing() {
+                cancelPendingTextFixErrorOverlayHide();
+                if (mSuggestionStripView != null) {
+                    mSuggestionStripView.setOnReplaceTextFix(LatinIME.this::commitTextFixReplacement);
+                    mSuggestionStripView.setOnDiscardTextFix(LatinIME.this::discardTextFix);
+                    mSuggestionStripView.showTextFixPreparing();
+                }
+            }
+
+            @Override
             public void onFinished() {
                 // Keep overlay visible until the user replaces or discards — only hide on error/cancel.
             }
@@ -896,7 +926,10 @@ public class LatinIME extends InputMethodService implements
             }
 
             @Override
-            public void onOpenSettings(@NonNull final String settingsDestination) {
+            public void onOpenSettings(@NonNull final String settingsDestination, @NonNull final String reason) {
+                // Say what is missing before the keyboard disappears. Hiding and opening settings
+                // with no message is indistinguishable from a crash.
+                Toast.makeText(LatinIME.this, reason, Toast.LENGTH_LONG).show();
                 requestHideSelf(0);
                 final Intent intent = new Intent();
                 intent.setClass(LatinIME.this, SettingsActivity2.class);
@@ -976,6 +1009,12 @@ public class LatinIME extends InputMethodService implements
         if (mVoiceInputManager == null || !mVoiceInputManager.retryLastTranscription()) {
             Toast.makeText(this, R.string.voice_retry_unavailable, Toast.LENGTH_SHORT).show();
         }
+    }
+
+    /** Starts a fresh recording from the "Record again" bar after an unusable one. */
+    private void recordVoiceAgain() {
+        if (mSuggestionStripView != null) mSuggestionStripView.hideUndoBar();
+        if (mVoiceInputManager != null) mVoiceInputManager.startRecording(false);
     }
 
     /**

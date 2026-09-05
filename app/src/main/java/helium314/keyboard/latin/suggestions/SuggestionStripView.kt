@@ -364,6 +364,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         recordingOverlay?.showTranscribing()
     }
 
+    /** On-device recognizer is still loading; see [RecordingOverlayView.showPreparing]. */
+    fun showPreparingOverlay() {
+        recordingOverlay?.showPreparing()
+    }
+
     fun hideRecordingOverlay() {
         recordingOverlay?.stopAnimation()
         recordingOverlay = null
@@ -388,7 +393,12 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         onDiscardTextFix = callback
     }
 
-    fun showTextFixWorking() {
+    /** On-device model is still loading; see [TextFixOverlayView.showPreparing]. */
+    fun showTextFixPreparing() = showTextFixOverlay(preparing = true)
+
+    fun showTextFixWorking() = showTextFixOverlay(preparing = false)
+
+    private fun showTextFixOverlay(preparing: Boolean) {
         // Same reason as showRecordingOverlay(): if the toolbar is open the strip is hidden and
         // our overlay would be invisible. Force the strip back to make the working state visible.
         captureToolbarStateForOverlay()
@@ -400,7 +410,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             it.onExpandClick = { showTextFixExpandedPopup() }
             it.onReportClick = { textFixProposedText?.let { proposed -> launchAiOutputReport(proposed) } }
         }
-        overlay.showWorking()
+        if (preparing) overlay.showPreparing() else overlay.showWorking()
         if (textFixOverlay == null) {
             setExternalSuggestionView(overlay, false)
             textFixOverlay = overlay
@@ -492,6 +502,25 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             showReport = false,
         )
         bar.onUndoClick = { onRetry.run() }
+        setExternalSuggestionView(bar, false)
+        undoBar = bar
+    }
+
+    /**
+     * Shows a message about a recording that produced no usable audio, with an offer to record
+     * again. Same layout and teardown as [showRetryBar]; the action re-records rather than re-running
+     * a transcription, because there is no clip left to re-run.
+     */
+    fun showRecordAgainBar(labelText: String, onRecordAgain: Runnable) {
+        val bar = UndoBarView(context)
+        bar.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+        bar.setLabel(labelText)
+        bar.setPrimaryAction(
+            context.getString(R.string.voice_record_again),
+            context.getString(R.string.voice_record_again_a11y),
+            showReport = false,
+        )
+        bar.onUndoClick = { onRecordAgain.run() }
         setExternalSuggestionView(bar, false)
         undoBar = bar
     }

@@ -48,10 +48,13 @@ import helium314.keyboard.latin.voice.local.ModelStorage
 import helium314.keyboard.latin.voice.local.SttModelInfo
 import helium314.keyboard.latin.voice.local.TextFixModelInfo
 import helium314.keyboard.settings.SearchSettingsScreen
+import helium314.keyboard.settings.rememberModelDownloadStarter
 
 @Composable
 fun LocalModelsScreen(onClickBack: () -> Unit) {
     val ctx = LocalContext.current
+    // Asks for POST_NOTIFICATIONS the first time, so download progress and failures are visible.
+    val startDownload = rememberModelDownloadStarter()
     val states by ModelDownloadRepository.states.collectAsState()
     val freeBytes = remember(states) { ModelStorage.availableBytes(ctx) }
     var pendingLicenseModel by remember { mutableStateOf<ModelInfo?>(null) }
@@ -72,7 +75,7 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
                 tokenDialogOpen = true
             }
             model.requiresLicense -> pendingLicenseModel = model
-            else -> ModelDownloadService.start(ctx, model.id)
+            else -> startDownload(model.id)
         }
     }
 
@@ -139,7 +142,7 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
                 pendingAfterTokenModel?.let { model ->
                     pendingAfterTokenModel = null
                     if (model.requiresLicense) pendingLicenseModel = model
-                    else ModelDownloadService.start(ctx, model.id)
+                    else startDownload(model.id)
                 }
             },
             onClear = {
@@ -170,7 +173,7 @@ fun LocalModelsScreen(onClickBack: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     pendingLicenseModel = null
-                    ModelDownloadService.start(ctx, model.id)
+                    startDownload(model.id)
                 }) { Text(stringResource(R.string.local_model_license_accept)) }
             },
             dismissButton = {

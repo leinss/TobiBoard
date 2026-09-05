@@ -36,6 +36,8 @@ class TextFixManager(
         private const val TAG = "TextFixManager"
         private const val MAX_INPUT_LENGTH = 10_000
         private const val MAX_OUTPUT_LENGTH = 10_000
+        /** Ceiling on one on-device fix, load included. See the catch that uses it. */
+        internal const val LOCAL_TIMEOUT_MS = 180_000L
         const val SETTINGS_TEXT_FIX = "text_fix"
         const val SETTINGS_LOCAL_MODELS = "local_models"
 
@@ -69,9 +71,38 @@ class TextFixManager(
             }
             return null
         }
+
+        /**
+         * True when the model handed back what it was given, so there is nothing to propose.
+         *
+         * The 1B-class on-device models echo the input routinely (see the commentary-stripping
+         * rules in `LocalLiteRtEngine`). Only a blank reply used to count as a failure, so an echo
+         * became a Replace/Discard offer whose diff was empty and whose Replace button did nothing.
+         *
+         * Leading and trailing whitespace is ignored because the field text is read with it and the
+         * model does not reproduce it reliably; whitespace *inside* the text is compared, so a fix
+         * that only re-spaces the input still counts as a change.
+         *
+         * Pure, so it is unit-tested.
+         */
+        @JvmStatic
+        fun isNoChange(input: String, proposed: String): Boolean = input.trim() == proposed.trim()
+
+        /**
+         * The state a request starts in. Only the on-device provider has a model to load, so only
+         * it gets [State.PREPARING]; a cloud request goes straight to [State.WORKING].
+         * Pure, so it is unit-tested.
+         */
+        @JvmStatic
+        fun initialWorkingState(provider: AiProvider): State =
+            if (provider == AiProvider.LOCAL) State.PREPARING else State.WORKING
     }
 
-    enum class State { IDLE, WORKING }
+    /**
+     * PREPARING covers the on-device model load, WORKING the request itself. They used to be one
+     * state, so a multi-second first-use load and a warm run rendered identically.
+     */
+    enum class State { IDLE, PREPARING, WORKING }
 
     enum class Variant(val enabledPref: String, val enabledDefault: Boolean, val promptPref: String, val promptDefault: String) {
         PRIMARY(Settings.PREF_TEXT_FIX_ENABLED, Defaults.PREF_TEXT_FIX_ENABLED, Settings.PREF_TEXT_FIX_PROMPT, Defaults.PREF_TEXT_FIX_PROMPT),
@@ -86,12 +117,19 @@ class TextFixManager(
          * selected. Null/empty only when the field has no text at all.
          */
         fun getTextToFix(): CharSequence?
+        /** On-device model load has started. Defaults to [onWorking] for implementers that
+         *  do not distinguish the two. */
+        fun onPreparing() = onWorking()
         fun onWorking()
         fun onFinished()
         fun onResult(originalText: String, proposedText: String)
         fun onError(message: String)
-        /** Called instead of a toast when a required setup step is missing. See [VoiceInputManager.Callbacks.onOpenSettings]. */
-        fun onOpenSettings(settingsDestination: String) {}
+        /**
+         * Called when a required setup step is missing. [reason] names the missing step in one
+         * sentence and must be shown before the keyboard hides, otherwise settings opening on its
+         * own is indistinguishable from a crash. See [VoiceInputManager.Callbacks.onOpenSettings].
+         */
+        fun onOpenSettings(settingsDestination: String, reason: String) {}
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -124,7 +162,7 @@ class TextFixManager(
 
         if (!prefs.getBoolean(variant.enabledPref, variant.enabledDefault)) {
             Log.d(TAG, "startTextFix: disabled — navigating to text_fix settings")
-            callbacks.onOpenSettings(SETTINGS_TEXT_FIX)
+            openSettingsFor(SetupGap.TEXT_FIX_DISABLED)
             return
         }
         val blocked = callbacks.getBlockedErrorResId()
@@ -157,8 +195,9 @@ class TextFixManager(
 
         // Show the working state immediately, then run the keystore / model-file / network
         // preconditions off the IME main thread. Failures post the same navigation/error back.
-        state = State.WORKING
-        callbacks.onWorking()
+        // The on-device path loads a model before it can do anything; the cloud path does not.
+        state = initialWorkingState(provider)
+        if (state == State.PREPARING) callbacks.onPreparing() else callbacks.onWorking()
         val token = activeToken + 1
         activeToken = token
 
@@ -166,7 +205,7 @@ class TextFixManager(
             // SecretStore is only needed for cloud API keys; LOCAL provider never touches it.
             if (provider.isCloud && !SecretStore.isSecureStorageAvailable(context)) {
                 Log.d(TAG, "startTextFix: SecretStore unavailable — navigating to text_fix settings")
-                finishWithSettings(token, SETTINGS_TEXT_FIX)
+                finishWithSettings(token, SetupGap.TEXT_FIX_NO_SECURE_STORAGE)
                 return@launch
             }
             val apiKey = if (provider.isCloud) {
@@ -174,7 +213,7 @@ class TextFixManager(
             } else ""
             if (provider.isCloud && apiKey.isBlank()) {
                 Log.d(TAG, "startTextFix: no API key — navigating to text_fix settings")
-                finishWithSettings(token, SETTINGS_TEXT_FIX)
+                finishWithSettings(token, SetupGap.TEXT_FIX_NO_API_KEY)
                 return@launch
             }
             if (provider.isCloud && !isNetworkAvailable(context)) {
@@ -187,13 +226,13 @@ class TextFixManager(
                 Log.d(TAG, "startTextFix: LOCAL model=${activeModel.id} ready=$modelReady")
                 if (!modelReady) {
                     Log.d(TAG, "startTextFix: model not ready — navigating to local_models")
-                    finishWithSettings(token, SETTINGS_LOCAL_MODELS)
+                    finishWithSettings(token, SetupGap.TEXT_FIX_MODEL_NOT_DOWNLOADED, activeModel.displayName)
                     return@launch
                 }
             }
             val model = if (provider.isCloud) {
                 resolveProviderModel(selectedModel, customModel) ?: run {
-                    finishWithSettings(token, SETTINGS_TEXT_FIX)
+                    finishWithSettings(token, SetupGap.TEXT_FIX_NO_MODEL_SELECTED)
                     return@launch
                 }
             } else ""
@@ -206,7 +245,9 @@ class TextFixManager(
             val effectivePrompt = PersonalDictionaryPrompt.augment(context, prompt)
 
             val client: TextFixEngine = when (provider) {
-                AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalLiteRtEngine(context, effectivePrompt)
+                AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalLiteRtEngine(
+                    context, effectivePrompt, onModelReady = { markWorking(token) },
+                )
                 AiProvider.OPENROUTER, AiProvider.PAYPERQ -> OpenRouterClient(
                     apiKey = apiKey,
                     model = model,
@@ -222,13 +263,34 @@ class TextFixManager(
             // so bail now rather than run a full uninterruptible generation whose result is discarded.
             if (activeToken != token) return@launch
             try {
-                val proposed = sanitize(runInterruptible { client.fixText(input) })
+                val proposed = sanitize(
+                    if (provider == AiProvider.LOCAL) {
+                        // The local path has no ceiling of its own: generateResponse is a native
+                        // call that never returns an error for taking too long. The timeout does
+                        // not stop it (see the class comment on LocalLiteRtEngine), it stops the
+                        // user waiting behind a label that will never change.
+                        kotlinx.coroutines.withTimeout(LOCAL_TIMEOUT_MS) {
+                            runInterruptible { client.fixText(input) }
+                        }
+                    } else {
+                        runInterruptible { client.fixText(input) }
+                    }
+                )
                 UsageTracker.record(client.lastResponseTokens)
                 if (proposed.isBlank()) {
                     finish(token, error = context.getString(R.string.text_fix_error_empty))
                     return@launch
                 }
+                if (isNoChange(input, proposed)) {
+                    finish(token, error = context.getString(R.string.text_fix_no_change_needed))
+                    return@launch
+                }
                 finish(token, original = input, result = proposed)
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                // Must precede the CancellationException branch: a timeout is one.
+                Log.w(TAG, "On-device text fix timed out after $LOCAL_TIMEOUT_MS ms")
+                client.cancel()
+                finish(token, error = context.getString(R.string.text_fix_error_timeout))
             } catch (e: CancellationException) {
                 finish(token)
             } catch (e: InterruptedException) {
@@ -243,9 +305,18 @@ class TextFixManager(
         }
     }
 
+    /** Moves out of PREPARING once the engine reports its model is loaded. Any thread. */
+    private fun markWorking(token: Long) {
+        mainHandler.post {
+            if (activeToken != token || state != State.PREPARING) return@post
+            state = State.WORKING
+            callbacks.onWorking()
+        }
+    }
+
     @Synchronized
     fun cancel() {
-        if (state != State.WORKING) return
+        if (state == State.IDLE) return
         activeToken += 1
         activeClient?.cancel()
         activeJob?.cancel()
@@ -300,15 +371,22 @@ class TextFixManager(
     }
 
     /** Reset to idle and route the user to settings — used when a background precondition fails. */
-    private fun finishWithSettings(token: Long, settingsDestination: String) {
+    private fun finishWithSettings(token: Long, gap: SetupGap, vararg formatArgs: Any) {
         mainHandler.post {
             if (activeToken != token) return@post
             activeJob = null
             activeClient = null
             state = State.IDLE
             callbacks.onFinished()
-            callbacks.onOpenSettings(settingsDestination)
+            openSettingsFor(gap, *formatArgs)
         }
+    }
+
+    /** Names the missing step, then hands the destination over. Main thread only. */
+    private fun openSettingsFor(gap: SetupGap, vararg formatArgs: Any) {
+        val reason = if (formatArgs.isEmpty()) context.getString(gap.messageResId)
+        else context.getString(gap.messageResId, *formatArgs)
+        callbacks.onOpenSettings(gap.settingsDestination, reason)
     }
 
     private fun sanitize(raw: String): String = sanitizeModelOutput(raw, MAX_OUTPUT_LENGTH)
