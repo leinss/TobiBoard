@@ -1,6 +1,7 @@
 # IzzyOnDroid submission — status and handoff
 
-> Prepared 2026-07-10 (portfolio W5, B-1). **NOT SUBMITTED — blocked on two hard eligibility failures, see below.**
+> Prepared 2026-07-10 (portfolio W5, B-1), figures refreshed 2026-09-05 against v6.8.16.
+> **NOT SUBMITTED — blocked on two hard eligibility failures, see below.**
 > This documents what was verified, why the app is currently ineligible, the exact
 > submission steps for when/if it becomes eligible, and the ready-to-paste request text.
 
@@ -9,7 +10,7 @@
 TobiBoard **cannot be listed on IzzyOnDroid as it ships today**, for two independent reasons:
 
 1. **APK size** — IzzyOnDroid's per-app hard limit is **30 MB per file**. TobiBoard's
-   signed release APK is **~116 MB** (`TobiBoard_6.8.6-release.apk`, 115.9 MB). Even an
+   signed release APK is **121.7 MB** (`TobiBoard_6.8.16-release.apk`, 121 662 846 bytes). Even an
    arm64-only ABI split cannot get this under 30 MB — the bulk is the bundled MediaPipe
    GenAI runtime + sherpa-onnx native libs, not multi-ABI `.so` duplication.
 2. **Non-free dependency** — IzzyOnDroid rejects proprietary components outright (no
@@ -42,9 +43,9 @@ IzzyOnDroid only if the M2-2 blob-free + sub-30 MB build is ever done.
   inclusion requests go to **Codeberg**: https://codeberg.org/IzzyOnDroid/repodata/issues
   (a `.forgejo/issue_template` exists; PR-to-add-app is "planned for later", so file an issue).
   **Filing requires a Codeberg account** (the agent has none → owner action).
-- App APK size: `gh release view v6.8.6 -R leinss/TobiBoard` → `TobiBoard_6.8.6-release.apk` = 115.9 MB.
-- Latest published release = **v6.8.6** (v6.8.7 does not exist on `leinss/TobiBoard`; that
-  tag belongs to upstream WisprBoard). `main` is at 6.8.8/6808, unreleased.
+- App APK size: `gh release view v6.8.16 -R leinss/TobiBoard` → `TobiBoard_6.8.16-release.apk` = 121.7 MB (checked 2026-09-05). The gap to the 30 MB limit has widened since 2026-07-10, when the APK was 115.9 MB.
+- Latest published release = **v6.8.16**, published 2026-08-31. `main` is at 6.8.16/6816 and
+  agrees with the tag.
 
 ## Exact submission steps (ONLY if M2-2 blob-free + sub-30 MB build ever ships)
 

@@ -120,7 +120,7 @@ jobs:
           <h2>Repo address</h2><p><code>$URL</code></p>
           <h2>Fingerprint (SHA-256)</h2><p><code>${FP:-see the workflow log}</code></p>
           <h2>One-tap add</h2><p><a href="$URL?fingerprint=$FP">$URL?fingerprint=$FP</a></p>
-          <p>Privacy-first, on-device keyboard (a HeliBoard fork) with optional, bring-your-own-key AI voice-to-text and text-fix. <a href="https://github.com/leinss/TobiBoard">Source</a>.</p>
+          <p>Privacy-first keyboard (a HeliBoard fork) with voice-to-text and text fix that run on your device by default, no account and no API key. Cloud providers are optional and bring-your-own-key. <a href="https://github.com/leinss/TobiBoard">Source</a> &middot; <a href="https://github.com/leinss/TobiBoard/blob/main/PRIVACY.md">Privacy policy</a>.</p>
           </body></html>
           HTML
           find site -maxdepth 2 -type f | sort

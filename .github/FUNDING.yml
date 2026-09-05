@@ -1,3 +1,9 @@
 # Shows a "Sponsor" button on the repository. See:
 # https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
 ko_fi: leinss
+
+# Uncomment each line once the account exists and the username is confirmed.
+# An entry pointing at an account that does not exist renders a dead button.
+# Rationale and setup steps: docs/ANNOUNCEMENT_NOTES.md, "Donations".
+# liberapay: leinss
+# github: [leinss]

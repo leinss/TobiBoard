@@ -22,11 +22,12 @@ Along the way: fixed the caps-lock-gets-stuck bug, fixed the keyboard-stops-typi
 
 **Runs on your device. No account. No key. No audio leaves your phone.**
 
-Long-press Return, tap the mic, speak. Your words land as polished text. Uses an on-device NVIDIA Parakeet TDT 0.6B v3 model (multilingual: English, German, Spanish, French) by default — nothing is sent anywhere. If you want a more powerful cloud model, switch to OpenRouter or PayPerQ and bring your own key.
+Long-press Return, tap the mic, speak. Your words land as polished text. Uses an on-device NVIDIA Parakeet TDT 0.6B v3 model by default. The model is multilingual and the app applies no language gate. Nothing is sent anywhere. If you want a more powerful cloud model, switch to OpenRouter or PayPerQ and bring your own key.
 
 - **On-device by default** — Parakeet runs locally, audio never leaves your phone
+- One-time model download of 670 MB on first use, from Hugging Face over Wi-Fi
 - Cloud providers (OpenRouter, PayPerQ) available for larger models — your choice
-- Add a custom prompt or vocabulary so it nails names and jargon
+- A custom transcription prompt is available on the cloud providers, so they get names and jargon right. The on-device model takes no prompt.
 
 <br>
 
@@ -38,7 +39,7 @@ Select rough text, long-press Return, hit Fix. It comes back clean in the same l
 
 - **On-device by default** — local model, nothing uploaded
 - Works in any language your model supports
-- Cleans typos, awkward phrasing, or shifts tone (formal ↔ casual)
+- Cleans typos and awkward phrasing. Both fix prompts are editable, so you can point one at tone instead.
 - You review the rewrite before replacing the original
 
 <br>
@@ -47,7 +48,7 @@ Select rough text, long-press Return, hit Fix. It comes back clean in the same l
 
 **Stays on your device. Always.**
 
-Long-press the clipboard icon to browse everything you've copied. Every entry shows when it was copied and how many times you've pasted it. Long-press any entry to pin it to the top or delete it. Clipboard data is stored only on your device, in the app's private storage, and is excluded from all backups — it is never uploaded or backed up to the cloud. The copied text and your labels are encrypted at rest with AES-256-GCM using an Android Keystore key (on Android 6+).
+Long-press the clipboard icon to browse everything you've copied. Every entry shows when it was copied and how many times you've pasted it. Long-press any entry to pin it to the top or delete it. Clipboard data is stored only on your device, in the app's private storage, and is excluded from all backups — it is never uploaded or backed up to the cloud. The copied text and your labels are encrypted at rest with AES-256-GCM using an Android Keystore key, hardware-backed where the device supports it, on Android 6 and newer. If the Keystore cannot produce a key, the clip is dropped rather than stored in plain text.
 
 - Search, label, and manage entries from **Settings → Preferences → Manage clipboard history**
 - Pin entries that you paste often so they're always at the top
@@ -71,7 +72,7 @@ If you choose a cloud provider, TobiBoard asks OpenRouter for **[zero-data-reten
 | On-device text fix (no key needed)           |     —     |     ✅      |
 | Cloud voice/text via OpenRouter or PayPerQ   |     —     |     ✅      |
 | Clipboard history with use counts + labels   |     —     |     ✅      |
-| Zero Data Retention enforced by default      |     —     |     ✅      |
+| Zero Data Retention requested where supported |     —     |     ✅      |
 | API key encrypted on-device                  |     —     |     ✅      |
 
 <br>
@@ -80,7 +81,7 @@ If you choose a cloud provider, TobiBoard asks OpenRouter for **[zero-data-reten
 
 1. **Install** — add the F-Droid repo `https://leinss.xyz/TobiBoard/repo` to your F-Droid client for automatic updates, or download the APK from [Releases](https://github.com/leinss/TobiBoard/releases/latest).
 2. **Enable** TobiBoard in *Android Settings → General Management → Keyboard list and default → Add TobiBoard*, then select it as your default.
-3. **Turn on what you want** — voice input and text fix both ship **off**. Enable them in TobiBoard settings; the on-device models are a one-time download of about 660 MB (speech) and about 550 MB to 1.6 GB (text fix), over Wi-Fi.
+3. **Turn on what you want** — voice input and text fix both ship **off**. Enable them in TobiBoard settings; the on-device models are a one-time download of 670 MB (speech) and 547 MB to 1.6 GB (text fix, depending on the model you pick), over Wi-Fi.
 
 > **Want a cloud model?** TobiBoard settings → Voice Input → Provider → choose OpenRouter or PayPerQ → paste your API key. The key field only appears once you select a cloud provider.
 
