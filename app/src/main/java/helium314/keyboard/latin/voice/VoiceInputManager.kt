@@ -67,6 +67,26 @@ class VoiceInputManager(
          */
         internal fun letLocalTranscriptionFinish(state: State, provider: AiProvider?): Boolean =
             state == State.TRANSCRIBING && provider == AiProvider.LOCAL
+
+        /**
+         * True when a finished transcription may still be committed. An on-device decode is
+         * deliberately allowed to outlive the input view (see [letLocalTranscriptionFinish]), so by
+         * the time it returns the user may be in a different field — a chat message landing in a
+         * password box, for instance. Comparing the editor the decode started in against the editor
+         * focused now is what stops that.
+         *
+         * Only a *different* editor blocks the commit. Either id being null means "unknown", and an
+         * unknown does not throw away a legitimate transcription: a null [current] is the ordinary
+         * end of an input session, which [letLocalTranscriptionFinish] exists to let a decode
+         * outlive, and where the commit is a no-op anyway because there is no input connection.
+         *
+         * @param startedIn the id captured when the transcription began, null if it was unknown.
+         * @param current   the id of the editor focused now, null when there is no editor.
+         *
+         * Pure, so it is unit-tested without the recording machinery.
+         */
+        internal fun transcriptionMayCommit(startedIn: String?, current: String?): Boolean =
+            startedIn == null || current == null || startedIn == current
     }
 
     enum class State { IDLE, RECORDING, TRANSCRIBING }
@@ -83,6 +103,13 @@ class VoiceInputManager(
         fun onFinished()
         fun onTranscriptionResult(text: String)
         /**
+         * A finished transcription that must NOT be inserted, because the user moved to a different
+         * editor while it was running (see [transcriptionMayCommit]). The text is handed over so it
+         * can still be preserved — the IME copies it to the clipboard on the same terms as a normal
+         * result — rather than being thrown away.
+         */
+        fun onTranscriptionDiscarded(text: String) {}
+        /**
          * [canRetry] means the audio survived and [retryLastTranscription] would re-run it, so the
          * error should be shown with a Retry action rather than as a bare toast.
          */
@@ -97,6 +124,18 @@ class VoiceInputManager(
          * "voice"). The IME should hide itself and launch settings at that destination.
          */
         fun onOpenSettings(settingsDestination: String) {}
+        /**
+         * True when the focused field is a password / no-learning / incognito field, decided by
+         * [SensitiveField] so this matches the text-fix guard exactly. Defaults to true: a caller
+         * that cannot answer must not get the microphone.
+         */
+        fun isSensitiveField(): Boolean = true
+        /**
+         * Identifies the editor the user is typing in, so a transcription that finishes after they
+         * have moved on is dropped instead of committed into the new field. Null when there is no
+         * editor. See [transcriptionMayCommit].
+         */
+        fun getEditorSessionId(): String? = null
         /** Optional IME subtype locale; used as a hint to the transcription model. */
         fun getLocaleHint(): Locale? = null
         /** Optional surrounding-text snapshot; used to decide whether to insert spaces. */
@@ -129,6 +168,8 @@ class VoiceInputManager(
     // The provider backing the in-flight transcription, so a lifecycle-driven cancel can spare a
     // local decode (see cancelForLifecycle). Only meaningful while state == TRANSCRIBING.
     @Volatile private var currentProvider: AiProvider? = null
+    // The editor the in-flight transcription was started in; see transcriptionMayCommit.
+    @Volatile private var transcriptionEditorSessionId: String? = null
     // The one failed clip kept for [retryLastTranscription]. Held only as long as
     // RETRY_AUDIO_RETENTION_MS and dropped the moment it is no longer useful; see purgeRetryAudio.
     private val retryAudio = RetryAudioRetention()
@@ -161,6 +202,15 @@ class VoiceInputManager(
 
         if (!prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)) {
             callbacks.onOpenSettings(SETTINGS_VOICE)
+            return
+        }
+
+        // Password, no-learning and incognito fields: the same refusal text fix already makes, via
+        // the same predicate (see SensitiveField). The action-key popup drops the mic in these
+        // fields, so this is the backstop for any other route into startRecording.
+        if (callbacks.isSensitiveField()) {
+            Log.i(TAG, "startRecording refused: sensitive field")
+            Toast.makeText(context, R.string.voice_error_sensitive_field, Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -320,6 +370,7 @@ class VoiceInputManager(
         val prefs = context.prefs()
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
         currentProvider = provider
+        transcriptionEditorSessionId = callbacks.getEditorSessionId()
         val apiKey = if (provider.isCloud) {
             SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
         } else ""
@@ -499,6 +550,14 @@ class VoiceInputManager(
     @Synchronized
     fun retryLastTranscription(): Boolean {
         if (state != State.IDLE) return false
+        // The retry commits into whatever is focused now, so the field guard applies again here and
+        // not only in startRecording.
+        if (callbacks.isSensitiveField()) {
+            Log.i(TAG, "retryLastTranscription refused: sensitive field")
+            purgeRetryAudio()
+            Toast.makeText(context, R.string.voice_error_sensitive_field, Toast.LENGTH_SHORT).show()
+            return false
+        }
         // consume() hands ownership to this attempt without deleting: the transcription path deletes
         // on success and re-retains on another failure. Disarm the expiry first so it cannot delete
         // the file out from under the in-flight attempt.
@@ -542,6 +601,7 @@ class VoiceInputManager(
         transcriptionJob = null
         transcriptionClient = null
         currentProvider = null
+        transcriptionEditorSessionId = null
         currentUseDedicatedStt = false
         state = State.IDLE
         callbacks.onFinished()
@@ -591,6 +651,7 @@ class VoiceInputManager(
                 transcriptionJob = null
                 transcriptionClient = null
                 currentProvider = null
+                transcriptionEditorSessionId = null
                 currentUseDedicatedStt = false
                 // The transcription thread's finally block will handle file deletion; only
                 // reach in here if it couldn't start.
@@ -694,12 +755,26 @@ class VoiceInputManager(
             if (activeTranscriptionToken.get() != requestToken) {
                 return@post
             }
+            val startedIn = transcriptionEditorSessionId
             transcriptionJob = null
             transcriptionClient = null
             currentProvider = null
+            transcriptionEditorSessionId = null
             currentUseDedicatedStt = false
             state = State.IDLE
             callbacks.onFinished()
+            if (!result.isNullOrEmpty() && !transcriptionMayCommit(startedIn, callbacks.getEditorSessionId())) {
+                // The user moved to a different field while the decode was running. Committing here
+                // would type the dictation into whatever they moved to. Always logged so it is
+                // diagnosable. The text itself was fine, so hand it to onTranscriptionDiscarded
+                // before reporting: losing the dictation outright over a field switch would be the
+                // worse failure, and the clipboard is where the user can still reach it.
+                Log.i(TAG, "Dropping transcription: editor changed since it started")
+                purgeRetryAudio()
+                callbacks.onTranscriptionDiscarded(result)
+                callbacks.onError(context.getString(R.string.voice_error_field_changed), false)
+                return@post
+            }
             if (!result.isNullOrEmpty()) {
                 // The attempt produced text, so nothing is left to retry. Drop the audio now rather
                 // than waiting for the retention timer.

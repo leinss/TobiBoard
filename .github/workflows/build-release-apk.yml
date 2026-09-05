@@ -17,7 +17,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The signing key lives in repository secrets. A fork, or this repo before the secrets
+  # are added, cannot produce a signed APK, and failing the whole workflow for that made
+  # every run red and hid real build breakage. Report it once, as a warning, and skip.
+  signing-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      available: ${{ steps.check.outputs.available }}
+    steps:
+      - id: check
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::warning title=Signed release build skipped::KEYSTORE_BASE64 is not set. Add the KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD repository secrets to build signed releases (see the README release section)."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: signing-secrets
+    if: needs.signing-secrets.outputs.available == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -45,8 +67,8 @@ jobs:
       - name: Install Android SDK components
         run: |
           sdkmanager \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
             "ndk;28.0.13004108"
 
       - name: Decode keystore

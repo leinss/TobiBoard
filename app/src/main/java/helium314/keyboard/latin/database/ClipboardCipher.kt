@@ -18,14 +18,43 @@ import javax.crypto.SecretKey
  * file access). A live attacker on an already-unlocked device can read the running keyboard's
  * clipboard regardless — out of scope, and unavoidable for an input method.
  *
- * Unavailable below API 23 (AndroidKeyStore AES keys need it) or if the keystore is transiently
- * unhappy; callers then fall back to plaintext and an `ENCRYPTED = 0` row flag, so the feature
- * degrades gracefully instead of losing clipboard data.
+ * [isAvailable] is false below API 23, where AndroidKeyStore has no AES keys at all, and also on a
+ * device whose keystore cannot produce a key at all. Both cases store plaintext with an
+ * `ENCRYPTED = 0` row flag, which is the one gap in the claim, and [ClipboardDao] tells the user
+ * about it once rather than degrading in silence. Once a key exists, an encryption *failure* drops
+ * the clip rather than writing it in the clear — see [storedValue].
  */
 internal object ClipboardCipher {
     private const val TAG = "ClipboardCipher"
     private const val KEYSTORE = "AndroidKeyStore"
     private const val KEY_ALIAS = "tobiboard_clipboard_v1"
+
+    /** What a clipboard row is allowed to hold. See [storedValue]. */
+    internal data class Stored(val value: String, val encrypted: Boolean)
+
+    /**
+     * Decides what to write for one clipboard field, or null for "write nothing, drop the clip".
+     *
+     * The app tells users the clipboard history is encrypted, so a keystore that is present but
+     * fails must not quietly downgrade to plaintext: that produced a row flagged `ENCRYPTED = 0`
+     * holding readable text, with nothing shown to the user. Losing a clip is the intended trade.
+     *
+     * @param encryptionExpected whether this device produced a key at all ([isAvailable]). When it
+     *                           is false there is no key to fail with, so plaintext is the
+     *                           degradation rather than a failure, and [ClipboardDao] warns the user
+     *                           once. It is false below API 23 and on a device whose keystore cannot
+     *                           produce a key.
+     * @param plaintext          the text the user copied.
+     * @param ciphertext         what [encrypt] returned, null if it failed.
+     *
+     * Pure, so it is unit-tested without a keystore; see ClipboardCipherStoredValueTest.
+     */
+    @JvmStatic
+    internal fun storedValue(encryptionExpected: Boolean, plaintext: String, ciphertext: String?): Stored? = when {
+        !encryptionExpected -> Stored(plaintext, encrypted = false)
+        ciphertext != null -> Stored(ciphertext, encrypted = true)
+        else -> null
+    }
 
     /** True when new clips can be encrypted. Cheap after the first call (key is cached in the store). */
     fun isAvailable(): Boolean = key() != null

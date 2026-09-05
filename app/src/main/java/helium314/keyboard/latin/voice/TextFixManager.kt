@@ -5,7 +5,6 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
-import android.view.inputmethod.EditorInfo
 import androidx.annotation.StringRes
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.settings.Defaults
@@ -13,6 +12,7 @@ import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.prefs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,11 +48,8 @@ class TextFixManager(
             incognitoModeEnabled: Boolean,
             imeOptions: Int,
         ): Int? {
-            // Sensitive signals first — caller-supplied flags and IME-level hints.
-            if (isPasswordField || noLearning || incognitoModeEnabled) {
-                return R.string.text_fix_error_sensitive_field
-            }
-            if ((imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0) {
+            // Sensitive signals first — shared with voice input so the two guards cannot diverge.
+            if (SensitiveField.isSensitive(inputType, isPasswordField, noLearning, incognitoModeEnabled, imeOptions)) {
                 return R.string.text_fix_error_sensitive_field
             }
             // TYPE_TEXT_FLAG_NO_SUGGESTIONS means "disable autocomplete strip" — it is widely set
@@ -61,12 +58,8 @@ class TextFixManager(
             when (inputType and InputType.TYPE_MASK_CLASS) {
                 InputType.TYPE_CLASS_TEXT -> { /* always allowed */ }
                 InputType.TYPE_CLASS_NUMBER -> {
-                    // Preventative: today we reject NUMBER as unsupported, but check password
-                    // variation first so it registers as sensitive rather than unsupported.
-                    if ((inputType and InputType.TYPE_MASK_VARIATION) ==
-                        InputType.TYPE_NUMBER_VARIATION_PASSWORD) {
-                        return R.string.text_fix_error_sensitive_field
-                    }
+                    // The password variation is already handled above as sensitive; everything else
+                    // numeric is simply unsupported.
                     return R.string.text_fix_error_unsupported_field
                 }
                 else -> {
@@ -102,7 +95,20 @@ class TextFixManager(
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Last-resort backstop, mirroring the one in [VoiceInputManager]. Without it, any Throwable
+     * escaping a [backgroundScope] coroutine reaches the default handler and kills the whole IME
+     * process. The on-device fix path loads a MediaPipe LLM of roughly a gigabyte
+     * ([helium314.keyboard.latin.voice.local.LocalLiteRtEngine]), so OutOfMemoryError is a realistic
+     * outcome on a mid-RAM device, and a `catch (e: Exception)` does not see it. The user gets the
+     * ordinary text-fix failure message instead of losing the keyboard mid-sentence.
+     */
+    private val crashGuard = CoroutineExceptionHandler { _, t ->
+        Log.e(TAG, "Uncaught failure in a text-fix coroutine", t)
+        mainHandler.post { failCurrentAttempt(context.getString(R.string.text_fix_error_failed)) }
+    }
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + crashGuard)
     @Volatile private var activeClient: TextFixEngine? = null
     @Volatile private var activeJob: Job? = null
     @Volatile private var activeToken = 0L
@@ -227,9 +233,12 @@ class TextFixManager(
                 finish(token)
             } catch (e: InterruptedException) {
                 finish(token)
-            } catch (e: Exception) {
-                Log.e(TAG, "Text fix failed", e)
-                finish(token, error = safeUserFacingError(context, e, R.string.text_fix_error_failed))
+            } catch (t: Throwable) {
+                // Throwable, not Exception: the on-device engine allocates around a gigabyte over
+                // JNI and can raise OutOfMemoryError / UnsatisfiedLinkError, which must surface as a
+                // text-fix error rather than unwinding out of the coroutine and killing the IME.
+                Log.e(TAG, "Text fix failed", t)
+                finish(token, error = safeUserFacingError(context, t, R.string.text_fix_error_failed))
             }
         }
     }
@@ -270,6 +279,24 @@ class TextFixManager(
                 callbacks.onError(error)
             }
         }
+    }
+
+    /**
+     * Resets to idle and reports [message] after a failure that bypassed the normal error path (the
+     * [crashGuard] backstop). Main thread only.
+     */
+    @Synchronized
+    private fun failCurrentAttempt(message: String) {
+        if (state == State.IDLE) return
+        activeToken += 1
+        // Same teardown as cancel(): an engine that threw still holds its native handle, and on the
+        // on-device path that is a gigabyte the next fix would have to allocate around.
+        activeClient?.cancel()
+        activeJob = null
+        activeClient = null
+        state = State.IDLE
+        callbacks.onFinished()
+        callbacks.onError(message)
     }
 
     /** Reset to idle and route the user to settings — used when a background precondition fails. */

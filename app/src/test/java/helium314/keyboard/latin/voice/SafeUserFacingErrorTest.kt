@@ -52,4 +52,15 @@ class SafeUserFacingErrorTest {
         val message = safeUserFacingError(context, IOException("boom"), R.string.text_fix_error_failed)
         assertEquals(context.getString(R.string.text_fix_error_failed), message)
     }
+
+    @Test
+    fun anErrorMapsToTheGenericFallbackSoTheCrashGuardHasSomethingToShow() {
+        // TextFixManager catches Throwable, not Exception: the on-device engine allocates roughly a
+        // gigabyte over JNI and an OutOfMemoryError used to unwind out of the coroutine and kill the
+        // IME process. The widened catch is only useful if there is a message for it.
+        assertEquals(
+            context.getString(R.string.text_fix_error_failed),
+            safeUserFacingError(context, OutOfMemoryError("engine"), R.string.text_fix_error_failed),
+        )
+    }
 }
