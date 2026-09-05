@@ -2,24 +2,26 @@ Everything runs on your device. Cloud is optional.
 
 TobiBoard is a fork of HeliBoard — the best privacy-respecting Android keyboard — with the three things it was missing: on-device voice-to-text, on-device text fix, and a proper clipboard manager. All run locally by default. No account. No API key required. Cloud providers are available if you want more powerful models, but you never need one.
 
+Both AI features ship switched off. When you turn one on, TobiBoard downloads its model once from Hugging Face over Wi-Fi: 670 MB for speech, and 547 MB to 1.6 GB for text fix depending on the model you pick. After that both run offline.
+
 <b>On-device Voice-to-Text</b>
 Long-press Return, tap the mic, speak. Your words land as polished text. Uses an on-device NVIDIA Parakeet TDT 0.6B v3 model (multilingual) by default — audio never leaves your phone.
 <ul>
-  <li>Works offline, no key needed</li>
+  <li>Works offline once the 670 MB model is downloaded, no key needed</li>
   <li>Cloud models (OpenRouter, PayPerQ) available if you want them — bring your own key</li>
-  <li>Custom prompt or vocabulary so it nails names and jargon</li>
+  <li>Cloud providers take a custom transcription prompt, so they get names and jargon right</li>
 </ul>
 
 <b>On-device Text Fix</b>
 Select rough text, long-press Return, hit Fix. Back as clean text in the same language. Runs locally by default — nothing uploaded, no key needed.
 <ul>
-  <li>Works offline, no key needed</li>
-  <li>Any language, cleans typos and awkward phrasing, adjusts tone</li>
+  <li>Works offline once the model is downloaded (547 MB to 1.6 GB), no key needed</li>
+  <li>Any language, cleans typos and awkward phrasing; both fix prompts are editable</li>
   <li>Review the rewrite before replacing the original</li>
 </ul>
 
 <b>Clipboard history — stays on your device</b>
-Long-press the clipboard icon to browse everything you've copied. See when it was copied and how often you paste it. Copied text is encrypted at rest with a hardware-backed key (Android 6+).
+Long-press the clipboard icon to browse everything you've copied. See when it was copied and how often you paste it. Copied text is encrypted at rest with AES-256-GCM using an Android Keystore key, hardware-backed where the device supports it, on Android 6 and newer. If the Keystore cannot produce a key, the clip is dropped rather than saved in plain text.
 <ul>
   <li>Pin entries you paste often so they're always at the top</li>
   <li>Add labels to find things later</li>
