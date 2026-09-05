@@ -50,6 +50,9 @@ fun ClipboardManagementScreen(onClickBack: () -> Unit) {
         onClickBack = onClickBack,
         title = { Text(stringResource(R.string.clipboard_management)) },
         searchHint = stringResource(R.string.clipboard_search_hint),
+        // Deleting or pinning a row bumps revision; without it the filtered list stays as it was
+        // and the last delete never reveals the empty state.
+        filterKey = revision,
         // SearchScreen draws exactly what this returns, so an empty result needs a row of its
         // own: without one the screen is a title bar and nothing else, with no explanation.
         filteredItems = { query ->

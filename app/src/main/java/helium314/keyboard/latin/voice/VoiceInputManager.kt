@@ -14,6 +14,7 @@ import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.prefs
+import helium314.keyboard.latin.voice.local.LocalSherpaEngine
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
@@ -59,8 +60,6 @@ class VoiceInputManager(
         private const val MAX_RECONNECT_ATTEMPTS = 3
         private const val RECONNECT_WAIT_MS_PER_ATTEMPT = 30_000L
         private const val RECONNECT_POLL_MS = 2_000L
-        /** Ceiling on one on-device transcription, model load included. See [LocalModelRequest]. */
-        internal const val LOCAL_TIMEOUT_MS = LocalModelRequest.LOCAL_TIMEOUT_MS
 
         /**
          * True when a lifecycle-driven cancel (window hidden / input view finishing) should be
@@ -206,12 +205,17 @@ class VoiceInputManager(
      * on-device decode path runs sherpa-onnx over JNI ([helium314.keyboard.latin.voice.local.LocalSherpaEngine]),
      * which can raise Errors (OutOfMemoryError, UnsatisfiedLinkError) that a `catch (e: Exception)`
      * does not see. Note this cannot save a genuine native abort inside the shared library.
+     *
+     * It is built per launch and closes over that attempt's token: a crash reported after the user
+     * has already started a newer recording must not tear the newer one down. A scope-level handler
+     * had no way to tell the two apart.
      */
-    private val crashGuard = CoroutineExceptionHandler { _, t ->
+    private fun crashGuardFor(token: Long) = CoroutineExceptionHandler { _, t ->
         Log.e(TAG, "Uncaught failure in a voice coroutine", t)
-        mainHandler.post { failCurrentAttempt(context.getString(R.string.voice_error_transcription_failed)) }
+        if (LocalModelRequest.shouldReleaseLocalModel(t)) LocalSherpaEngine.releaseSharedAsync()
+        mainHandler.post { failCurrentAttempt(token, context.getString(R.string.voice_error_transcription_failed)) }
     }
-    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + crashGuard)
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var audioRecorder: AudioRecorder = AudioRecorder(outputFile = File(cacheAudioDir(), "rec_placeholder.wav"))
     @Volatile private var state = State.IDLE
     private var currentAudioFile: File? = null
@@ -377,7 +381,10 @@ class VoiceInputManager(
         // Deferred that completes once the recording loop drains and the file header is
         // written. Awaiting it here on the IME main thread used to ANR for up to 2s.
         val deferred = audioRecorder.stop()
-        stopFinalizeJob = backgroundScope.launch(CoroutineName("VoiceFinalize")) {
+        // Snapshot the token at launch: if the user cancels and records again while the recorder is
+        // still draining, a crash from this finalize must not fail the newer attempt.
+        val finalizeToken = activeTranscriptionToken.get()
+        stopFinalizeJob = backgroundScope.launch(CoroutineName("VoiceFinalize") + crashGuardFor(finalizeToken)) {
             val wavFile = deferred.await()
             withContext(Dispatchers.Main.immediate) { onRecordingFinalized(wavFile) }
         }
@@ -512,7 +519,7 @@ class VoiceInputManager(
         // a newer request cannot be mistaken for this one.
         val requestToken = activeTranscriptionToken.incrementAndGet()
         val client: SttEngine = when (provider) {
-            AiProvider.LOCAL -> helium314.keyboard.latin.voice.local.LocalSherpaEngine(
+            AiProvider.LOCAL -> LocalSherpaEngine(
                 context, onModelReady = { markTranscribing(requestToken) },
             )
             AiProvider.OPENROUTER, AiProvider.PAYPERQ -> OpenRouterClient(
@@ -529,7 +536,7 @@ class VoiceInputManager(
         transcriptionClient = client
         val useDedicatedSttForRetry = useDedicatedStt
 
-        transcriptionJob = backgroundScope.launch(CoroutineName("VoiceTranscription")) {
+        transcriptionJob = backgroundScope.launch(CoroutineName("VoiceTranscription") + crashGuardFor(requestToken)) {
             // Set on any failure path, so the finally below keeps the clip for one Retry instead of
             // deleting it. A success or an explicit cancel leaves it false and the audio goes.
             var keepForRetry = false
@@ -608,6 +615,9 @@ class VoiceInputManager(
                 // can raise Errors (OutOfMemoryError, UnsatisfiedLinkError). Those used to escape
                 // this handler and kill the IME process mid-dictation.
                 Log.e(TAG, "Transcription failed", t)
+                // The recognizer survives a failed decode, so a retry would allocate against the
+                // same held ~660 MB and die the same way. Hand it back first.
+                if (LocalModelRequest.shouldReleaseLocalModel(t)) LocalSherpaEngine.releaseSharedAsync()
                 keepForRetry = true
                 // Retain before reporting, for the same ordering reason as the blank-result path.
                 retainForRetry(wavFile, useDedicatedSttForRetry)
@@ -666,8 +676,6 @@ class VoiceInputManager(
         mainHandler.postDelayed(purgeRetryAudioRunnable, RETRY_AUDIO_RETENTION_MS)
     }
 
-    /** Deletes the retained clip now and disarms the expiry timer. Safe to call repeatedly. */
-    @Synchronized
     /**
      * Clears every field of the transcription state machine and returns to IDLE. Returns the editor
      * session the cleared attempt started in, which the commit path needs after the reset.
@@ -675,7 +683,12 @@ class VoiceInputManager(
      * Three cancel paths used to repeat this block by hand ([failCurrentAttempt], the TRANSCRIBING
      * branch of [cancelRecording] and [finishTranscription]), so every field added to the state
      * machine had to be added in three places or one path leaked it into the next attempt.
+     *
+     * Synchronized because [finishTranscription] reaches it from a main-thread post that holds no
+     * lock, unlike the two cancel paths. Kotlin's monitor is reentrant, so the locked callers are
+     * unaffected.
      */
+    @Synchronized
     private fun clearTranscriptionState(): String? {
         val startedIn = transcriptionEditorSessionId
         transcriptionJob = null
@@ -687,6 +700,8 @@ class VoiceInputManager(
         return startedIn
     }
 
+    /** Deletes the retained clip now and disarms the expiry timer. Safe to call repeatedly. */
+    @Synchronized
     private fun purgeRetryAudio() {
         mainHandler.removeCallbacks(purgeRetryAudioRunnable)
         retryAudio.purge()
@@ -694,12 +709,19 @@ class VoiceInputManager(
 
     /**
      * Resets to IDLE and reports [message] after a failure that bypassed the normal error path (the
-     * [crashGuard] backstop). Keeps whatever clip is retained so Retry still works.
+     * [crashGuardFor] backstop). Keeps whatever clip is retained so Retry still works.
+     *
+     * Does nothing when [token] is no longer the attempt that is running: a crash reported late
+     * must not tear down the recording the user started after it.
      */
     @Synchronized
-    private fun failCurrentAttempt(message: String) {
-        if (state == State.IDLE) return
+    private fun failCurrentAttempt(token: Long, message: String) {
+        if (state == State.IDLE || activeTranscriptionToken.get() != token) return
         activeTranscriptionToken.incrementAndGet()
+        // Same teardown as cancelRecording(): an engine that threw still holds its native handle,
+        // and on the on-device path that is hundreds of megabytes the next attempt would allocate
+        // around.
+        transcriptionClient?.cancel()
         clearTranscriptionState()
         callbacks.onFinished()
         callbacks.onError(message, hasRetryableRecording())

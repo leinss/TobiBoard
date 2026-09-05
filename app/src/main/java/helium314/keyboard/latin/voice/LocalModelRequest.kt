@@ -43,6 +43,19 @@ internal object LocalModelRequest {
         activeToken == requestToken && state == preparing
 
     /**
+     * True when a failure means the shared on-device model should be handed back before the next
+     * attempt. An OutOfMemoryError here is almost always the on-device handle (~1 GB for the LLM,
+     * ~660 MB for the recognizer) competing with the app heap: it survives the failed request, so a
+     * retry would allocate against the same held memory and die identically. The cause is checked
+     * too, because a native load failure reaches us wrapped in
+     * [helium314.keyboard.latin.voice.local.LocalModelLoadException].
+     *
+     * Pure, so it is unit-tested.
+     */
+    fun shouldReleaseLocalModel(t: Throwable): Boolean =
+        t is OutOfMemoryError || t.cause is OutOfMemoryError
+
+    /**
      * Runs [block] under [timeoutMs] when [isLocal], and cancels [engine] if it expires.
      *
      * The cancel is here rather than at the call site because that is the part that drifted: it

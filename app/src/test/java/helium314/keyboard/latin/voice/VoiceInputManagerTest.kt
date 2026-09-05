@@ -50,11 +50,6 @@ class VoiceInputManagerTest {
     }
 
     @Test
-    fun theOnDeviceTranscriptionPathHasACeiling() {
-        assertTrue(VoiceInputManager.LOCAL_TIMEOUT_MS > 0L)
-    }
-
-    @Test
     fun cloudTranscriptionIsStillCancelledOnLifecycleEvents() {
         // Cloud uploads keep the cancel-on-dismiss behaviour: no stale field insert seconds later.
         assertFalse(

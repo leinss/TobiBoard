@@ -392,15 +392,6 @@
     <string name="emoji" tools:keep="@string/emoji">Emoji</string>
     <!-- Shown when the clipboard key is tapped with clipboard history off and an empty clipboard -->
     <string name="clipboard_nothing_to_paste">Nothing to paste</string>
-    <!-- Short captions drawn under the icons in the Return-key long-press popup, so the icons are
-         not five unlabelled glyphs. Keep each to one short word: they are drawn inside a key. -->
-    <string name="popup_caption_clipboard">Clipboard</string>
-    <string name="popup_caption_voice">Voice</string>
-    <string name="popup_caption_emoji">Emoji</string>
-    <string name="popup_caption_stt">STT</string>
-    <string name="popup_caption_text_fix">Fix</string>
-    <string name="popup_caption_text_fix_2">Fix 2</string>
-    <string name="popup_caption_add_to_dictionary">Dictionary</string>
     <!-- Title of the setting to set clipboard toolbar keys -->
     <string name="clipboard_toolbar_keys">Select clipboard toolbar keys</string>
     <!-- Title of the setting to set pinned toolbar keys -->

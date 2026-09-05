@@ -2,6 +2,7 @@
 package helium314.keyboard.latin.utils
 
 import helium314.keyboard.latin.common.Constants.Separators
+import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -39,5 +40,18 @@ class ToolbarPrefsTest {
         val entry = defaultToolbarPref.split(Separators.ENTRY)
             .single { it.substringBefore(Separators.KV) == ToolbarKey.TEXT_FIX.name }
         assertTrue(entry.endsWith("${Separators.KV}false"), "TEXT_FIX must not be enabled by default: $entry")
+    }
+
+    @Test fun theTextFixToolbarKeyRunsBothPrompts() {
+        // Tap is the primary prompt, long-press the second one, so one toolbar slot reaches both.
+        assertEquals(KeyCode.TEXT_FIX, defaultCodeForToolbarKey(ToolbarKey.TEXT_FIX))
+        assertEquals(KeyCode.TEXT_FIX_2, defaultLongClickCodeForToolbarKey(ToolbarKey.TEXT_FIX))
+    }
+
+    @Test fun everyToolbarKeyHasATapCode() {
+        // A key with no code is a toolbar button that does nothing when tapped.
+        ToolbarKey.entries.forEach {
+            assertTrue(defaultCodeForToolbarKey(it) != KeyCode.UNSPECIFIED, "$it has no tap code")
+        }
     }
 }

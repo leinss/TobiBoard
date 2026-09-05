@@ -72,12 +72,12 @@ class Database private constructor(
             if (clipDao == null) {
                 Log.e(TAG, "can't transfer clipboard data because ClipboardDao is null")
             } else {
-                otherDb.readableDatabase.rawQuery("SELECT TIMESTAMP, PINNED, TEXT FROM CLIPBOARD", null)
-                    .use {
-                        clipDao.clear()
-                        while (it.moveToNext())
-                            clipDao.addClip(it.getLong(0), it.getInt(1) != 0, it.getString(2))
-                    }
+                // The DAO owns the ENCRYPTED flag and the cipher, so it does the reading: a row
+                // encrypted on the exporting device cannot be decrypted here and must be dropped,
+                // not stored as if the ciphertext were the clip text.
+                val dropped = clipDao.importFrom(otherDb.readableDatabase)
+                if (dropped > 0)
+                    Log.w(TAG, "dropped $dropped clipboard rows that could not be decrypted on import")
             }
             val db = getInstance(context)
             otherDb.readableDatabase.rawQuery("SELECT TIMESTAMP, WORD, EXPORTED, SOURCE_ACTIVE, DATA FROM GESTURE_DATA", null)

@@ -387,6 +387,38 @@ class ClipboardDao private constructor(
         db.writableDatabase.delete(TABLE, "$COLUMN_PINNED = 0", null)
     }
 
+    /**
+     * Replaces the clipboard history with the rows of [source], an imported database already
+     * migrated to the current schema.
+     *
+     * A row's ENCRYPTED flag decides how its text is read. The v3 to v4 migration encrypts an
+     * imported plaintext backup with *this* device's key, so those rows decrypt here; a row that
+     * arrived already encrypted on another device does not, and is dropped. Reading every row as
+     * plaintext, as this used to, stored the raw ciphertext as if it were the clip.
+     *
+     * Returns the number of rows dropped because they could not be read.
+     */
+    fun importFrom(source: SQLiteDatabase): Int {
+        var dropped = 0
+        source.query(
+            TABLE,
+            arrayOf(COLUMN_TIMESTAMP, COLUMN_PINNED, COLUMN_TEXT, COLUMN_ENCRYPTED),
+            null, null, null, null, null,
+        ).use { c ->
+            clear()
+            while (c.moveToNext()) {
+                val stored = c.getString(2)
+                val text = if (c.getInt(3) != 0) stored?.let { cipher.decrypt(it) } else stored
+                if (text == null) {
+                    dropped++
+                    continue
+                }
+                addClip(c.getLong(0), c.getInt(1) != 0, text)
+            }
+        }
+        return dropped
+    }
+
     fun clear() {
         val removed = count()
         if (removed == 0) return

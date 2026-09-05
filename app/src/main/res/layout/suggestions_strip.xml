@@ -29,7 +29,9 @@
             android:contentDescription="@string/more_keys_strip_description" />
         <!-- The default key set is wider than a phone screen, so the last keys are off-screen.
              A fading edge plus a permanently drawn scrollbar is what tells the user there is
-             more to the right; without them the row just looks cut off. -->
+             more to the right; without them the row just looks cut off. A toolbar key is square at
+             the strip height (40dp or less), so the fade is kept short: a longer one would dim most
+             of a key that is fully in view. -->
         <HorizontalScrollView
             android:id="@+id/toolbar_container"
             android:layout_width="match_parent"
@@ -38,7 +40,7 @@
             android:fadeScrollbars="false"
             android:scrollbarSize="2dp"
             android:requiresFadingEdge="horizontal"
-            android:fadingEdgeLength="24dp"
+            android:fadingEdgeLength="8dp"
             android:scrollbarThumbHorizontal="@color/toolbar_scrollbar"
             android:visibility="gone">
             <LinearLayout

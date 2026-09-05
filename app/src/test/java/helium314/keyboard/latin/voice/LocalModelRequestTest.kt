@@ -82,9 +82,22 @@ class LocalModelRequestTest {
     }
 
     @Test
-    fun theCeilingIsTheSameForBothManagers() {
-        assertEquals(LocalModelRequest.LOCAL_TIMEOUT_MS, TextFixManager.LOCAL_TIMEOUT_MS)
-        assertEquals(LocalModelRequest.LOCAL_TIMEOUT_MS, VoiceInputManager.LOCAL_TIMEOUT_MS)
+    fun bothManagersShareOneCeiling() {
+        // Both call withLocalTimeout() with the default, so there is one number and no alias to
+        // drift; the manager-local copies this used to compare are gone.
         assertTrue(LocalModelRequest.LOCAL_TIMEOUT_MS > 0L)
+    }
+
+    @Test
+    fun anOutOfMemoryFailureHandsTheOnDeviceModelBack() {
+        // The held handle survives the failed request, so a retry would allocate against the same
+        // memory. The wrapped form is what a native load failure actually arrives as.
+        assertTrue(LocalModelRequest.shouldReleaseLocalModel(OutOfMemoryError()))
+        assertTrue(LocalModelRequest.shouldReleaseLocalModel(RuntimeException(OutOfMemoryError())))
+    }
+
+    @Test
+    fun anOrdinaryFailureKeepsTheOnDeviceModelLoaded() {
+        assertFalse(LocalModelRequest.shouldReleaseLocalModel(java.io.IOException("no network")))
     }
 }

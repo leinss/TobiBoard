@@ -50,7 +50,11 @@ private fun setToolbarButtonActivatedState(button: ImageButton) {
     }
 }
 
-fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomToolbarKeyCode(key) ?: when (key) {
+fun getCodeForToolbarKey(key: ToolbarKey) =
+    Settings.getInstance().getCustomToolbarKeyCode(key) ?: defaultCodeForToolbarKey(key)
+
+/** The built-in tap code, split out from [getCodeForToolbarKey] so it is testable without Settings. */
+internal fun defaultCodeForToolbarKey(key: ToolbarKey) = when (key) {
     VOICE -> KeyCode.VOICE_INPUT
     CLIPBOARD -> KeyCode.CLIPBOARD
     NUMPAD -> KeyCode.NUMPAD
@@ -85,7 +89,11 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     SPLIT -> KeyCode.SPLIT_LAYOUT
 }
 
-fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getCustomToolbarLongpressCode(key) ?: when (key) {
+fun getCodeForToolbarKeyLongClick(key: ToolbarKey) =
+    Settings.getInstance().getCustomToolbarLongpressCode(key) ?: defaultLongClickCodeForToolbarKey(key)
+
+/** The built-in long-press code, split out from [getCodeForToolbarKeyLongClick] for the same reason. */
+internal fun defaultLongClickCodeForToolbarKey(key: ToolbarKey) = when (key) {
     CLIPBOARD -> KeyCode.CLIPBOARD_PASTE
     // Long-pressing the text-fix key runs the second (user-defined) prompt, so both variants are
     // reachable from one toolbar slot instead of costing two.

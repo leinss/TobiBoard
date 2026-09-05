@@ -33,11 +33,6 @@ class TextFixStateMachineTest {
     }
 
     @Test
-    fun theLocalPathHasACeiling() {
-        assertTrue(TextFixManager.LOCAL_TIMEOUT_MS > 0L)
-    }
-
-    @Test
     fun anEchoedInputIsNoChange() {
         assertTrue(TextFixManager.isNoChange("the quick brown fox", "the quick brown fox"))
         assertTrue(TextFixManager.isNoChange("  hello  ", "hello"))

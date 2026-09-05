@@ -224,9 +224,10 @@ fun ColorsScreen(
             else result
         },
         itemContent = { ColorRow(it) },
-        content = {
-            // The name field lives in the app-bar title slot, where a TextField supportingText is
-            // clipped. The explanation goes here instead, directly below the bar.
+        // The name field lives in the app-bar title slot, where a TextField supportingText is
+        // clipped. The explanation goes directly below the bar instead, and here rather than in
+        // content so it stays on screen while the user is searching colors.
+        belowAppBar = {
             if (!nameValid)
                 Text(
                     stringResource(R.string.name_invalid),
@@ -234,6 +235,8 @@ fun ColorsScreen(
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
+        },
+        content = {
             val rows: List<ColorSetting?> =
                 if (moreColors == 2) listOf<ColorSetting?>(null) + shownColors else shownColors
             Scaffold(

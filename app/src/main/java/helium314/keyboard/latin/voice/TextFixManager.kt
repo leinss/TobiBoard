@@ -37,8 +37,6 @@ class TextFixManager(
         private const val TAG = "TextFixManager"
         private const val MAX_INPUT_LENGTH = 10_000
         private const val MAX_OUTPUT_LENGTH = 10_000
-        /** Ceiling on one on-device fix, load included. Shared with voice input; see the catch that uses it. */
-        internal const val LOCAL_TIMEOUT_MS = LocalModelRequest.LOCAL_TIMEOUT_MS
         const val SETTINGS_TEXT_FIX = "text_fix"
         const val SETTINGS_LOCAL_MODELS = "local_models"
 
@@ -98,18 +96,10 @@ class TextFixManager(
         fun initialWorkingState(provider: AiProvider): State =
             LocalModelRequest.initialState(provider, State.PREPARING, State.WORKING)
 
-        /**
-         * True when a failure means the shared on-device model should be handed back before the
-         * next attempt. An OutOfMemoryError here is almost always the ~1 GB LLM handle competing
-         * with the app heap: it survives the failed request, so a retry would allocate against the
-         * same held gigabyte and die identically. The cause is checked too, because a native load
-         * failure reaches us wrapped in [helium314.keyboard.latin.voice.local.LocalModelLoadException].
-         *
-         * Pure, so it is unit-tested.
-         */
+        /** See [LocalModelRequest.shouldReleaseLocalModel]; both managers apply the same rule. */
         @JvmStatic
         internal fun shouldReleaseLocalModel(t: Throwable): Boolean =
-            t is OutOfMemoryError || t.cause is OutOfMemoryError
+            LocalModelRequest.shouldReleaseLocalModel(t)
     }
 
     /**
