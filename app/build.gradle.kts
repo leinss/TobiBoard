@@ -224,4 +224,18 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.11.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    // Drives the IME itself: keys are drawn by a custom view, so the keyboard can only be
+    // touched through injected input events rather than through view/compose matchers.
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+
+    // ui-test-manifest declares the empty ComponentActivity that createComposeRule() hosts.
+    // It has to be on the variant the instrumentation tests are built against, and that is
+    // debugNoMinify (see `testBuildType` above), not debug — `debugImplementation` alone would
+    // put it on a variant the test APK never links against.
+    // Only on debugNoMinify, which is testBuildType. Adding it to `debug` too would put an
+    // exported ComponentActivity into the sideloadable APK that users actually install.
+    add("debugNoMinifyImplementation", "androidx.compose.ui:ui-test-manifest")
 }
