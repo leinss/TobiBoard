@@ -226,6 +226,10 @@
     <string name="clipboard_encryption_failed">Clipboard history could not encrypt this item, so it was not saved</string>
     <!-- Shown once when the device keystore cannot provide a key, so clips are stored unencrypted -->
     <string name="clipboard_encryption_unavailable">This device cannot encrypt clipboard history, so it is stored unencrypted</string>
+    <!-- Shown once when stored clips can no longer be decrypted and had to be removed -->
+    <string name="clipboard_entries_unreadable"><xliff:g id="count">%1$d</xliff:g> clipboard entries could no longer be decrypted and were removed</string>
+    <!-- Same, but the rows were kept: the key could not be shown to work, so the failure may be temporary -->
+    <string name="clipboard_entries_unreadable_kept"><xliff:g id="count">%1$d</xliff:g> clipboard entries could not be decrypted and are hidden</string>
     <string name="clipboard_annotation_hint">Label (optional)</string>
     <string name="clipboard_annotation_dialog_title">Add label</string>
     <string name="clipboard_search_hint">Search clipboard history…</string>
@@ -629,7 +633,9 @@ language, hence "No language". -->
     <!-- Detailed instruction of the 3rd step in the setup wizard. %s is the application name. -->
     <string name="setup_step3_instruction">Now you can type in all your favorite apps with %s.</string>
     <!-- Tip shown on the final setup step making the (opt-in, off-by-default) clipboard history feature discoverable. -->
-    <string name="setup_step3_tip_clipboard">Tip: turn on Clipboard history in Settings to save and reuse things you copy — it stays on your device, encrypted, and is off by default.</string>
+    <string name="setup_step3_tip_clipboard">Tip: turn on Clipboard history in Settings to save and reuse things you copy. It stays on your device, is encrypted where the device keystore allows it, and is off by default.</string>
+    <!-- Final wizard step: text fix has no step of its own, so it is named here -->
+    <string name="setup_step3_tip_text_fix">Tip: Text Fix rewrites what you typed. It is off by default; turn it on in Settings → Text Fix, and download its on-device model there.</string>
     <!-- The label of the button that triggers the settings screen for the keyboard. -->
     <string name="setup_step3_action">Configure the keyboard</string>
     <!-- The label of the button that finishes the setup wizard. -->
@@ -804,9 +810,9 @@ New dictionary:
     <!-- github repo link for about screen -->
     <string name="about_github_link">View on GitHub</string>
     <!-- link to the wiki for about screen -->
-    <string name="about_wiki_link">Go to Wiki</string>
+    <string name="about_wiki_link">Read the documentation</string>
     <!-- description for wiki link -->
-    <string name="about_wiki_link_description">The Wiki can be improved by any GitHub user!</string>
+    <string name="about_wiki_link_description">Setup, models and privacy notes in the project README</string>
     <!-- preference title for saving the log to a file -->
     <string name="save_log">Save log</string>
     <!-- license for about screen-->
@@ -1132,7 +1138,7 @@ New dictionary:
     <!-- Voice Input -->
     <string name="voice_input_title">Voice Input</string>
     <string name="voice_input_enabled">Enable Voice Input</string>
-    <string name="voice_input_enabled_summary">After adding a provider API key, enable this and long-press Return to record and transcribe</string>
+    <string name="voice_input_enabled_summary">Long-press Return to record and transcribe. Runs on this device by default; a cloud provider needs an API key you supply.</string>
     <string name="ai_provider">AI Provider</string>
     <string name="ai_provider_openrouter">OpenRouter</string>
     <string name="ai_provider_payperq">PayPerQ</string>
@@ -1153,7 +1159,7 @@ New dictionary:
     <string name="setup_model_download_ready">Model ready ✓</string>
     <string name="setup_model_download_failed">Download failed: %1$s</string>
     <string name="setup_model_download_retry">Retry download</string>
-    <string name="text_fix_error_local_not_ready">Gemma model not downloaded. Open Settings → On-device models.</string>
+    <string name="text_fix_error_local_not_ready"><xliff:g id="model">%1$s</xliff:g> is not downloaded. Open Settings → On-device models.</string>
     <string name="text_fix_error_local_load_failed">On-device model failed to load — it may be corrupt. Re-download it in Settings → On-device models.</string>
     <string name="openrouter_api_key">OpenRouter API Key</string>
     <string name="openrouter_api_key_summary">Required before long-pressing Return to use voice input with your OpenRouter account</string>
@@ -1193,9 +1199,17 @@ New dictionary:
     <string name="voice_error_no_audio">No audio captured</string>
     <string name="voice_error_too_short">Recording too short</string>
     <string name="voice_error_silent">No speech detected</string>
+    <!-- The microphone or the disk cut the capture short, so the clip is incomplete and was discarded -->
+    <string name="voice_error_recording_truncated">Recording stopped early, so the audio is incomplete. Nothing was transcribed.</string>
+    <!-- Action on the message bar shown after a recording produced no usable audio -->
+    <string name="voice_record_again">Record again</string>
+    <string name="voice_record_again_a11y">Record again</string>
     <string name="voice_error_not_enabled">Enable Voice Input in settings</string>
     <string name="voice_error_no_permission">Grant microphone permission in settings</string>
     <string name="voice_error_no_network">No internet connection</string>
+    <!-- On-device model is loading, before any transcription starts. The load cannot be interrupted. -->
+    <string name="voice_preparing">Preparing the on-device model. Cancel hides this but cannot stop the load.</string>
+    <string name="voice_error_timeout">The on-device model took too long and was given up on</string>
     <string name="voice_error_stt_openrouter_only">Dedicated STT is only available with OpenRouter</string>
     <string name="voice_error_transcription_failed">Transcription failed</string>
     <!-- Shown when voice input is used in a password, incognito or no-learning field -->
@@ -1214,10 +1228,14 @@ New dictionary:
     <string name="voice_copied_to_clipboard">Transcription copied to clipboard</string>
     <string name="voice_error_secure_storage_unavailable">Secure storage is unavailable on this device</string>
     <string name="voice_mic_rationale_title">Microphone access</string>
-    <string name="voice_mic_rationale_message">TobiBoard records audio only while you hold the voice button. The recording is sent over HTTPS to your selected AI provider for transcription using the API key you supply; it is not proxied by any TobiBoard server. You can revoke microphone access at any time from Android\'s app settings.</string>
+    <!-- Microphone rationale, cloud provider selected -->
+    <string name="voice_mic_rationale_message">TobiBoard records audio only while the voice button is active. The recording is sent over HTTPS to your selected AI provider for transcription using the API key you supply; it is not proxied by any TobiBoard server. You can revoke microphone access at any time from Android\'s app settings.</string>
+    <!-- Microphone rationale, on-device provider selected. No upload, no API key. -->
+    <string name="voice_mic_rationale_message_local">TobiBoard records audio only while the voice button is active. The recording is transcribed by the on-device model and never leaves this phone. You can revoke microphone access at any time from Android\'s app settings.</string>
     <string name="voice_mic_rationale_confirm">Allow microphone</string>
     <string name="voice_enable_privacy_title">Enable Voice Input?</string>
     <string name="voice_enable_privacy_message">Voice Input sends your recorded audio over HTTPS to your selected AI provider using the API key you supply.</string>
+    <string name="voice_enable_privacy_message_local">Voice Input transcribes your recording on this device. Nothing is uploaded and no API key is needed. Switching to a cloud provider later will send audio off this device.</string>
     <string name="voice_enable_privacy_confirm">Enable Voice Input</string>
     <string name="voice_custom_model">Custom</string>
     <string name="voice_model_unavailable">Saved model not available: <xliff:g id="slug">%1$s</xliff:g>. Pick a new one.</string>
@@ -1262,7 +1280,10 @@ New dictionary:
     <string name="voice_test_key_success_zdr_unavailable">API key works, but the selected model has no ZDR endpoint</string>
     <string name="voice_test_key_invalid">API key rejected</string>
     <string name="voice_test_key_invalid_model">Selected model is unavailable</string>
+    <string name="voice_test_key_success_zdr_unverified">API key works, but zero data retention could not be verified for this model</string>
     <string name="voice_test_key_network_error">Network error while testing key</string>
+    <string name="voice_test_key_provider_error">The AI provider returned an error while testing the key</string>
+    <string name="voice_test_key_unexpected">Unexpected response while testing the key</string>
     <string name="voice_test_key_testing">Testing…</string>
     <string name="voice_usage_meter">Session usage</string>
     <string name="voice_usage_meter_empty">No requests yet this session. Tap to reset.</string>
@@ -1305,6 +1326,8 @@ New dictionary:
     <string name="local_model_state_cancelled">Cancelled</string>
     <string name="local_model_state_failed">Failed: <xliff:g id="reason">%1$s</xliff:g></string>
     <string name="local_model_download_error_generic">Unexpected download error</string>
+    <!-- Title of the notification posted when a model download fails -->
+    <string name="local_model_download_failed_title">Download failed: <xliff:g id="model">%1$s</xliff:g></string>
     <string name="local_model_license_title">Accept license for <xliff:g id="model">%1$s</xliff:g>?</string>
     <string name="local_model_license_accept">Accept &amp; download</string>
     <string name="local_model_auth_required">Hugging Face access token required. Open On-device models settings to add yours.</string>
@@ -1336,7 +1359,7 @@ New dictionary:
     <string name="setup_ai_provider_add_key">Add %1$s API key</string>
     <string name="setup_ai_provider_update_key">Update %1$s API key</string>
     <string name="setup_ai_provider_language_title">Add speech languages</string>
-    <string name="setup_ai_provider_language_instruction">Recommended for audio-to-text: tell the model which languages you usually speak, such as English, Italian, or English, Italian. It will still detect the spoken language and will not translate.</string>
+    <string name="setup_ai_provider_language_instruction">Recommended for audio-to-text: tell the model which languages you usually speak, such as English, or English and Italian. It will still detect the spoken language and will not translate.</string>
     <string name="setup_ai_provider_language_status">Expected languages: %1$s</string>
     <string name="setup_ai_provider_language_not_set">Expected languages: not set</string>
     <string name="setup_ai_provider_language_action">Set speech languages</string>
@@ -1351,9 +1374,10 @@ New dictionary:
     <!-- Text Fix -->
     <string name="settings_screen_text_fix">Text Fix</string>
     <string name="text_fix_enabled">Enable Text Fix</string>
-    <string name="text_fix_enabled_summary">After adding a provider API key, enable this. Long-press Return to fix the text in the field — or just your selection, if you made one.</string>
+    <string name="text_fix_enabled_summary">Long-press Return to fix the text in the field, or just your selection if you made one. Runs on this device by default; a cloud provider needs an API key you supply.</string>
     <string name="text_fix_enable_privacy_title">Enable Text Fix?</string>
     <string name="text_fix_enable_privacy_message">Text Fix sends your text over HTTPS to your selected AI provider using the API key you supply.</string>
+    <string name="text_fix_enable_privacy_message_local">Text Fix rewrites your text with the on-device model. Nothing is uploaded and no API key is needed. Switching to a cloud provider later will send your text off this device.</string>
     <string name="text_fix_enable_privacy_confirm">Enable Text Fix</string>
     <string name="text_fix_model">Text Fix Model</string>
     <string name="text_fix_model_custom">Custom Model ID</string>
@@ -1361,6 +1385,9 @@ New dictionary:
     <string name="text_fix_prompt">Fix Prompt</string>
     <string name="text_fix_prompt_summary">Instruction sent to the AI when improving your text</string>
     <string name="text_fix_working">Fixing…</string>
+    <!-- On-device model is loading, before any fixing starts. The load cannot be interrupted. -->
+    <string name="text_fix_preparing">Preparing the on-device model. Discard hides this but cannot stop the load.</string>
+    <string name="text_fix_error_timeout">The on-device model took too long and was given up on</string>
     <string name="text_fix_result_a11y">Proposed text: <xliff:g id="text">%1$s</xliff:g>. Use Replace to accept or Discard to reject.</string>
     <string name="text_fix_replace">Replace</string>
     <string name="text_fix_discard">Discard</string>
@@ -1374,9 +1401,13 @@ New dictionary:
     <string name="text_fix_error_selection_changed">Text changed while fixing; try again</string>
     <string name="text_fix_error_too_long">Text is too long</string>
     <string name="text_fix_error_not_enabled">Enable Text Fix in settings</string>
+    <!-- No cloud model is selected for text fix. Distinct from voice_error_no_model, which names the voice one. -->
+    <string name="text_fix_error_no_model">Choose a text-fix model in settings</string>
     <string name="text_fix_error_sensitive_field">Text Fix is unavailable in sensitive fields</string>
     <string name="text_fix_error_unsupported_field">Text Fix is unavailable in this field</string>
     <string name="text_fix_error_empty">The model returned no text</string>
+    <!-- The model handed back the input unchanged, so there is nothing to replace -->
+    <string name="text_fix_no_change_needed">No change needed</string>
     <string name="text_fix_error_failed">Text fix failed</string>
     <string name="text_fix_2_enabled">Enable Second Text Fix</string>
     <string name="text_fix_2_enabled_summary">Adds a second Text Fix button to long-press Return, with its own custom prompt</string>

@@ -17,6 +17,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import helium314.keyboard.latin.R
@@ -25,11 +26,14 @@ import helium314.keyboard.latin.R
  * Overlay shown in the suggestion strip during a text-fix round-trip.
  *
  * States:
+ *  - preparing: on-device model is loading; spinner plus a status that says a discard cannot
+ *    stop the load, because `LlmInference.createFromOptions` ignores interrupts.
  *  - working: shows "Fixing…" status while the request is in flight.
  *  - result: shows the proposed text plus Replace/Discard buttons.
  */
 class TextFixOverlayView(context: Context) : LinearLayout(context) {
 
+    private val spinner: ProgressBar
     private val statusText: TextView
     private val resultText: TextView
     private val expandButton: ImageView
@@ -52,6 +56,11 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         setPadding(dp(12), dp(4), dp(12), dp(4))
 
+        spinner = ProgressBar(context).apply {
+            isIndeterminate = true
+            layoutParams = LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(10) }
+            visibility = View.GONE
+        }
         statusText = TextView(context).apply {
             textSize = 13f
             layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
@@ -112,6 +121,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         discardButton = makePillButton(R.string.text_fix_discard, isPrimary = false) { debounceClick { onDiscardClick?.invoke() } }
         replaceButton = makePillButton(R.string.text_fix_replace, isPrimary = true) { debounceClick { onReplaceClick?.invoke() } }
 
+        addView(spinner)
         addView(statusText)
         addView(resultText)
         addView(expandButton)
@@ -148,6 +158,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
 
     fun setColors(textColor: Int) {
         baseTextColor = textColor
+        spinner.indeterminateDrawable?.mutate()?.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         statusText.setTextColor(textColor)
         resultText.setTextColor(textColor)
         // Primary (Replace): strong filled background with full-opacity text.
@@ -166,8 +177,18 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         reportButton.setTextColor((textColor and 0x00FFFFFF) or 0xB0000000.toInt())
     }
 
+    /** On-device model load: distinct from [showWorking], which used to cover both. */
+    fun showPreparing() {
+        showStatus(context.getString(R.string.text_fix_preparing))
+    }
+
     fun showWorking() {
-        statusText.text = context.getString(R.string.text_fix_working)
+        showStatus(context.getString(R.string.text_fix_working))
+    }
+
+    private fun showStatus(text: CharSequence) {
+        statusText.text = text
+        spinner.visibility = View.VISIBLE
         statusText.visibility = View.VISIBLE
         resultText.visibility = View.GONE
         expandButton.visibility = View.GONE
@@ -178,6 +199,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
     }
 
     fun showResult(original: String, proposed: String) {
+        spinner.visibility = View.GONE
         statusText.visibility = View.GONE
         // Inline word-diff: additions are bold + underlined, removals struck through and dimmed,
         // so the user sees what the fix changed rather than just the final text. Theme-safe — no

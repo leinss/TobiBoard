@@ -76,6 +76,7 @@ import helium314.keyboard.latin.utils.UncachedInputMethodManagerUtils
 import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.latin.voice.AiProvider
+import helium314.keyboard.latin.voice.ConsentCopy
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
 import helium314.keyboard.latin.voice.defaultApiKey
@@ -425,6 +426,16 @@ fun WelcomeWizard(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                     )
+                    // The wizard has no text-fix step (it is already eight steps), so the feature
+                    // would otherwise never be mentioned: it ships off and its model is a separate
+                    // download, so a user who finishes the wizard has no way to know it exists.
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.setup_step3_tip_text_fix),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                    )
                 }
             }
     }
@@ -488,6 +499,8 @@ private fun AiProviderSetupStep(
 ) {
     val ctx = LocalContext.current
     val prefs = ctx.prefs()
+    // Asks for POST_NOTIFICATIONS the first time, so download progress and failures are visible.
+    val startModelDownload = rememberModelDownloadStarter()
     var showApiKeyDialog by rememberSaveable { mutableStateOf(false) }
     var showProviderDialog by rememberSaveable { mutableStateOf(false) }
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
@@ -614,7 +627,7 @@ private fun AiProviderSetupStep(
                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             },
             title = { Text(stringResource(R.string.voice_mic_rationale_title)) },
-            content = { Text(stringResource(R.string.voice_mic_rationale_message)) },
+            content = { Text(stringResource(ConsentCopy.micRationale(selectedProvider))) },
             confirmButtonText = stringResource(R.string.voice_mic_rationale_confirm),
         )
     }
@@ -753,7 +766,7 @@ private fun AiProviderSetupStep(
                             painterResource(R.drawable.ic_settings_preferences)
                         ) {
                             if (!isInProgress) {
-                                helium314.keyboard.latin.voice.local.ModelDownloadService.start(ctx, model.id)
+                                startModelDownload(model.id)
                             }
                         }
                         Spacer(Modifier.height(10.dp))

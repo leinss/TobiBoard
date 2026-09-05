@@ -80,7 +80,7 @@ If you choose a cloud provider, TobiBoard asks OpenRouter for **[zero-data-reten
 
 1. **Install** — add the F-Droid repo `https://leinss.xyz/TobiBoard/repo` to your F-Droid client for automatic updates, or download the APK from [Releases](https://github.com/leinss/TobiBoard/releases/latest).
 2. **Enable** TobiBoard in *Android Settings → General Management → Keyboard list and default → Add TobiBoard*, then select it as your default.
-3. **Use it** — voice and text fix work out of the box with on-device models. No setup required.
+3. **Turn on what you want** — voice input and text fix both ship **off**. Enable them in TobiBoard settings; the on-device models are a one-time download of about 660 MB (speech) and about 550 MB to 1.6 GB (text fix), over Wi-Fi.
 
 > **Want a cloud model?** TobiBoard settings → Voice Input → Provider → choose OpenRouter or PayPerQ → paste your API key. The key field only appears once you select a cloud provider.
 

@@ -2,6 +2,8 @@
 package helium314.keyboard.latin.voice.local
 
 import android.content.Context
+import androidx.core.content.edit
+import helium314.keyboard.latin.utils.prefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,15 +32,35 @@ internal object ModelDownloadRepository {
      * Reconcile the cached state with on-disk reality for every registered model. Run
      * at app start so the UI doesn't briefly show "Not downloaded" for models that are
      * actually ready.
+     *
+     * A failure reason recorded by [recordFailure] is restored here. [_states] is in-memory only
+     * and this runs once per process, so without the stored reason a download that died while the
+     * user was elsewhere came back as [DownloadState.NotDownloaded] on the next launch and the only
+     * record of why it stopped was gone.
      */
     fun rehydrate(context: Context) {
+        val prefs = context.prefs()
         val snapshot = ModelRegistry.ALL.associate { model ->
-            model.id to if (ModelStorage.isReady(context, model)) {
-                DownloadState.Ready
-            } else {
-                DownloadState.NotDownloaded
+            val storedReason = prefs.getString(failureKey(model.id), null)
+            model.id to when {
+                ModelStorage.isReady(context, model) -> DownloadState.Ready
+                !storedReason.isNullOrBlank() -> DownloadState.Failed(storedReason)
+                else -> DownloadState.NotDownloaded
             }
         }
         _states.value = snapshot
     }
+
+    /** Stores [reason] so [rehydrate] can restore it after the process is gone. */
+    fun recordFailure(context: Context, modelId: String, reason: String) {
+        update(modelId, DownloadState.Failed(reason))
+        context.prefs().edit { putString(failureKey(modelId), reason) }
+    }
+
+    /** Drops any stored failure for [modelId]. Call when a download starts or succeeds. */
+    fun clearFailure(context: Context, modelId: String) {
+        context.prefs().edit { remove(failureKey(modelId)) }
+    }
+
+    private fun failureKey(modelId: String) = "local_model_download_failure_$modelId"
 }

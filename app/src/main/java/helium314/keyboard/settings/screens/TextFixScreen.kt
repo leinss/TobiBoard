@@ -20,6 +20,7 @@ import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.latin.voice.AiProvider
+import helium314.keyboard.latin.voice.ConsentCopy
 import helium314.keyboard.latin.voice.ModelCatalog
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
@@ -73,6 +74,9 @@ fun createTextFixSettings(context: Context) = listOf(
         val ctx = LocalContext.current
         val prefs = ctx.prefs()
         val secureStorageMessage = stringResource(R.string.voice_error_secure_storage_unavailable)
+        // The consent copy has to match the provider that will actually run, not the cloud one.
+        val consentProviderPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
+        val consentProvider = AiProvider.fromPref(consentProviderPref)
         val showPrivacyDialog = rememberSaveable { mutableStateOf(false) }
         if (showPrivacyDialog.value) {
             ConfirmationDialog(
@@ -82,7 +86,7 @@ fun createTextFixSettings(context: Context) = listOf(
                     prefs.edit { putBoolean(setting.key, true) }
                 },
                 title = { Text(stringResource(R.string.text_fix_enable_privacy_title)) },
-                content = { Text(stringResource(R.string.text_fix_enable_privacy_message)) },
+                content = { Text(stringResource(ConsentCopy.textFixEnable(consentProvider))) },
                 confirmButtonText = stringResource(R.string.text_fix_enable_privacy_confirm),
             )
         }

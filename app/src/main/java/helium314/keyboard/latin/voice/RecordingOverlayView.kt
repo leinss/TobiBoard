@@ -16,6 +16,7 @@ import android.view.View
 import android.view.animation.LinearInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import helium314.keyboard.latin.R
@@ -35,6 +36,7 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
     }
 
     private val meterView: AmplitudeMeterView
+    private val spinner: ProgressBar
     private val timerText: TextView
     private val statusText: TextView
     private val cancelButton: ImageView
@@ -70,6 +72,11 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         meterView = AmplitudeMeterView(context).apply {
             layoutParams = LayoutParams(dp(44), dp(20)).apply { marginEnd = dp(12) }
         }
+        spinner = ProgressBar(context).apply {
+            isIndeterminate = true
+            layoutParams = LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(12) }
+            visibility = View.GONE
+        }
         timerText = TextView(context).apply {
             textSize = 12f
             layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
@@ -88,6 +95,7 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         }
 
         addView(meterView)
+        addView(spinner)
         addView(timerText)
         addView(statusText)
         addView(cancelButton)
@@ -117,6 +125,7 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
     }
 
     fun setColors(textColor: Int) {
+        spinner.indeterminateDrawable?.mutate()?.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         statusText.setTextColor(textColor)
         timerNormalColor = (textColor and 0x00FFFFFF) or 0xAA000000.toInt()
         timerText.setTextColor(timerNormalColor)
@@ -134,8 +143,16 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         )
     }
 
+    /**
+     * On-device model load, distinct from [showTranscribing]. The sherpa recognizer takes seconds to
+     * build on a cold start and the decode that follows is fast, so one label covering both made a
+     * first run look identical to a hung one.
+     */
+    fun showPreparing() = showBusy(context.getString(R.string.voice_preparing))
+
     fun showRecording() {
         statusText.text = context.getString(R.string.voice_recording)
+        spinner.visibility = View.GONE
         meterView.visibility = View.VISIBLE
         meterView.startAnimation()
         timerText.visibility = View.VISIBLE
@@ -145,13 +162,16 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         announceForAccessibility(statusText.text)
     }
 
-    fun showTranscribing() {
-        statusText.text = context.getString(R.string.voice_transcribing)
+    fun showTranscribing() = showBusy(context.getString(R.string.voice_transcribing))
+
+    /** Meter and timer off, spinner on. Cancel stays, so the user can still abort. */
+    private fun showBusy(text: CharSequence) {
+        statusText.text = text
         meterView.stopAnimation()
         meterView.visibility = View.GONE
+        spinner.visibility = View.VISIBLE
         timerText.visibility = View.GONE
         stopButton.visibility = View.GONE
-        // Cancel remains visible so the user can abort the upload.
         cancelButton.visibility = View.VISIBLE
         stopTicking()
         announceForAccessibility(statusText.text)

@@ -27,10 +27,15 @@ import helium314.keyboard.latin.R
 import helium314.keyboard.latin.permissions.PermissionsUtil
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
+import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.latin.voice.AiProvider
+import helium314.keyboard.latin.voice.ApiKeyProbe
+import helium314.keyboard.latin.voice.ApiKeyProbeOutcome
+import helium314.keyboard.latin.voice.ConsentCopy
+import helium314.keyboard.latin.voice.ZdrSupport
 import helium314.keyboard.latin.voice.ModelCatalog
 import helium314.keyboard.latin.voice.OpenRouterClient
 import helium314.keyboard.latin.voice.PolishLevel
@@ -180,6 +185,9 @@ fun createVoiceSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_VOICE_INPUT_ENABLED, R.string.voice_input_enabled, R.string.voice_input_enabled_summary) { setting ->
         val ctx = LocalContext.current
         val prefs = ctx.prefs()
+        // The consent copy has to match the provider that will actually run, not the cloud one.
+        val consentProviderPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
+        val consentProvider = AiProvider.fromPref(consentProviderPref)
         val permissionDeniedMessage = stringResource(R.string.voice_error_no_permission)
         val secureStorageMessage = stringResource(R.string.voice_error_secure_storage_unavailable)
         // rememberSaveable so the in-progress enable flow survives a rotation mid-dialog.
@@ -218,7 +226,7 @@ fun createVoiceSettings(context: Context) = listOf(
                     enableAfterPrivacyConfirmation()
                 },
                 title = { Text(stringResource(R.string.voice_enable_privacy_title)) },
-                content = { Text(stringResource(R.string.voice_enable_privacy_message)) },
+                content = { Text(stringResource(ConsentCopy.voiceEnable(consentProvider))) },
                 confirmButtonText = stringResource(R.string.voice_enable_privacy_confirm),
             )
         }
@@ -231,7 +239,7 @@ fun createVoiceSettings(context: Context) = listOf(
                     permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 },
                 title = { Text(stringResource(R.string.voice_mic_rationale_title)) },
-                content = { Text(stringResource(R.string.voice_mic_rationale_message)) },
+                content = { Text(stringResource(ConsentCopy.micRationale(consentProvider))) },
                 confirmButtonText = stringResource(R.string.voice_mic_rationale_confirm),
             )
         }
@@ -804,23 +812,14 @@ private fun VoiceTestKeyPreference(setting: Setting) {
             busy = true
             scope.launch {
                 val result = withContext(Dispatchers.IO) { probeApiKey(provider, apiKey, model, useZdr) }
-                val msgRes = when (result) {
-                    TestResult.OK -> R.string.voice_test_key_success
-                    TestResult.OK_ZDR_UNAVAILABLE -> R.string.voice_test_key_success_zdr_unavailable
-                    TestResult.INVALID -> R.string.voice_test_key_invalid
-                    TestResult.INVALID_MODEL -> R.string.voice_test_key_invalid_model
-                    TestResult.NETWORK -> R.string.voice_test_key_network_error
-                }
-                Toast.makeText(ctx, msgRes, Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, result.messageResId, Toast.LENGTH_SHORT).show()
                 busy = false
             }
         }
     )
 }
 
-private enum class TestResult { OK, OK_ZDR_UNAVAILABLE, INVALID, INVALID_MODEL, NETWORK }
-
-private fun probeApiKey(provider: AiProvider, apiKey: String, model: String, useZdr: Boolean): TestResult {
+private fun probeApiKey(provider: AiProvider, apiKey: String, model: String, useZdr: Boolean): ApiKeyProbeOutcome {
     if (provider == AiProvider.PAYPERQ) return probePayPerQApiKey(apiKey, model)
     val keyConn = (java.net.URL(OpenRouterClient.KEY_ENDPOINT).openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
@@ -830,20 +829,21 @@ private fun probeApiKey(provider: AiProvider, apiKey: String, model: String, use
         readTimeout = 10_000
     }
     return try {
-        when (keyConn.responseCode) {
-            200 -> probeModel(apiKey, model, useZdr)
-            401, 403 -> TestResult.INVALID
-            else -> TestResult.NETWORK
-        }
-    } catch (_: Exception) {
-        TestResult.NETWORK
+        // A 404 on the key endpoint is not a bad model id, so map it like any other odd status.
+        val code = keyConn.responseCode
+        if (code == 200) probeModel(apiKey, model, useZdr)
+        else ApiKeyProbe.forStatus(code)?.takeUnless { it == ApiKeyProbeOutcome.INVALID_MODEL }
+            ?: ApiKeyProbeOutcome.PROVIDER_ERROR
+    } catch (e: Exception) {
+        Log.w(PROBE_TAG, "API key probe failed", e)
+        ApiKeyProbe.forException(e)
     } finally {
         keyConn.disconnect()
     }
 }
 
-private fun probePayPerQApiKey(apiKey: String, model: String): TestResult {
-    if (model.isBlank()) return TestResult.INVALID_MODEL
+private fun probePayPerQApiKey(apiKey: String, model: String): ApiKeyProbeOutcome {
+    if (model.isBlank()) return ApiKeyProbeOutcome.INVALID_MODEL
     val conn = (java.net.URL(OpenRouterClient.PAYPERQ_AUDIO_MODELS_ENDPOINT).openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
         setRequestProperty("Authorization", "Bearer $apiKey")
@@ -851,22 +851,24 @@ private fun probePayPerQApiKey(apiKey: String, model: String): TestResult {
         readTimeout = 10_000
     }
     return try {
-        when (conn.responseCode) {
-            200 -> TestResult.OK
-            401, 403 -> TestResult.INVALID
-            else -> TestResult.NETWORK
-        }
-    } catch (_: Exception) {
-        TestResult.NETWORK
+        // This is the model-listing endpoint, so a 404 here is a routing problem, not a bad model
+        // id; only the per-model endpoint below can tell those apart.
+        val code = conn.responseCode
+        if (code == 200) ApiKeyProbeOutcome.OK
+        else ApiKeyProbe.forStatus(code)?.takeUnless { it == ApiKeyProbeOutcome.INVALID_MODEL }
+            ?: ApiKeyProbeOutcome.PROVIDER_ERROR
+    } catch (e: Exception) {
+        Log.w(PROBE_TAG, "PayPerQ API key probe failed", e)
+        ApiKeyProbe.forException(e)
     } finally {
         conn.disconnect()
     }
 }
 
-private fun probeModel(apiKey: String, model: String, useZdr: Boolean): TestResult {
+private fun probeModel(apiKey: String, model: String, useZdr: Boolean): ApiKeyProbeOutcome {
     val parts = model.trim().split("/", limit = 2)
     if (parts.size != 2 || parts.any { it.isBlank() }) {
-        return TestResult.INVALID_MODEL
+        return ApiKeyProbeOutcome.INVALID_MODEL
     }
     val author = URLEncoder.encode(parts[0], StandardCharsets.UTF_8.name())
     val slug = URLEncoder.encode(parts[1], StandardCharsets.UTF_8.name())
@@ -878,26 +880,27 @@ private fun probeModel(apiKey: String, model: String, useZdr: Boolean): TestResu
         readTimeout = 10_000
     }
     return try {
-        when (conn.responseCode) {
-            200 -> if (useZdr && !probeZdrModelSupport(apiKey, model)) TestResult.OK_ZDR_UNAVAILABLE else TestResult.OK
-            401, 403 -> TestResult.INVALID
-            404 -> TestResult.INVALID_MODEL
-            else -> TestResult.NETWORK
+        val outcome = ApiKeyProbe.forStatus(conn.responseCode)
+        when {
+            outcome != null -> outcome
+            useZdr -> ApiKeyProbe.withZdr(probeZdrModelSupport(apiKey, model))
+            else -> ApiKeyProbeOutcome.OK
         }
-    } catch (_: Exception) {
-        TestResult.NETWORK
+    } catch (e: Exception) {
+        Log.w(PROBE_TAG, "Model probe failed", e)
+        ApiKeyProbe.forException(e)
     } finally {
         conn.disconnect()
     }
 }
 
-private fun probeZdrModelSupport(apiKey: String, model: String): Boolean {
+private fun probeZdrModelSupport(apiKey: String, model: String): ZdrSupport {
     // The catalog is the authoritative source for known slugs — its `zdr` flags are verified
     // against OpenRouter's ZDR endpoint list, and they're what the request path actually keys
     // off when deciding to send `provider.zdr: true`. Hitting `/endpoints/zdr` here used to
     // false-negative for every `~author/...-latest` alias because OpenRouter returns canonical
     // model IDs without the leading tilde, so the exact-string match never landed.
-    if (ModelCatalog.openRouterSupportsZdr(model)) return true
+    if (ModelCatalog.openRouterSupportsZdr(model)) return ZdrSupport.SUPPORTED
     val conn = (java.net.URL(OpenRouterClient.ZDR_ENDPOINT).openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
         setRequestProperty("Authorization", "Bearer $apiKey")
@@ -906,19 +909,22 @@ private fun probeZdrModelSupport(apiKey: String, model: String): Boolean {
         readTimeout = 10_000
     }
     return try {
-        if (conn.responseCode != 200) return true
+        // Fail closed. Every branch below used to answer "supported", so a user with zero data
+        // retention switched on was told the guarantee held whenever the check itself had failed.
+        if (conn.responseCode != 200) return ZdrSupport.UNKNOWN
         val body = readProbeResponseCapped(conn.inputStream)
-        val endpoints = JSONObject(body).optJSONArray("data") ?: return true
+        val endpoints = JSONObject(body).optJSONArray("data") ?: return ZdrSupport.UNKNOWN
         // Belt-and-suspenders for custom slugs: also accept a match against the tilde-stripped
         // form, since the user can paste either shape into the Custom Model ID field.
         val tildeStripped = model.removePrefix("~")
         for (i in 0 until endpoints.length()) {
             val id = endpoints.optJSONObject(i)?.optString("model_id") ?: continue
-            if (id == model || id == tildeStripped) return true
+            if (id == model || id == tildeStripped) return ZdrSupport.SUPPORTED
         }
-        false
-    } catch (_: Exception) {
-        true
+        ZdrSupport.UNSUPPORTED
+    } catch (e: Exception) {
+        Log.w(PROBE_TAG, "ZDR endpoint probe failed", e)
+        ZdrSupport.UNKNOWN
     } finally {
         conn.disconnect()
     }
@@ -941,6 +947,7 @@ private fun readProbeResponseCapped(input: java.io.InputStream): String {
 }
 
 private const val MAX_PROBE_RESPONSE_BYTES = 512 * 1024
+private const val PROBE_TAG = "VoiceKeyProbe"
 
 @Preview
 @Composable

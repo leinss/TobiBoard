@@ -22,7 +22,14 @@ import java.io.IOException
  * Cancellation is per-engine instance; it short-circuits before decode but cannot interrupt
  * sherpa-onnx's native decode call, so a late cancel still pays for the in-flight transcription.
  */
-internal class LocalSherpaEngine(private val context: Context) : SttEngine {
+internal class LocalSherpaEngine(
+    private val context: Context,
+    /**
+     * Fired on the background thread once the recognizer exists and the decode is about to start.
+     * The caller uses it to move out of its "preparing" state; see [LocalLiteRtEngine].
+     */
+    private val onModelReady: (() -> Unit)? = null,
+) : SttEngine {
 
     @Volatile private var cancelled = false
 
@@ -42,6 +49,7 @@ internal class LocalSherpaEngine(private val context: Context) : SttEngine {
         } ?: throw LocalModelLoadException(
             IOException("Parakeet model files not on disk — open Settings → On-device models.")
         )
+        onModelReady?.invoke()
         val wave = WaveReader.readWaveFromFile(audioFile.absolutePath)
         val stream = recognizer.createStream()
         return try {
