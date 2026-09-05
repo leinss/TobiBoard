@@ -30,5 +30,5 @@ enum class SetupGap(
 
     /** Takes the model's display name as a format argument, so the Qwen default is not called Gemma. */
     TEXT_FIX_MODEL_NOT_DOWNLOADED(R.string.text_fix_error_local_not_ready, TextFixManager.SETTINGS_LOCAL_MODELS),
-    TEXT_FIX_NO_MODEL_SELECTED(R.string.voice_error_no_model, TextFixManager.SETTINGS_TEXT_FIX),
+    TEXT_FIX_NO_MODEL_SELECTED(R.string.text_fix_error_no_model, TextFixManager.SETTINGS_TEXT_FIX),
 }

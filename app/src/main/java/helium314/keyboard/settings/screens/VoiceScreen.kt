@@ -851,7 +851,12 @@ private fun probePayPerQApiKey(apiKey: String, model: String): ApiKeyProbeOutcom
         readTimeout = 10_000
     }
     return try {
-        ApiKeyProbe.forStatus(conn.responseCode) ?: ApiKeyProbeOutcome.OK
+        // This is the model-listing endpoint, so a 404 here is a routing problem, not a bad model
+        // id; only the per-model endpoint below can tell those apart.
+        val code = conn.responseCode
+        if (code == 200) ApiKeyProbeOutcome.OK
+        else ApiKeyProbe.forStatus(code)?.takeUnless { it == ApiKeyProbeOutcome.INVALID_MODEL }
+            ?: ApiKeyProbeOutcome.PROVIDER_ERROR
     } catch (e: Exception) {
         Log.w(PROBE_TAG, "PayPerQ API key probe failed", e)
         ApiKeyProbe.forException(e)

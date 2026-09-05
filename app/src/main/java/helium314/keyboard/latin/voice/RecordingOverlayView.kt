@@ -148,17 +148,7 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
      * build on a cold start and the decode that follows is fast, so one label covering both made a
      * first run look identical to a hung one.
      */
-    fun showPreparing() {
-        statusText.text = context.getString(R.string.voice_preparing)
-        meterView.stopAnimation()
-        meterView.visibility = View.GONE
-        spinner.visibility = View.VISIBLE
-        timerText.visibility = View.GONE
-        stopButton.visibility = View.GONE
-        cancelButton.visibility = View.VISIBLE
-        stopTicking()
-        announceForAccessibility(statusText.text)
-    }
+    fun showPreparing() = showBusy(context.getString(R.string.voice_preparing))
 
     fun showRecording() {
         statusText.text = context.getString(R.string.voice_recording)
@@ -172,14 +162,16 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         announceForAccessibility(statusText.text)
     }
 
-    fun showTranscribing() {
-        statusText.text = context.getString(R.string.voice_transcribing)
+    fun showTranscribing() = showBusy(context.getString(R.string.voice_transcribing))
+
+    /** Meter and timer off, spinner on. Cancel stays, so the user can still abort. */
+    private fun showBusy(text: CharSequence) {
+        statusText.text = text
         meterView.stopAnimation()
         meterView.visibility = View.GONE
         spinner.visibility = View.VISIBLE
         timerText.visibility = View.GONE
         stopButton.visibility = View.GONE
-        // Cancel remains visible so the user can abort the upload.
         cancelButton.visibility = View.VISIBLE
         stopTicking()
         announceForAccessibility(statusText.text)

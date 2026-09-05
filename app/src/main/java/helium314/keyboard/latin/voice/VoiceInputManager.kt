@@ -92,6 +92,14 @@ class VoiceInputManager(
             startedIn == null || current == null || startedIn == current
 
         /**
+         * The state a request starts in. Only the on-device provider has a model to load, so only
+         * it gets [State.PREPARING]; a cloud request goes straight to [State.TRANSCRIBING].
+         * Pure, so it is unit-tested.
+         */
+        internal fun initialTranscribingState(provider: AiProvider): State =
+            if (provider == AiProvider.LOCAL) State.PREPARING else State.TRANSCRIBING
+
+        /**
          * Why a finished recording must not be transcribed, or null when it is usable.
          *
          * [truncated] is checked before the length and loudness gates: a capture the microphone
@@ -100,14 +108,6 @@ class VoiceInputManager(
          *
          * Pure, so it is unit-tested without the recording machinery.
          */
-        /**
-         * The state a request starts in. Only the on-device provider has a model to load, so only
-         * it gets [State.PREPARING]; a cloud request goes straight to [State.TRANSCRIBING].
-         * Pure, so it is unit-tested.
-         */
-        internal fun initialTranscribingState(provider: AiProvider): State =
-            if (provider == AiProvider.LOCAL) State.PREPARING else State.TRANSCRIBING
-
         internal fun rejectionFor(
             hasAudioFile: Boolean,
             truncated: Boolean,
@@ -414,15 +414,14 @@ class VoiceInputManager(
             return
         }
 
-        state = State.TRANSCRIBING
-        callbacks.onTranscribing()
         beginTranscription(wavFile!!)
     }
 
     /**
      * Runs transcription over [wavFile]. Split out of [onRecordingFinalized] so
-     * [retryLastTranscription] can re-enter it with a retained clip. Callers must already have set
-     * `state = TRANSCRIBING` and notified [Callbacks.onTranscribing].
+     * [retryLastTranscription] can re-enter it with a retained clip. It sets the state itself:
+     * the on-device provider starts in PREPARING and the cloud ones in TRANSCRIBING, so a caller
+     * that announced TRANSCRIBING first would flash the wrong label for a frame.
      */
     @Synchronized
     private fun beginTranscription(wavFile: File) {
@@ -431,7 +430,7 @@ class VoiceInputManager(
         currentProvider = provider
         // The on-device path builds a recognizer before it decodes anything; the cloud path does not.
         state = initialTranscribingState(provider)
-        if (state == State.PREPARING) callbacks.onPreparing()
+        if (state == State.PREPARING) callbacks.onPreparing() else callbacks.onTranscribing()
         transcriptionEditorSessionId = callbacks.getEditorSessionId()
         val apiKey = if (provider.isCloud) {
             SecretStore.getApiKey(context, provider.apiKeyPrefKey(), provider.defaultApiKey())
@@ -592,6 +591,9 @@ class VoiceInputManager(
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                 // Must precede the CancellationException branch: a timeout is one.
                 Log.w(TAG, "On-device transcription timed out after $LOCAL_TIMEOUT_MS ms")
+                // Sets the engine's cancelled flag so a load that is still blocking does not go on
+                // to start the decode for a request the user has already been told timed out.
+                client.cancel()
                 keepForRetry = true
                 retainForRetry(wavFile, useDedicatedSttForRetry)
                 finishTranscription(
@@ -652,8 +654,6 @@ class VoiceInputManager(
         val consumed = retryAudio.consume() ?: return false
         currentAudioFile = consumed.file
         currentUseDedicatedStt = consumed.useDedicatedStt
-        state = State.TRANSCRIBING
-        callbacks.onTranscribing()
         beginTranscription(consumed.file)
         return true
     }

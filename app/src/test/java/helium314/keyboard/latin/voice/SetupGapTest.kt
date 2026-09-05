@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.latin.voice
 
+import helium314.keyboard.settings.SettingsDestination
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -24,6 +25,20 @@ class SetupGapTest {
         assertEquals(TextFixManager.SETTINGS_LOCAL_MODELS, SetupGap.TEXT_FIX_MODEL_NOT_DOWNLOADED.settingsDestination)
         assertEquals(VoiceInputManager.SETTINGS_VOICE, SetupGap.VOICE_NO_API_KEY.settingsDestination)
         assertEquals(TextFixManager.SETTINGS_TEXT_FIX, SetupGap.TEXT_FIX_DISABLED.settingsDestination)
+    }
+
+    @Test
+    fun everyDestinationIsARouteTheSettingsNavHostKnows() {
+        // The destination travels to SettingsActivity2 as a plain string extra, so a renamed route
+        // in SettingsDestination would compile and then navigate nowhere.
+        val routes = setOf(
+            SettingsDestination.Voice,
+            SettingsDestination.TextFix,
+            SettingsDestination.LocalModels,
+        )
+        for (gap in SetupGap.entries) {
+            assertTrue(gap.settingsDestination in routes, "$gap points at an unknown route")
+        }
     }
 
     @Test

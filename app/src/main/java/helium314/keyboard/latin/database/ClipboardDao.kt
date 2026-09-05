@@ -106,6 +106,11 @@ class ClipboardDao private constructor(
         val started = if (DebugFlags.DEBUG_ENABLED) SystemClock.elapsedRealtime() else 0L
         val list = mutableListOf<ClipboardHistoryEntry>()
         val undecryptableIds = mutableListOf<Long>()
+        // Proof that the AES key is usable in this process. Without it a transient keystore failure
+        // (the service not yet warm after boot, a momentary KeyStoreException) looks exactly like a
+        // lost key, and deleting on that reading would take the whole encrypted history with it.
+        var anyRowDecrypted = false
+        var undecryptableAnnotations = 0
         // A SQLite open / migration / decrypt failure must degrade to an empty (or partial) cache,
         // never propagate: ensureCacheLoaded() may run on a coroutine with no exception handler, so
         // an uncaught throw here would crash the IME process.
@@ -121,18 +126,21 @@ class ClipboardDao private constructor(
             ).use {
                 while (it.moveToNext()) {
                     val isEncrypted = it.getInt(6) != 0
-                    // A row flagged encrypted whose content won't decrypt (key lost / corrupt) cannot
-                    // be shown as ciphertext, and it will never become readable again, so it is
-                    // collected for deletion and counted. Skipping it silently, as this used to,
-                    // made entries vanish from history with no explanation and left the dead rows
-                    // in the database for good.
+                    // A row flagged encrypted whose content won't decrypt cannot be shown as
+                    // ciphertext, so it is dropped from the cache and counted. Skipping it silently,
+                    // as this used to, made entries vanish from history with no explanation.
                     val text = if (isEncrypted)
                         (it.getString(3)?.let { stored -> ClipboardCipher.decrypt(stored) }
+                            ?.also { _ -> anyRowDecrypted = true }
                             ?: run { undecryptableIds.add(it.getLong(0)); continue })
                     else it.getString(3)
                     val storedAnnotation = it.getString(5)
-                    val annotation = if (isEncrypted && storedAnnotation != null)
-                        ClipboardCipher.decrypt(storedAnnotation) else storedAnnotation
+                    val annotation = if (isEncrypted && storedAnnotation != null) {
+                        // The clip itself decrypted, so a null here is this one value, not the key.
+                        ClipboardCipher.decrypt(storedAnnotation)
+                            ?.also { _ -> anyRowDecrypted = true }
+                            ?: run { undecryptableAnnotations += 1; null }
+                    } else storedAnnotation
                     list.add(ClipboardHistoryEntry(
                         id = it.getLong(0),
                         timeStamp = it.getLong(1),
@@ -147,7 +155,9 @@ class ClipboardDao private constructor(
         } catch (t: Throwable) {
             Log.e(TAG, "failed to load clipboard cache; degrading to ${list.size} entries", t)
         }
-        if (undecryptableIds.isNotEmpty()) purgeUndecryptable(undecryptableIds)
+        if (undecryptableAnnotations > 0)
+            Log.w(TAG, "$undecryptableAnnotations clipboard annotations could not be decrypted")
+        if (undecryptableIds.isNotEmpty()) reportUndecryptable(undecryptableIds, keyProven = anyRowDecrypted)
         if (DebugFlags.DEBUG_ENABLED)
             Log.d(TAG, "loaded ${list.size} clips in ${SystemClock.elapsedRealtime() - started} ms on ${Thread.currentThread().name}")
         return list
@@ -284,19 +294,30 @@ class ClipboardDao private constructor(
     }
 
     /**
-     * Deletes the rows whose ciphertext no longer decrypts and tells the user how many went. Their
-     * content is unrecoverable: the AES key they were written under is gone, so keeping them only
-     * grows the database.
+     * Tells the user how many rows could not be decrypted, and deletes them only when the key is
+     * known to work.
+     *
+     * [keyProven] is true when some other encrypted row in the same load decrypted, which is the
+     * only evidence available that the AES key is usable right now. Without it the rows are left
+     * alone: [ClipboardCipher.decrypt] also returns null when the keystore itself fails, and that
+     * failure is often transient, so deleting on it would destroy a readable history for good.
      */
-    private fun purgeUndecryptable(ids: List<Long>) {
+    private fun reportUndecryptable(ids: List<Long>, keyProven: Boolean) {
         undecryptableCount = ids.size
+        if (!keyProven) {
+            Log.w(TAG, "${ids.size} clipboard rows did not decrypt and no row did; keeping them")
+            warnOnce(unreadableWarningShown, appContext.getString(R.string.clipboard_entries_unreadable_kept, ids.size))
+            return
+        }
         Log.w(TAG, "dropping ${ids.size} clipboard rows that no longer decrypt")
-        try {
-            db.writableDatabase.delete(TABLE, "$COLUMN_ID IN (${ids.joinToString(",")})", null)
+        val deleted = try {
+            db.writableDatabase.delete(TABLE, "$COLUMN_ID IN (${ids.joinToString(",")})", null) > 0
         } catch (t: Throwable) {
             Log.e(TAG, "failed to delete undecryptable clipboard rows", t)
+            false
         }
-        warnOnce(unreadableWarningShown, appContext.getString(R.string.clipboard_entries_unreadable, ids.size))
+        val message = if (deleted) R.string.clipboard_entries_unreadable else R.string.clipboard_entries_unreadable_kept
+        warnOnce(unreadableWarningShown, appContext.getString(message, ids.size))
     }
 
     private fun isRowEncrypted(id: Long): Boolean =

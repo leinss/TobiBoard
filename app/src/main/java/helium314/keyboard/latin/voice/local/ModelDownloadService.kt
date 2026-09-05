@@ -75,6 +75,8 @@ internal class ModelDownloadService : Service() {
             return
         }
         if (jobs.containsKey(modelId)) return // already downloading: that job keeps us foreground
+        // A new attempt supersedes whatever the last one failed with.
+        ModelDownloadRepository.clearFailure(applicationContext, modelId)
         if (ModelStorage.isReady(this, model)) {
             ModelDownloadRepository.update(modelId, DownloadState.Ready)
             stopForegroundIfIdle()
@@ -130,7 +132,7 @@ internal class ModelDownloadService : Service() {
      * until they come back and wonder why nothing downloaded.
      */
     private fun failDownload(modelId: String, displayName: String, reason: String) {
-        ModelDownloadRepository.update(modelId, DownloadState.Failed(reason))
+        ModelDownloadRepository.recordFailure(applicationContext, modelId, reason)
         postFailureNotification(modelId, displayName, reason)
     }
 

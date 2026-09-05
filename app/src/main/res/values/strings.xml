@@ -228,6 +228,8 @@
     <string name="clipboard_encryption_unavailable">This device cannot encrypt clipboard history, so it is stored unencrypted</string>
     <!-- Shown once when stored clips can no longer be decrypted and had to be removed -->
     <string name="clipboard_entries_unreadable"><xliff:g id="count">%1$d</xliff:g> clipboard entries could no longer be decrypted and were removed</string>
+    <!-- Same, but the rows were kept: the key could not be shown to work, so the failure may be temporary -->
+    <string name="clipboard_entries_unreadable_kept"><xliff:g id="count">%1$d</xliff:g> clipboard entries could not be decrypted and are hidden</string>
     <string name="clipboard_annotation_hint">Label (optional)</string>
     <string name="clipboard_annotation_dialog_title">Add label</string>
     <string name="clipboard_search_hint">Search clipboard history…</string>
@@ -1399,6 +1401,8 @@ New dictionary:
     <string name="text_fix_error_selection_changed">Text changed while fixing; try again</string>
     <string name="text_fix_error_too_long">Text is too long</string>
     <string name="text_fix_error_not_enabled">Enable Text Fix in settings</string>
+    <!-- No cloud model is selected for text fix. Distinct from voice_error_no_model, which names the voice one. -->
+    <string name="text_fix_error_no_model">Choose a text-fix model in settings</string>
     <string name="text_fix_error_sensitive_field">Text Fix is unavailable in sensitive fields</string>
     <string name="text_fix_error_unsupported_field">Text Fix is unavailable in this field</string>
     <string name="text_fix_error_empty">The model returned no text</string>
