@@ -75,6 +75,8 @@ public final class KeyboardId {
     public final int mElementId;
     public final EditorInfo mEditorInfo;
     public final boolean mDeviceLocked;
+    /** See {@link helium314.keyboard.latin.settings.SettingsValues#mSensitiveField}. */
+    public final boolean mSensitiveField;
     public final boolean mNumberRowEnabled;
     public final boolean mNumberRowInSymbols;
     public final boolean mLanguageSwitchKeyEnabled;
@@ -103,6 +105,7 @@ public final class KeyboardId {
         mCustomActionLabel = (mEditorInfo.actionLabel != null)
                 ? mEditorInfo.actionLabel.toString() : null;
         mHasShortcutKey = params.mVoiceInputKeyEnabled;
+        mSensitiveField = params.mSensitiveField;
         mIsSplitLayout = params.mIsSplitLayoutEnabled;
         mOneHandedModeEnabled = params.mOneHandedModeEnabled;
         mInternalAction = params.mInternalAction;
@@ -120,6 +123,7 @@ public final class KeyboardId {
                 id.passwordInput(),
                 id.mDeviceLocked,
                 id.mHasShortcutKey,
+                id.mSensitiveField,
                 id.mNumberRowEnabled,
                 id.mLanguageSwitchKeyEnabled,
                 id.mEmojiKeyEnabled,
@@ -144,6 +148,7 @@ public final class KeyboardId {
                 && other.passwordInput() == passwordInput()
                 && other.mDeviceLocked == mDeviceLocked
                 && other.mHasShortcutKey == mHasShortcutKey
+                && other.mSensitiveField == mSensitiveField
                 && other.mNumberRowEnabled == mNumberRowEnabled
                 && other.mLanguageSwitchKeyEnabled == mLanguageSwitchKeyEnabled
                 && other.mEmojiKeyEnabled == mEmojiKeyEnabled

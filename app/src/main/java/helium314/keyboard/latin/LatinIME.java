@@ -721,6 +721,12 @@ public class LatinIME extends InputMethodService implements
             }
 
             @Override
+            public void onTranscriptionDiscarded(@NonNull final String text) {
+                // The insert is refused, so the clipboard is the only place the dictation survives.
+                copyTranscriptionToClipboardIfEnabled(text);
+            }
+
+            @Override
             public void onError(@NonNull final String message, final boolean canRetry) {
                 if (isVoiceHapticEnabled())
                     AudioAndHapticFeedbackManager.getInstance().vibrateVoiceError();
@@ -741,6 +747,17 @@ public class LatinIME extends InputMethodService implements
             @Override
             public void onWaitingForNetwork() {
                 Toast.makeText(LatinIME.this, R.string.voice_waiting_for_network, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public boolean isSensitiveField() {
+                return LatinIME.this.isSensitiveField();
+            }
+
+            @Nullable
+            @Override
+            public String getEditorSessionId() {
+                return LatinIME.this.getEditorSessionId();
             }
 
             @Nullable
@@ -795,8 +812,7 @@ public class LatinIME extends InputMethodService implements
                     Log.d(TAG, "getBlockedErrorResId: settingsValues=null → unsupported_field");
                     return R.string.text_fix_error_unsupported_field;
                 }
-                final EditorInfo ei = getCurrentInputEditorInfo();
-                final int imeOptions = ei != null ? ei.imeOptions : 0;
+                final int imeOptions = settingsValues.mInputAttributes.getImeOptions();
                 Log.d(TAG, String.format("getBlockedErrorResId: inputType=0x%08X isPassword=%b noLearning=%b incognito=%b imeOptions=0x%08X",
                         settingsValues.mInputAttributes.mInputType,
                         settingsValues.mInputAttributes.mIsPasswordField,
@@ -2477,6 +2493,32 @@ public class LatinIME extends InputMethodService implements
     public boolean isVoiceRecording() {
         return mVoiceInputManager != null
             && mVoiceInputManager.getState() == VoiceInputManager.State.RECORDING;
+    }
+
+    /**
+     * True when the focused field is a password / no-learning / incognito field. Text fix and voice
+     * input both refuse there, through the same predicate, so the two cannot drift apart.
+     * Returns true when the settings snapshot is missing: unknown means refuse.
+     */
+    public boolean isSensitiveField() {
+        final SettingsValues settingsValues = mSettings.getCurrent();
+        return settingsValues == null || settingsValues.mSensitiveField;
+    }
+
+    /**
+     * Identifies the editor the user is typing in, for
+     * {@link VoiceInputManager#transcriptionMayCommit}.
+     * The package name plus the view id plus the input type is what the framework gives us; the view
+     * id is View.NO_ID for web fields, so two web fields in one page in one app read as the same
+     * editor. That is a deliberate fail-open. The cases this is here to stop are a dictation landing
+     * in a different app or in a password box, and each of those changes at least one of the three
+     * parts; two ordinary fields that share all three are not distinguished.
+     */
+    @Nullable
+    public String getEditorSessionId() {
+        final EditorInfo ei = getCurrentInputEditorInfo();
+        if (ei == null) return null;
+        return ei.packageName + "/" + ei.fieldId + "/" + ei.inputType;
     }
 
     private void cancelVoiceRecordingIfCapturing() {

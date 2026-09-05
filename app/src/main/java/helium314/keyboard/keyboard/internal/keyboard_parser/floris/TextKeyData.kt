@@ -206,7 +206,7 @@ sealed interface KeyData : AbstractKeyData {
             }
             if (params.mId.mElementId == KeyboardId.ELEMENT_CLIPBOARD_BOTTOM_ROW)
                 popupKeys.remove("!icon/clipboard_action_key|!code/key_clipboard")
-            applyActionPopupOrder(popupKeys)
+            applyActionPopupOrder(popupKeys, params)
             return SimplePopups(popupKeys)
         }
 
@@ -222,7 +222,7 @@ sealed interface KeyData : AbstractKeyData {
             "text_fix_2_key" to "!icon/text_fix_2_key|!code/key_text_fix_2",
         )
 
-        private fun applyActionPopupOrder(popupKeys: MutableList<String>) {
+        private fun applyActionPopupOrder(popupKeys: MutableList<String>, params: KeyboardParams) {
             val nameToEntry = ORDERABLE_ACTION_POPUPS.toMap()
             val entries = nameToEntry.values.toSet()
             // Snapshot the orderable subset that survived the prior filtering passes.
@@ -239,7 +239,13 @@ sealed interface KeyData : AbstractKeyData {
                 Settings.PREF_VOICE_STT_ENABLED,
                 Defaults.PREF_VOICE_STT_ENABLED
             )
-            if (!traditionalEnabled) {
+            // Voice opens the microphone and sends the audio to a model, so it must not be offered
+            // in a password / no-learning / incognito field. Text fix has always refused there; the
+            // popup used to offer the mic anyway and it recorded. The flag comes from KeyboardId, so
+            // it is part of the keyboard cache key and a keyboard built for an ordinary field is
+            // never served back for a sensitive one.
+            val sensitiveField = params.mId.mSensitiveField
+            if (!traditionalEnabled || sensitiveField) {
                 present.remove("!icon/shortcut_key|!code/key_voice_input")
             }
             // Pull in the optional second text-fix entry only when its pref is on AND the
@@ -249,7 +255,7 @@ sealed interface KeyData : AbstractKeyData {
                 val tf2 = "!icon/text_fix_2_key|!code/key_text_fix_2"
                 if (tf2 !in present) present.add(tf2)
             }
-            if (sttEnabled) {
+            if (sttEnabled && !sensitiveField) {
                 val stt = "!icon/stt_action_key|!code/key_voice_stt_input"
                 if (stt !in present) present.add(stt)
             }

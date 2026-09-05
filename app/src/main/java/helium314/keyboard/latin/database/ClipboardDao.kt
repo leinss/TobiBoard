@@ -4,11 +4,17 @@ package helium314.keyboard.latin.database
 import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.widget.Toast
+import androidx.annotation.StringRes
 import helium314.keyboard.latin.ClipboardHistoryEntry
+import helium314.keyboard.latin.R
 import helium314.keyboard.latin.define.DebugFlags
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.Log
+import java.util.concurrent.atomic.AtomicBoolean
 
 /*
  possible extension for later: allow non-text
@@ -24,7 +30,10 @@ import helium314.keyboard.latin.utils.Log
 
 /** Class providing cached access to the clipboard table */
 // currently we should not need to worry about synchronizing access (though maybe we could addClip in a coroutine, then it might be relevant)
-class ClipboardDao private constructor(private val db: Database) {
+class ClipboardDao private constructor(
+    private val db: Database,
+    private val appContext: Context,
+) {
     interface Listener {
         fun onClipInserted(position: Int)
         fun onClipsRemoved(position: Int, count: Int)
@@ -39,6 +48,16 @@ class ClipboardDao private constructor(private val db: Database) {
     // Whether new clips are written encrypted. Fixed for the DAO's lifetime; reads honor each row's
     // own ENCRYPTED flag so plaintext (legacy / API < 23) and encrypted rows can coexist.
     private val encrypting = ClipboardCipher.isAvailable()
+
+    init {
+        // A device that cannot produce a key at all stores clips in the clear. Below API 23 that is
+        // expected; above it the keystore is broken. Either way the user is told once, because the
+        // app claims the clipboard is encrypted and silence here is the part that misleads.
+        if (!encrypting) {
+            Log.w(TAG, "clipboard encryption unavailable; clips are stored in plaintext")
+            warnOnce(R.string.clipboard_encryption_unavailable)
+        }
+    }
 
     // The cache is loaded lazily on first access to the [cache] accessor and never dropped.
     // The load (SQLite open + per-row AES-GCM decrypt) is the expensive part; call
@@ -123,14 +142,23 @@ class ClipboardDao private constructor(private val db: Database) {
     }
 
     private fun insertNewEntry(timestamp: Long, pinned: Boolean, text: String) {
+        // Fail closed: a device that can encrypt but fails to must not leave the clip readable on
+        // disk under an ENCRYPTED = 0 flag. Drop it and say so once.
+        val stored = ClipboardCipher.storedValue(
+            encryptionExpected = encrypting,
+            plaintext = text,
+            ciphertext = if (encrypting) ClipboardCipher.encrypt(text) else null,
+        )
+        if (stored == null) {
+            Log.e(TAG, "clip not stored: encryption failed")
+            warnOnce(R.string.clipboard_encryption_failed)
+            return
+        }
         val cv = ContentValues(6)
         cv.put(COLUMN_TIMESTAMP, timestamp)
         cv.put(COLUMN_PINNED, pinned)
-        // Encrypt the clip content at rest when possible; fall back to plaintext (flag 0) so a
-        // transient keystore failure never drops the clip.
-        val encrypted = if (encrypting) ClipboardCipher.encrypt(text) else null
-        cv.put(COLUMN_TEXT, encrypted ?: text)
-        cv.put(COLUMN_ENCRYPTED, if (encrypted != null) 1 else 0)
+        cv.put(COLUMN_TEXT, stored.value)
+        cv.put(COLUMN_ENCRYPTED, if (stored.encrypted) 1 else 0)
         cv.put(COLUMN_USE_COUNT, 0)
         cv.putNull(COLUMN_ANNOTATION)
         val rowId = db.writableDatabase.insert(TABLE, null, cv)
@@ -189,17 +217,42 @@ class ClipboardDao private constructor(private val db: Database) {
 
     fun setAnnotation(id: Long, annotation: String?) {
         val entry = cache.firstOrNull { it.id == id } ?: return
+        val previousAnnotation = entry.annotation
         entry.annotation = annotation
         val cv = ContentValues(1)
         if (annotation == null) {
             cv.putNull(COLUMN_ANNOTATION)
         } else {
             // Match the row's at-rest format: an encrypted row keeps its annotation encrypted too,
-            // so the cache-load decrypt path reads it back correctly.
-            val stored = if (isRowEncrypted(id)) ClipboardCipher.encrypt(annotation) else null
-            cv.put(COLUMN_ANNOTATION, stored ?: annotation)
+            // so the cache-load decrypt path reads it back correctly. Same fail-closed rule as the
+            // clip itself — never write readable text into a row flagged encrypted.
+            val rowEncrypted = isRowEncrypted(id)
+            val stored = ClipboardCipher.storedValue(
+                encryptionExpected = rowEncrypted,
+                plaintext = annotation,
+                ciphertext = if (rowEncrypted) ClipboardCipher.encrypt(annotation) else null,
+            )
+            if (stored == null) {
+                Log.e(TAG, "annotation not stored: encryption failed")
+                entry.annotation = previousAnnotation
+                warnOnce(R.string.clipboard_encryption_failed)
+                return
+            }
+            cv.put(COLUMN_ANNOTATION, stored.value)
         }
         db.writableDatabase.update(TABLE, cv, "$COLUMN_ID = $id", null)
+    }
+
+    /**
+     * Shows [messageResId] once per process. Once: the clipboard listener fires on every copy, and a
+     * toast per copy would be its own bug. `compareAndSet` because [addClip] is not synchronised, so
+     * two copies landing together would otherwise both get through the check.
+     */
+    private fun warnOnce(@StringRes messageResId: Int) {
+        if (!encryptionWarningShown.compareAndSet(false, true)) return
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(appContext, messageResId, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun isRowEncrypted(id: Long): Boolean =
@@ -267,6 +320,8 @@ class ClipboardDao private constructor(private val db: Database) {
     companion object {
         private const val TAG = "ClipboardDao"
 
+        private val encryptionWarningShown = AtomicBoolean(false)
+
         private const val TABLE = "CLIPBOARD"
         // it's possible timestamp is not unique, so we use a separate ID
         // ID is generated and returned on insert, see https://sqlite.org/rowidtable.html
@@ -322,7 +377,7 @@ class ClipboardDao private constructor(private val db: Database) {
         fun getInstance(context: Context): ClipboardDao? {
             if (instance == null)
                 try {
-                    instance = ClipboardDao(Database.getInstance(context))
+                    instance = ClipboardDao(Database.getInstance(context), context.applicationContext)
                 } catch (e: Throwable) {
                     Log.e(TAG, "can't create ClipboardDao", e)
                 }

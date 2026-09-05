@@ -59,4 +59,43 @@ class VoiceInputManagerTest {
             VoiceInputManager.letLocalTranscriptionFinish(VoiceInputManager.State.TRANSCRIBING, null)
         )
     }
+
+    // --- transcriptionMayCommit: an on-device decode outlives the input view (above), so the
+    // result must be checked against the editor it was started in before it is typed anywhere.
+
+    @Test
+    fun resultCommitsWhenTheUserIsStillInTheSameField() {
+        assertTrue(VoiceInputManager.transcriptionMayCommit("com.example/17/1", "com.example/17/1"))
+    }
+
+    @Test
+    fun resultIsDroppedWhenTheUserMovedToAnotherField() {
+        assertFalse(VoiceInputManager.transcriptionMayCommit("com.example/17/1", "com.example/42/1"))
+    }
+
+    @Test
+    fun resultIsDroppedWhenTheUserMovedToAnotherApp() {
+        assertFalse(VoiceInputManager.transcriptionMayCommit("com.example/17/1", "com.other/17/1"))
+    }
+
+    @Test
+    fun resultIsDroppedWhenTheFieldTypeChanged() {
+        // Same view id reused for a password box: the input type is what separates them.
+        assertFalse(VoiceInputManager.transcriptionMayCommit("com.example/17/1", "com.example/17/129"))
+    }
+
+    @Test
+    fun resultCommitsWhenNoEditorIsFocused() {
+        // The ordinary end of an input session, which letLocalTranscriptionFinish exists to let a
+        // decode outlive. Only a DIFFERENT editor blocks the commit; with no editor at all the
+        // commit is a no-op anyway, and dropping here would undo that feature.
+        assertTrue(VoiceInputManager.transcriptionMayCommit("com.example/17/1", null))
+    }
+
+    @Test
+    fun resultCommitsWhenTheStartingEditorWasUnknown() {
+        // Nothing to compare against, so do not throw away a legitimate transcription.
+        assertTrue(VoiceInputManager.transcriptionMayCommit(null, "com.example/17/1"))
+        assertTrue(VoiceInputManager.transcriptionMayCommit(null, null))
+    }
 }

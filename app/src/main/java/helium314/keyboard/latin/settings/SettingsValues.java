@@ -34,6 +34,7 @@ import helium314.keyboard.latin.utils.ScriptUtils;
 import helium314.keyboard.latin.utils.SubtypeSettings;
 import helium314.keyboard.latin.utils.SubtypeUtilsKt;
 import helium314.keyboard.latin.utils.ToolbarMode;
+import helium314.keyboard.latin.voice.SensitiveField;
 
 import java.util.List;
 import java.util.Locale;
@@ -61,6 +62,12 @@ public class SettingsValues {
     public final boolean mShowEmojiDescriptions;
     public final boolean mKeyPreviewPopupOn;
     public final boolean mShowsVoiceInputKey;
+    /**
+     * True when the focused field is a password / no-learning / incognito field, decided once per
+     * input session by {@link helium314.keyboard.latin.voice.SensitiveField}. Text fix, voice input
+     * and the long-press-Return action popup all read this one value, so they cannot disagree.
+     */
+    public final boolean mSensitiveField;
     public final boolean mLanguageSwitchKeyToOtherImes;
     public final boolean mLanguageSwitchKeyToOtherSubtypes;
     private final boolean mShowsLanguageSwitchKey;
@@ -279,6 +286,12 @@ public class SettingsValues {
         mSecondaryStripVisible = mToolbarMode != ToolbarMode.HIDDEN || ! mToolbarHidingGlobal;
         mIncognitoModeEnabled = prefs.getBoolean(Settings.PREF_ALWAYS_INCOGNITO_MODE, Defaults.PREF_ALWAYS_INCOGNITO_MODE) || mInputAttributes.mNoLearning
                 || mInputAttributes.mIsPasswordField;
+        mSensitiveField = SensitiveField.isSensitive(
+                mInputAttributes.mInputType,
+                mInputAttributes.mIsPasswordField,
+                mInputAttributes.mNoLearning,
+                mIncognitoModeEnabled,
+                mInputAttributes.getImeOptions());
         mKeyboardHeightScale = Settings.readHeightScale(prefs, isLandscape);
         mBottomRowScale = Settings.readBottomRowScale(prefs, isLandscape);
         mSpaceSwipeHorizontal = Settings.readHorizontalSpaceSwipe(prefs);

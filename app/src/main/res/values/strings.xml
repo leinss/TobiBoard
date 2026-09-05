@@ -222,6 +222,10 @@
     <string name="clipboard_history_disabled_hint">Clipboard history is off.\nTap to turn it on.</string>
     <!-- Shown in the empty clipboard view when history is on but nothing has been saved yet -->
     <string name="clipboard_history_empty_hint">Copy text while the keyboard is open to save it here.</string>
+    <!-- Shown once when a copied item could not be encrypted and was therefore not saved -->
+    <string name="clipboard_encryption_failed">Clipboard history could not encrypt this item, so it was not saved</string>
+    <!-- Shown once when the device keystore cannot provide a key, so clips are stored unencrypted -->
+    <string name="clipboard_encryption_unavailable">This device cannot encrypt clipboard history, so it is stored unencrypted</string>
     <string name="clipboard_annotation_hint">Label (optional)</string>
     <string name="clipboard_annotation_dialog_title">Add label</string>
     <string name="clipboard_search_hint">Search clipboard history…</string>
@@ -1194,6 +1198,10 @@ New dictionary:
     <string name="voice_error_no_network">No internet connection</string>
     <string name="voice_error_stt_openrouter_only">Dedicated STT is only available with OpenRouter</string>
     <string name="voice_error_transcription_failed">Transcription failed</string>
+    <!-- Shown when voice input is used in a password, incognito or no-learning field -->
+    <string name="voice_error_sensitive_field">Voice input is unavailable in sensitive fields</string>
+    <!-- Shown when a transcription finishes after the user has moved to a different text field -->
+    <string name="voice_error_field_changed">Transcription discarded — you left the text field</string>
     <string name="voice_error_rate_limited">AI provider rate limit reached — try again in a moment</string>
     <string name="voice_max_duration_reached">Maximum recording length reached — transcribing&#8230;</string>
     <!-- Recording timer: elapsed time followed by the recording limit, e.g. "0:30 / 1:30" -->

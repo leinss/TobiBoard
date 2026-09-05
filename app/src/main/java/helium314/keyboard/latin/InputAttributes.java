@@ -137,6 +137,11 @@ public final class InputAttributes {
             mNoLearning = false;
     }
 
+    /** The raw {@code EditorInfo.imeOptions}, or 0 when there is no editor. */
+    public int getImeOptions() {
+        return null != mEditorInfo ? mEditorInfo.imeOptions : 0;
+    }
+
     public boolean isTypeNull() {
         return InputType.TYPE_NULL == mInputType;
     }
