@@ -11,6 +11,7 @@ import helium314.keyboard.latin.utils.LayoutUtilsCustom
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.utils.prefs
+import helium314.keyboard.latin.voice.AiProvider
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.local.LocalSherpaEngine
 import helium314.keyboard.latin.voice.local.ModelDownloadRepository
@@ -42,8 +43,10 @@ class App : Application() {
             ModelDownloadRepository.rehydrate(this@App)
             // Cold-init of the sherpa-onnx recognizer is ~2.7 s; doing it on first user
             // utterance is felt as a hang. Building it here is a no-op if Parakeet is not
-            // on disk.
-            LocalSherpaEngine.warmUp(this@App)
+            // on disk, but only the on-device provider ever asks for it: on a cloud provider
+            // this used to load ~660 MB at every app start that nothing would ever read.
+            val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
+            if (provider == AiProvider.LOCAL) LocalSherpaEngine.warmUp(this@App)
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
             @Suppress("DEPRECATION")
             Log.i(

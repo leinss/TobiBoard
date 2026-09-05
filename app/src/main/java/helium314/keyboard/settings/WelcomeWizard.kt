@@ -100,9 +100,16 @@ fun WelcomeWizard(
     val languageStep = WizardStepResolver.LANGUAGE
     val voiceStep = WizardStepResolver.VOICE
     val doneStep = WizardStepResolver.DONE
-    val totalSetupSteps = WizardStepResolver.DONE
     val ctx = LocalContext.current
     val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+    // Which branch of the AI sub-flow the user is on decides how many steps there are, so the
+    // step indicator needs it. Kept here rather than inside AiProviderSetupStep because the
+    // indicator is drawn for the gating steps too.
+    var providerIsCloud by rememberSaveable {
+        mutableStateOf(
+            AiProvider.fromPref(ctx.prefs().getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)).isCloud
+        )
+    }
     var aiSetupSkipped by rememberSaveable { mutableStateOf(false) }
     fun isAiProviderReady(): Boolean {
         val prefs = ctx.prefs()
@@ -206,15 +213,19 @@ fun WelcomeWizard(
                 )
         }
     }
+    // One affordance for the position, the numbered row. The progress bar that used to sit under
+    // it said the same thing a second time and drew a stop indicator at the end of the track,
+    // which read as an extra, unreachable step.
     @Composable
     fun ProgressHeader(currentStep: Int) {
+        val visibleSteps = wizardVisibleSteps(providerIsCloud)
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            (1..totalSetupSteps).forEach {
-                val isSelected = currentStep == it
+            visibleSteps.forEachIndexed { index, stepId ->
+                val isSelected = currentStep == stepId
                 Surface(
                     shape = CircleShape,
                     color = if (isSelected) primaryActionColor else actionContainerColor.copy(alpha = 0.5f),
@@ -223,7 +234,7 @@ fun WelcomeWizard(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            it.toString(),
+                            (index + 1).toString(),
                             style = MaterialTheme.typography.labelMedium,
                             color = if (isSelected) primaryActionContentColor else textColorDim
                         )
@@ -231,13 +242,6 @@ fun WelcomeWizard(
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        LinearProgressIndicator(
-            progress = { currentStep / totalSetupSteps.toFloat() },
-            modifier = Modifier.fillMaxWidth(),
-            color = primaryActionColor,
-            trackColor = actionContainerColor.copy(alpha = 0.35f)
-        )
         Spacer(Modifier.height(20.dp))
     }
     @Composable
@@ -384,6 +388,7 @@ fun WelcomeWizard(
                         progressHeader = { ProgressHeader(it) },
                         primaryAction = { actionText, icon, action -> PrimaryAction(actionText, icon, action) },
                         secondaryAction = { actionText, icon, action -> SecondaryAction(actionText, icon, action) },
+                        onProviderChanged = { providerIsCloud = it },
                         onProviderConfigured = {
                             val picked = AiProvider.fromPref(
                                 ctx.prefs().getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
@@ -476,6 +481,24 @@ fun WelcomeWizard(
     }
 }
 
+/**
+ * The steps the wizard actually shows, in order, for one provider choice.
+ *
+ * The AI sub-flow branches: a cloud provider gets the API-key step and never the model download,
+ * an on-device provider gets the download and never the key step. A fixed 1..8 row therefore
+ * numbers a step the user never reaches, and the count jumps (6 to 8) when the skipped step sits
+ * in the middle. The indicator numbers this list 1..N instead.
+ */
+internal fun wizardVisibleSteps(providerIsCloud: Boolean): List<Int> = listOf(
+    WizardStepResolver.ENABLE,
+    WizardStepResolver.SWITCH,
+    WizardStepResolver.PROVIDER,
+    if (providerIsCloud) WizardStepResolver.API_KEY else WizardStepResolver.MODEL,
+    WizardStepResolver.LANGUAGE,
+    WizardStepResolver.VOICE,
+    WizardStepResolver.DONE,
+)
+
 @Composable
 private fun AiProviderSetupStep(
     step: Int,
@@ -489,6 +512,7 @@ private fun AiProviderSetupStep(
     progressHeader: @Composable (Int) -> Unit,
     primaryAction: @Composable (String, Painter, () -> Unit) -> Unit,
     secondaryAction: @Composable (String, Painter?, () -> Unit) -> Unit,
+    onProviderChanged: (Boolean) -> Unit,
     onProviderConfigured: () -> Unit,
     onModelConfigured: () -> Unit,
     onApiKeyConfigured: () -> Unit,
@@ -551,6 +575,9 @@ private fun AiProviderSetupStep(
             }
         }
         refreshApiKeyState(provider)
+        // The step indicator counts a different number of steps for cloud (API key) and
+        // on-device (model download).
+        onProviderChanged(provider.isCloud)
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -681,20 +708,18 @@ private fun AiProviderSetupStep(
                         stringResource(R.string.setup_ai_provider_compare_cloud),
                         style = MaterialTheme.typography.bodyMedium.merge(color = textColor)
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        stringResource(R.string.setup_ai_provider_current_provider, providerName(selectedProvider)),
-                        style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim)
-                    )
                     Spacer(Modifier.height(24.dp))
-                    primaryAction(
+                    // The provider button already names the current provider, so no separate
+                    // "current provider" line above it. It stays a secondary control: it opens a
+                    // picker rather than advancing, and the filled button is the forward action.
+                    secondaryAction(
                         stringResource(R.string.setup_ai_provider_select, providerName(selectedProvider)),
                         painterResource(R.drawable.ic_settings_preferences)
                     ) {
                         showProviderDialog = true
                     }
                     Spacer(Modifier.height(10.dp))
-                    secondaryAction(
+                    primaryAction(
                         stringResource(R.string.setup_continue_action),
                         painterResource(R.drawable.ic_setup_check),
                         onProviderConfigured
@@ -752,7 +777,7 @@ private fun AiProviderSetupStep(
                             Text(stringResource(R.string.setup_model_download_failed, downloadState.reason),
                                 style = MaterialTheme.typography.bodyMedium.merge(color = MaterialTheme.colorScheme.error))
                         else ->
-                            Text(stringResource(R.string.setup_model_download_size, model.totalBytes / 1_048_576L),
+                            Text(stringResource(R.string.setup_model_download_size, model.sizeLabel.orEmpty()),
                                 style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim))
                     }
                     Spacer(Modifier.height(24.dp))

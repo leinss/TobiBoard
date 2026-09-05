@@ -22,6 +22,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -29,14 +31,19 @@ import java.util.concurrent.ConcurrentHashMap
  * process being dismissed. The UI starts downloads via [start] and cancels via
  * [cancel]; progress is observed through [ModelDownloadRepository.states].
  *
- * Downloads run serially — a second [start] request while one is in flight is queued.
+ * Downloads run serially: a second [start] request while one is in flight waits on
+ * [downloadMutex] and shows as [DownloadState.Queued] until the running one finishes.
  * Concurrency would add bandwidth contention without user benefit (only one model is
- * actively useful at a time anyway).
+ * actively useful at a time anyway). Cancelling a queued download works the same as
+ * cancelling a running one: its job is cancelled while suspended on the mutex.
  */
 internal class ModelDownloadService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
+    // One download at a time. The class comment promised this from the start, but every start()
+    // launched straight into the shared scope, so two models fought over bandwidth and disk.
+    private val downloadMutex = Mutex()
     private val downloader = ModelDownloader()
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -100,10 +107,15 @@ internal class ModelDownloadService : Service() {
 
         val job = scope.launch {
             try {
-                val targetDir = ModelStorage.dirFor(applicationContext, model)
-                downloader.download(targetDir, model, authToken) { state ->
-                    ModelDownloadRepository.update(modelId, state)
-                    updateNotification(modelId, model.displayName, state)
+                // Reported before the wait so a second model does not sit on the previous state
+                // (usually NotDownloaded) for as long as the running download takes.
+                ModelDownloadRepository.update(modelId, DownloadState.Queued)
+                downloadMutex.withLock {
+                    val targetDir = ModelStorage.dirFor(applicationContext, model)
+                    downloader.download(targetDir, model, authToken) { state ->
+                        ModelDownloadRepository.update(modelId, state)
+                        updateNotification(modelId, model.displayName, state)
+                    }
                 }
             } catch (e: CancellationException) {
                 // User cancel / service teardown: the Cancelled state is already set by

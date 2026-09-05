@@ -54,4 +54,24 @@ class ModelStorageTest {
         val gone = File.createTempFile("modeltest", ".bin").apply { delete() }
         assertFalse(ModelStorage.isFileIntact(gone, helloSha, 5L))
     }
+
+    @Test
+    fun anUnmeasurableVolumeIsNotTreatedAsAFullOne() {
+        // availableBytes returns UNKNOWN_BYTES when StatFs fails. Warning the user off a download
+        // on the strength of a reading we do not have is the bug this replaced.
+        assertFalse(ModelStorage.isLowSpace(ModelStorage.UNKNOWN_BYTES, 600_000_000L))
+        assertFalse(ModelStorage.isLowSpace(0L, 600_000_000L))
+    }
+
+    @Test
+    fun lowSpaceIsLessThanTwentyPercentHeadroomOverTheDownload() {
+        assertTrue(ModelStorage.isLowSpace(600_000_000L, 600_000_000L))
+        assertTrue(ModelStorage.isLowSpace(719_000_000L, 600_000_000L))
+        assertFalse(ModelStorage.isLowSpace(720_000_000L, 600_000_000L))
+    }
+
+    @Test
+    fun anUnknownDownloadSizeNeverCountsAsLowSpace() {
+        assertFalse(ModelStorage.isLowSpace(1_000L, 0L))
+    }
 }

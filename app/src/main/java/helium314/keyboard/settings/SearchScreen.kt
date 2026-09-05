@@ -107,6 +107,17 @@ fun <T: Any?> SearchScreen(
     itemContent: @Composable (T) -> Unit,
     icon: @Composable (() -> Unit)? = null,
     menu: List<Pair<String, () -> Unit>>? = null,
+    // Placeholder for the search field. Screens that search something other than the settings list
+    // say so here, otherwise the field is an unlabelled box.
+    searchHint: String? = null,
+    // Anything the filter reads besides the query. The cached result below is keyed on the query
+    // alone, so a screen whose data can change under a live search (the clipboard list, which the
+    // user can delete rows from) has to name what changed or the stale result is redrawn.
+    filterKey: Any? = Unit,
+    // Drawn directly under the app bar in every state, unlike [content], which the filtered list
+    // replaces as soon as the user types. For anything that belongs to the bar itself, such as the
+    // error text for a name field that lives in the title slot.
+    belowAppBar: @Composable (ColumnScope.() -> Unit)? = null,
     content: @Composable (ColumnScope.() -> Unit)? = null,
 ) {
     // searchText and showSearch should have the same remember or rememberSaveable
@@ -174,10 +185,12 @@ fun <T: Any?> SearchScreen(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = MaterialTheme.colorScheme.surface
-                        )
+                        ),
+                        placeholder = searchHint,
                     )
                 }
             }
+            belowAppBar?.invoke(this)
             CompositionLocalProvider(LocalTextStyle provides MaterialTheme.typography.bodyLarge) {
                 if (searchText.text.isBlank() && content != null) {
                     Column {
@@ -187,7 +200,7 @@ fun <T: Any?> SearchScreen(
                     // Cache the filter result by search text so scrolling / unrelated recompositions
                     // don't re-scan settingsContainer on every frame.
                     val query = searchText.text
-                    val items = remember(query) { filteredItems(query) }
+                    val items = remember(query, filterKey) { filteredItems(query) }
                     Scaffold(
                         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
                     ) { innerPadding ->
@@ -217,6 +230,7 @@ fun ExpandableSearchField(
     onSearchChange: (TextFieldValue) -> Unit,
     modifier: Modifier = Modifier,
     colors: TextFieldColors = TextFieldDefaults.colors(),
+    placeholder: String? = null,
 ) {
     val focusRequester = remember { FocusRequester() }
 
@@ -229,6 +243,7 @@ fun ExpandableSearchField(
             onValueChange = onSearchChange,
             modifier = modifier.focusRequester(focusRequester),
             leadingIcon = { SearchIcon() },
+            placeholder = placeholder?.let { { Text(it) } },
             trailingIcon = { IconButton(onClick = {
                 if (search.text.isBlank()) onDismiss()
                 else onSearchChange(TextFieldValue())

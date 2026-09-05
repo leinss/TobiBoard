@@ -11,6 +11,7 @@ import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.prefs
+import helium314.keyboard.latin.voice.local.LocalLiteRtEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
@@ -36,8 +37,6 @@ class TextFixManager(
         private const val TAG = "TextFixManager"
         private const val MAX_INPUT_LENGTH = 10_000
         private const val MAX_OUTPUT_LENGTH = 10_000
-        /** Ceiling on one on-device fix, load included. See the catch that uses it. */
-        internal const val LOCAL_TIMEOUT_MS = 180_000L
         const val SETTINGS_TEXT_FIX = "text_fix"
         const val SETTINGS_LOCAL_MODELS = "local_models"
 
@@ -95,7 +94,12 @@ class TextFixManager(
          */
         @JvmStatic
         fun initialWorkingState(provider: AiProvider): State =
-            if (provider == AiProvider.LOCAL) State.PREPARING else State.WORKING
+            LocalModelRequest.initialState(provider, State.PREPARING, State.WORKING)
+
+        /** See [LocalModelRequest.shouldReleaseLocalModel]; both managers apply the same rule. */
+        @JvmStatic
+        internal fun shouldReleaseLocalModel(t: Throwable): Boolean =
+            LocalModelRequest.shouldReleaseLocalModel(t)
     }
 
     /**
@@ -135,18 +139,23 @@ class TextFixManager(
     private val mainHandler = Handler(Looper.getMainLooper())
 
     /**
-     * Last-resort backstop, mirroring the one in [VoiceInputManager]. Without it, any Throwable
-     * escaping a [backgroundScope] coroutine reaches the default handler and kills the whole IME
-     * process. The on-device fix path loads a MediaPipe LLM of roughly a gigabyte
+     * Last-resort backstop for one attempt, mirroring the one in [VoiceInputManager]. Without it,
+     * any Throwable escaping a [backgroundScope] coroutine reaches the default handler and kills
+     * the whole IME process. The on-device fix path loads a MediaPipe LLM of roughly a gigabyte
      * ([helium314.keyboard.latin.voice.local.LocalLiteRtEngine]), so OutOfMemoryError is a realistic
      * outcome on a mid-RAM device, and a `catch (e: Exception)` does not see it. The user gets the
      * ordinary text-fix failure message instead of losing the keyboard mid-sentence.
+     *
+     * It is built per launch and closes over that attempt's [activeToken]: a crash reported after
+     * the user has already started a newer fix must not tear the newer one down. A scope-level
+     * handler had no way to tell the two apart.
      */
-    private val crashGuard = CoroutineExceptionHandler { _, t ->
+    private fun crashGuardFor(token: Long) = CoroutineExceptionHandler { _, t ->
         Log.e(TAG, "Uncaught failure in a text-fix coroutine", t)
-        mainHandler.post { failCurrentAttempt(context.getString(R.string.text_fix_error_failed)) }
+        if (shouldReleaseLocalModel(t)) LocalLiteRtEngine.releaseSharedAsync()
+        mainHandler.post { failCurrentAttempt(token, context.getString(R.string.text_fix_error_failed)) }
     }
-    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + crashGuard)
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var activeClient: TextFixEngine? = null
     @Volatile private var activeJob: Job? = null
     @Volatile private var activeToken = 0L
@@ -201,7 +210,7 @@ class TextFixManager(
         val token = activeToken + 1
         activeToken = token
 
-        activeJob = backgroundScope.launch(CoroutineName("TextFixRequest")) {
+        activeJob = backgroundScope.launch(CoroutineName("TextFixRequest") + crashGuardFor(token)) {
             // SecretStore is only needed for cloud API keys; LOCAL provider never touches it.
             if (provider.isCloud && !SecretStore.isSecureStorageAvailable(context)) {
                 Log.d(TAG, "startTextFix: SecretStore unavailable — navigating to text_fix settings")
@@ -263,16 +272,12 @@ class TextFixManager(
             // so bail now rather than run a full uninterruptible generation whose result is discarded.
             if (activeToken != token) return@launch
             try {
+                // The local path has no ceiling of its own: generateResponse is a native call
+                // that never returns an error for taking too long. The timeout does not stop it
+                // (see the class comment on LocalLiteRtEngine), it stops the user waiting behind a
+                // label that will never change. withLocalTimeout also cancels the engine.
                 val proposed = sanitize(
-                    if (provider == AiProvider.LOCAL) {
-                        // The local path has no ceiling of its own: generateResponse is a native
-                        // call that never returns an error for taking too long. The timeout does
-                        // not stop it (see the class comment on LocalLiteRtEngine), it stops the
-                        // user waiting behind a label that will never change.
-                        kotlinx.coroutines.withTimeout(LOCAL_TIMEOUT_MS) {
-                            runInterruptible { client.fixText(input) }
-                        }
-                    } else {
+                    LocalModelRequest.withLocalTimeout(provider == AiProvider.LOCAL, client) {
                         runInterruptible { client.fixText(input) }
                     }
                 )
@@ -287,9 +292,8 @@ class TextFixManager(
                 }
                 finish(token, original = input, result = proposed)
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                // Must precede the CancellationException branch: a timeout is one.
-                Log.w(TAG, "On-device text fix timed out after $LOCAL_TIMEOUT_MS ms")
-                client.cancel()
+                // Must precede the CancellationException branch: a timeout is one. The engine has
+                // already been cancelled by withLocalTimeout.
                 finish(token, error = context.getString(R.string.text_fix_error_timeout))
             } catch (e: CancellationException) {
                 finish(token)
@@ -300,6 +304,7 @@ class TextFixManager(
                 // JNI and can raise OutOfMemoryError / UnsatisfiedLinkError, which must surface as a
                 // text-fix error rather than unwinding out of the coroutine and killing the IME.
                 Log.e(TAG, "Text fix failed", t)
+                if (shouldReleaseLocalModel(t)) LocalLiteRtEngine.releaseSharedAsync()
                 finish(token, error = safeUserFacingError(context, t, R.string.text_fix_error_failed))
             }
         }
@@ -308,7 +313,7 @@ class TextFixManager(
     /** Moves out of PREPARING once the engine reports its model is loaded. Any thread. */
     private fun markWorking(token: Long) {
         mainHandler.post {
-            if (activeToken != token || state != State.PREPARING) return@post
+            if (!LocalModelRequest.shouldMarkRunning(activeToken, token, state, State.PREPARING)) return@post
             state = State.WORKING
             callbacks.onWorking()
         }
@@ -320,6 +325,15 @@ class TextFixManager(
         activeToken += 1
         activeClient?.cancel()
         activeJob?.cancel()
+        resetToIdle()
+    }
+
+    /**
+     * The teardown every terminal path shares. Each field of the state machine used to be cleared
+     * by hand in four places, so adding one meant remembering all four. Callers that end an attempt
+     * the manager did not finish itself invalidate [activeToken] and cancel the engine first.
+     */
+    private fun resetToIdle() {
         activeJob = null
         activeClient = null
         state = State.IDLE
@@ -340,10 +354,7 @@ class TextFixManager(
     ) {
         mainHandler.post {
             if (activeToken != token) return@post
-            activeJob = null
-            activeClient = null
-            state = State.IDLE
-            callbacks.onFinished()
+            resetToIdle()
             if (original != null && !result.isNullOrEmpty()) {
                 callbacks.onResult(original, result)
             } else if (!error.isNullOrEmpty()) {
@@ -354,19 +365,17 @@ class TextFixManager(
 
     /**
      * Resets to idle and reports [message] after a failure that bypassed the normal error path (the
-     * [crashGuard] backstop). Main thread only.
+     * [crashGuardFor] backstop). Does nothing when [token] is not the attempt that is running: a
+     * crash reported late must not tear down the fix the user started after it. Main thread only.
      */
     @Synchronized
-    private fun failCurrentAttempt(message: String) {
-        if (state == State.IDLE) return
+    private fun failCurrentAttempt(token: Long, message: String) {
+        if (state == State.IDLE || activeToken != token) return
         activeToken += 1
         // Same teardown as cancel(): an engine that threw still holds its native handle, and on the
         // on-device path that is a gigabyte the next fix would have to allocate around.
         activeClient?.cancel()
-        activeJob = null
-        activeClient = null
-        state = State.IDLE
-        callbacks.onFinished()
+        resetToIdle()
         callbacks.onError(message)
     }
 
@@ -374,10 +383,7 @@ class TextFixManager(
     private fun finishWithSettings(token: Long, gap: SetupGap, vararg formatArgs: Any) {
         mainHandler.post {
             if (activeToken != token) return@post
-            activeJob = null
-            activeClient = null
-            state = State.IDLE
-            callbacks.onFinished()
+            resetToIdle()
             openSettingsFor(gap, *formatArgs)
         }
     }

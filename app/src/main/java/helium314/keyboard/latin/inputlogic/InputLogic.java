@@ -20,6 +20,7 @@ import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.inputmethod.CorrectionInfo;
 import android.view.inputmethod.EditorInfo;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -687,7 +688,11 @@ public final class InputLogic {
         final String clipboardContent = mLatinIME.getClipboardHistoryManager().retrieveClipboardContent().toString();
         if (!clipboardContent.isEmpty()) {
             mLatinIME.onTextInput(clipboardContent);
+            return;
         }
+        // With clipboard history off, the key pastes the system clipboard. An empty clipboard used
+        // to make it a silent no-op, which reads as a broken key rather than as an empty clipboard.
+        Toast.makeText(mLatinIME, R.string.clipboard_nothing_to_paste, Toast.LENGTH_SHORT).show();
     }
 
     /**

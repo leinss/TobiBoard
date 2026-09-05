@@ -50,7 +50,11 @@ private fun setToolbarButtonActivatedState(button: ImageButton) {
     }
 }
 
-fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomToolbarKeyCode(key) ?: when (key) {
+fun getCodeForToolbarKey(key: ToolbarKey) =
+    Settings.getInstance().getCustomToolbarKeyCode(key) ?: defaultCodeForToolbarKey(key)
+
+/** The built-in tap code, split out from [getCodeForToolbarKey] so it is testable without Settings. */
+internal fun defaultCodeForToolbarKey(key: ToolbarKey) = when (key) {
     VOICE -> KeyCode.VOICE_INPUT
     CLIPBOARD -> KeyCode.CLIPBOARD
     NUMPAD -> KeyCode.NUMPAD
@@ -68,6 +72,7 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     CLEAR_CLIPBOARD -> KeyCode.CLIPBOARD_CLEAR_HISTORY
     CLOSE_HISTORY -> KeyCode.ALPHA
     ADD_TO_DICTIONARY -> KeyCode.ADD_TO_DICTIONARY
+    TEXT_FIX -> KeyCode.TEXT_FIX
     EMOJI -> KeyCode.EMOJI
     LEFT -> KeyCode.ARROW_LEFT
     RIGHT -> KeyCode.ARROW_RIGHT
@@ -84,8 +89,15 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     SPLIT -> KeyCode.SPLIT_LAYOUT
 }
 
-fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getCustomToolbarLongpressCode(key) ?: when (key) {
+fun getCodeForToolbarKeyLongClick(key: ToolbarKey) =
+    Settings.getInstance().getCustomToolbarLongpressCode(key) ?: defaultLongClickCodeForToolbarKey(key)
+
+/** The built-in long-press code, split out from [getCodeForToolbarKeyLongClick] for the same reason. */
+internal fun defaultLongClickCodeForToolbarKey(key: ToolbarKey) = when (key) {
     CLIPBOARD -> KeyCode.CLIPBOARD_PASTE
+    // Long-pressing the text-fix key runs the second (user-defined) prompt, so both variants are
+    // reachable from one toolbar slot instead of costing two.
+    TEXT_FIX -> KeyCode.TEXT_FIX_2
     UNDO -> KeyCode.REDO
     REDO -> KeyCode.UNDO
     SELECT_ALL -> KeyCode.CLIPBOARD_SELECT_WORD
@@ -106,7 +118,7 @@ fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getC
 // names need to be aligned with resources strings (using lowercase of key.name)
 enum class ToolbarKey {
     VOICE, CLIPBOARD, NUMPAD, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ADD_TO_DICTIONARY,
-    ONE_HANDED, SPLIT, INCOGNITO, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN,
+    TEXT_FIX, ONE_HANDED, SPLIT, INCOGNITO, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN,
     WORD_LEFT, WORD_RIGHT, PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END
 }
 

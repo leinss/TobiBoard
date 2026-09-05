@@ -33,6 +33,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ClipboardDao private constructor(
     private val db: Database,
     private val appContext: Context,
+    /** Injected so a test can supply a cipher; Robolectric has no AndroidKeyStore. */
+    private val cipher: ClipboardEncryption = ClipboardCipher,
 ) {
     interface Listener {
         fun onClipInserted(position: Int)
@@ -45,9 +47,10 @@ class ClipboardDao private constructor(
     // we clean up old clips when a new clip is added, but not too frequently
     private var lastClearOldClips = 0L
 
-    // Whether new clips are written encrypted. Fixed for the DAO's lifetime; reads honor each row's
-    // own ENCRYPTED flag so plaintext (legacy / API < 23) and encrypted rows can coexist.
-    private val encrypting = ClipboardCipher.isAvailable()
+    // How new clips are written. Fixed for the DAO's lifetime; reads honor each row's own ENCRYPTED
+    // flag so plaintext (legacy / API < 23) and encrypted rows can coexist.
+    private val writeMode = ClipboardCipher.writeMode(cipher.keystoreSupported, cipher.isAvailable())
+    private val encrypting = writeMode == ClipboardWriteMode.ENCRYPT
     private val unreadableWarningShown = AtomicBoolean(false)
 
     /** How many rows the last cache load had to drop because they no longer decrypt. Test seam. */
@@ -56,12 +59,20 @@ class ClipboardDao private constructor(
         private set
 
     init {
-        // A device that cannot produce a key at all stores clips in the clear. Below API 23 that is
-        // expected; above it the keystore is broken. Either way the user is told once, because the
-        // app claims the clipboard is encrypted and silence here is the part that misleads.
-        if (!encrypting) {
-            Log.w(TAG, "clipboard encryption unavailable; clips are stored in plaintext")
-            warnOnce(R.string.clipboard_encryption_unavailable)
+        // The user is told once either way, because the app claims the clipboard is encrypted and
+        // silence here is the part that misleads.
+        when (writeMode) {
+            ClipboardWriteMode.ENCRYPT -> {}
+            ClipboardWriteMode.PLAINTEXT -> {
+                Log.w(TAG, "no keystore on this platform; clips are stored in plaintext")
+                warnOnce(R.string.clipboard_encryption_unavailable)
+            }
+            ClipboardWriteMode.REFUSE -> {
+                // A keystore that exists but cannot produce a key is a broken device, not a
+                // platform limit. Storing the clip readable there would contradict the claim.
+                Log.e(TAG, "keystore present but no key available; clipboard history is disabled")
+                warnOnce(R.string.clipboard_encryption_broken)
+            }
         }
     }
 
@@ -100,6 +111,7 @@ class ClipboardDao private constructor(
      */
     fun ensureCacheLoaded() {
         cache // touching the accessor triggers the load if it hasn't happened yet
+        vacuumIfRequested(appContext, db)
     }
 
     private fun readAllFromDb(): MutableList<ClipboardHistoryEntry> {
@@ -130,14 +142,14 @@ class ClipboardDao private constructor(
                     // ciphertext, so it is dropped from the cache and counted. Skipping it silently,
                     // as this used to, made entries vanish from history with no explanation.
                     val text = if (isEncrypted)
-                        (it.getString(3)?.let { stored -> ClipboardCipher.decrypt(stored) }
+                        (it.getString(3)?.let { stored -> cipher.decrypt(stored) }
                             ?.also { _ -> anyRowDecrypted = true }
                             ?: run { undecryptableIds.add(it.getLong(0)); continue })
                     else it.getString(3)
                     val storedAnnotation = it.getString(5)
                     val annotation = if (isEncrypted && storedAnnotation != null) {
                         // The clip itself decrypted, so a null here is this one value, not the key.
-                        ClipboardCipher.decrypt(storedAnnotation)
+                        cipher.decrypt(storedAnnotation)
                             ?.also { _ -> anyRowDecrypted = true }
                             ?: run { undecryptableAnnotations += 1; null }
                     } else storedAnnotation
@@ -177,11 +189,12 @@ class ClipboardDao private constructor(
 
     private fun insertNewEntry(timestamp: Long, pinned: Boolean, text: String) {
         // Fail closed: a device that can encrypt but fails to must not leave the clip readable on
-        // disk under an ENCRYPTED = 0 flag. Drop it and say so once.
+        // disk under an ENCRYPTED = 0 flag, and neither must one whose keystore is broken. Only
+        // PLAINTEXT, which is the platform having no keystore at all, writes readable text.
         val stored = ClipboardCipher.storedValue(
-            encryptionExpected = encrypting,
+            encryptionExpected = writeMode != ClipboardWriteMode.PLAINTEXT,
             plaintext = text,
-            ciphertext = if (encrypting) ClipboardCipher.encrypt(text) else null,
+            ciphertext = if (encrypting) cipher.encrypt(text) else null,
         )
         if (stored == null) {
             Log.e(TAG, "clip not stored: encryption failed")
@@ -264,7 +277,7 @@ class ClipboardDao private constructor(
             val stored = ClipboardCipher.storedValue(
                 encryptionExpected = rowEncrypted,
                 plaintext = annotation,
-                ciphertext = if (rowEncrypted) ClipboardCipher.encrypt(annotation) else null,
+                ciphertext = if (rowEncrypted) cipher.encrypt(annotation) else null,
             )
             if (stored == null) {
                 Log.e(TAG, "annotation not stored: encryption failed")
@@ -374,6 +387,38 @@ class ClipboardDao private constructor(
         db.writableDatabase.delete(TABLE, "$COLUMN_PINNED = 0", null)
     }
 
+    /**
+     * Replaces the clipboard history with the rows of [source], an imported database already
+     * migrated to the current schema.
+     *
+     * A row's ENCRYPTED flag decides how its text is read. The v3 to v4 migration encrypts an
+     * imported plaintext backup with *this* device's key, so those rows decrypt here; a row that
+     * arrived already encrypted on another device does not, and is dropped. Reading every row as
+     * plaintext, as this used to, stored the raw ciphertext as if it were the clip.
+     *
+     * Returns the number of rows dropped because they could not be read.
+     */
+    fun importFrom(source: SQLiteDatabase): Int {
+        var dropped = 0
+        source.query(
+            TABLE,
+            arrayOf(COLUMN_TIMESTAMP, COLUMN_PINNED, COLUMN_TEXT, COLUMN_ENCRYPTED),
+            null, null, null, null, null,
+        ).use { c ->
+            clear()
+            while (c.moveToNext()) {
+                val stored = c.getString(2)
+                val text = if (c.getInt(3) != 0) stored?.let { cipher.decrypt(it) } else stored
+                if (text == null) {
+                    dropped++
+                    continue
+                }
+                addClip(c.getLong(0), c.getInt(1) != 0, text)
+            }
+        }
+        return dropped
+    }
+
     fun clear() {
         val removed = count()
         if (removed == 0) return
@@ -436,6 +481,40 @@ class ClipboardDao private constructor(
             }
         }
 
+        // Own preferences file, so the one-time flag needs no key in the shared settings surface.
+        private const val DB_PREFS = "clipboard_db"
+        private const val PREF_VACUUM_PENDING = "vacuum_after_encryption_migration"
+
+        /**
+         * Ask for the one-time VACUUM. Called from the v3 → v4 migration, which encrypts existing
+         * rows in place: SQLite keeps the old plaintext in free pages until the file is rewritten,
+         * so the readable copy the migration was meant to remove survives in the database file.
+         * The migration itself cannot do it, because it runs inside a transaction and VACUUM
+         * cannot.
+         */
+        fun requestVacuum(context: Context) {
+            context.applicationContext.getSharedPreferences(DB_PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(PREF_VACUUM_PENDING, true).apply()
+        }
+
+        /**
+         * Run the requested VACUUM once, then never again. Rewriting the whole database can take
+         * seconds on a large clipboard history, so this must be called off the main thread; the
+         * flag is cleared first, because a VACUUM that fails is not worth retrying on every load.
+         */
+        private fun vacuumIfRequested(context: Context, db: Database) {
+            val prefs = context.applicationContext.getSharedPreferences(DB_PREFS, Context.MODE_PRIVATE)
+            if (!prefs.getBoolean(PREF_VACUUM_PENDING, false)) return
+            prefs.edit().putBoolean(PREF_VACUUM_PENDING, false).apply()
+            try {
+                val started = SystemClock.elapsedRealtime()
+                db.writableDatabase.execSQL("VACUUM")
+                Log.i(TAG, "vacuumed the database in ${SystemClock.elapsedRealtime() - started} ms")
+            } catch (t: Throwable) {
+                Log.e(TAG, "VACUUM after the clipboard encryption migration failed", t)
+            }
+        }
+
         private var instance: ClipboardDao? = null
 
         /** Returns the instance or creates a new one. Returns null if instance can't be created (e.g. no access to db due to device being locked) */
@@ -448,5 +527,14 @@ class ClipboardDao private constructor(
                 }
             return instance
         }
+
+        /**
+         * A DAO over the real database with [cipher] injected, bypassing the process-wide instance.
+         * Test seam: the production cipher needs an AndroidKeyStore, which Robolectric has not, so
+         * every write mode except REFUSE would be unreachable from a test.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun createForTest(context: Context, cipher: ClipboardEncryption): ClipboardDao =
+            ClipboardDao(Database.getInstance(context), context.applicationContext, cipher)
     }
 }

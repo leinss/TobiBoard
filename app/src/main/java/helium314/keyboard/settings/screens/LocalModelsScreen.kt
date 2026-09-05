@@ -47,6 +47,7 @@ import helium314.keyboard.latin.voice.local.ModelRegistry
 import helium314.keyboard.latin.voice.local.ModelStorage
 import helium314.keyboard.latin.voice.local.SttModelInfo
 import helium314.keyboard.latin.voice.local.TextFixModelInfo
+import helium314.keyboard.latin.voice.local.formatModelSize
 import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.rememberModelDownloadStarter
 
@@ -277,7 +278,7 @@ private fun ModelCard(
                 style = MaterialTheme.typography.bodySmall,
             )
             Spacer(Modifier.height(8.dp))
-            StateRow(state)
+            StateRow(model, state)
             if (model.totalBytes > 0 && state is DownloadState.NotDownloaded && freeBytes in 1..<((model.totalBytes * 12) / 10)) {
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -313,8 +314,10 @@ private fun ModelCard(
     }
 }
 
+// The state carries the raw HuggingFace file name (`Qwen2.5-...-seq_q8_ekv1280.task`), which is
+// what the downloader logs and verifies. The user sees the model's display name instead.
 @Composable
-private fun StateRow(state: DownloadState) {
+private fun StateRow(model: ModelInfo, state: DownloadState) {
     when (state) {
         DownloadState.NotDownloaded ->
             Text(stringResource(R.string.local_model_state_not_downloaded))
@@ -327,7 +330,7 @@ private fun StateRow(state: DownloadState) {
             Text(
                 stringResource(
                     R.string.local_model_state_downloading,
-                    state.fileIndex + 1, state.fileCount, state.currentFile, pct,
+                    state.fileIndex + 1, state.fileCount, pct,
                 )
             )
             Spacer(Modifier.height(4.dp))
@@ -341,7 +344,7 @@ private fun StateRow(state: DownloadState) {
             }
         }
         is DownloadState.Verifying ->
-            Text(stringResource(R.string.local_model_state_verifying, state.currentFile))
+            Text(stringResource(R.string.local_model_state_verifying, model.displayName))
         DownloadState.Ready ->
             Text(
                 stringResource(R.string.local_model_state_ready),
@@ -358,9 +361,5 @@ private fun StateRow(state: DownloadState) {
 }
 
 @Composable
-private fun formatBytes(bytes: Long): String = when {
-    bytes <= 0 -> stringResource(R.string.local_model_size_unknown)
-    bytes >= 1_000_000_000 -> "%.1f GB".format(bytes / 1_000_000_000.0)
-    bytes >= 1_000_000 -> "%.0f MB".format(bytes / 1_000_000.0)
-    else -> "%.0f KB".format(bytes / 1_000.0)
-}
+private fun formatBytes(bytes: Long): String =
+    formatModelSize(bytes) ?: stringResource(R.string.local_model_size_unknown)
