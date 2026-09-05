@@ -93,6 +93,7 @@ import helium314.keyboard.latin.voice.TextFixManager;
 import helium314.keyboard.latin.voice.TextReplaceGuard;
 import helium314.keyboard.latin.voice.VoiceInputManager;
 import helium314.keyboard.latin.voice.local.LocalLiteRtEngine;
+import helium314.keyboard.latin.voice.local.LocalSherpaEngine;
 import helium314.keyboard.settings.SettingsActivity2;
 import kotlin.Unit;
 
@@ -1221,6 +1222,12 @@ public class LatinIME extends InputMethodService implements
         if (BuildConfig.DEBUG) unregisterReceiver(mDebugTextFixReceiver);
         mVoiceInputManager.release();
         if (mTextFixManager != null) mTextFixManager.release();
+        // Hand both on-device models back. The IME service dies here but the application process
+        // does not, so without this the recognizer's ~660 MB and the LLM's ~1 GB stay resident
+        // until the system kills the process. Async because freeing that much native memory is
+        // slow and onDestroy runs on the main thread; both rebuild lazily on the next request.
+        LocalLiteRtEngine.releaseSharedAsync();
+        LocalSherpaEngine.releaseSharedAsync();
         mClipboardHistoryManager.onDestroy();
         mDictionaryFacilitator.closeDictionaries();
         mInputLogic.onDestroy();
@@ -2524,9 +2531,11 @@ public class LatinIME extends InputMethodService implements
             }
             // deallocateMemory always called on hiding, and should not be called when showing
         }
-        // Free the on-device text-fix LLM (~1 GB native) under real memory pressure so the IME
-        // process is not killed for holding it; it reloads lazily on the next fix.
+        // Free the on-device models under real memory pressure (the text-fix LLM is ~1 GB of
+        // native memory, the speech recognizer ~660 MB) so the IME process is not killed for
+        // holding them; both reload lazily on the next request.
         LocalLiteRtEngine.onTrimMemory(level);
+        LocalSherpaEngine.onTrimMemory(level);
     }
 
     public boolean isVoiceRecording() {

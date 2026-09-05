@@ -59,8 +59,8 @@ class VoiceInputManager(
         private const val MAX_RECONNECT_ATTEMPTS = 3
         private const val RECONNECT_WAIT_MS_PER_ATTEMPT = 30_000L
         private const val RECONNECT_POLL_MS = 2_000L
-        /** Ceiling on one on-device transcription, model load included. */
-        internal const val LOCAL_TIMEOUT_MS = 180_000L
+        /** Ceiling on one on-device transcription, model load included. See [LocalModelRequest]. */
+        internal const val LOCAL_TIMEOUT_MS = LocalModelRequest.LOCAL_TIMEOUT_MS
 
         /**
          * True when a lifecycle-driven cancel (window hidden / input view finishing) should be
@@ -97,7 +97,7 @@ class VoiceInputManager(
          * Pure, so it is unit-tested.
          */
         internal fun initialTranscribingState(provider: AiProvider): State =
-            if (provider == AiProvider.LOCAL) State.PREPARING else State.TRANSCRIBING
+            LocalModelRequest.initialState(provider, State.PREPARING, State.TRANSCRIBING)
 
         /**
          * Why a finished recording must not be transcribed, or null when it is usable.
@@ -241,7 +241,9 @@ class VoiceInputManager(
     /** Moves out of PREPARING once the engine reports its model is loaded. Any thread. */
     private fun markTranscribing(requestToken: Long) {
         mainHandler.post {
-            if (activeTranscriptionToken.get() != requestToken || state != State.PREPARING) return@post
+            if (!LocalModelRequest.shouldMarkRunning(
+                    activeTranscriptionToken.get(), requestToken, state, State.PREPARING)
+            ) return@post
             state = State.TRANSCRIBING
             callbacks.onTranscribing()
         }
@@ -532,15 +534,12 @@ class VoiceInputManager(
             // deleting it. A success or an explicit cancel leaves it false and the audio goes.
             var keepForRetry = false
             try {
+                // The on-device path has no ceiling of its own: the sherpa build and decode are
+                // native calls that never give up. The timeout does not stop them, it stops the
+                // user waiting behind a label that will never change. withLocalTimeout also
+                // cancels the engine, which is the part that drifted when this was inline.
                 val transcription = sanitizeTranscription(
-                    if (provider == AiProvider.LOCAL) {
-                        // The on-device path has no ceiling of its own: the sherpa build and decode
-                        // are native calls that never give up. The timeout does not stop them, it
-                        // stops the user waiting behind a label that will never change.
-                        kotlinx.coroutines.withTimeout(LOCAL_TIMEOUT_MS) {
-                            transcribeWithReconnect(client, wavFile, offlineRetryEnabled)
-                        }
-                    } else {
+                    LocalModelRequest.withLocalTimeout(provider == AiProvider.LOCAL, client) {
                         transcribeWithReconnect(client, wavFile, offlineRetryEnabled)
                     }
                 )
@@ -589,11 +588,8 @@ class VoiceInputManager(
                 val finalText = applySpacing(polished, spacingContext)
                 finishTranscription(requestToken = requestToken, result = finalText)
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                // Must precede the CancellationException branch: a timeout is one.
-                Log.w(TAG, "On-device transcription timed out after $LOCAL_TIMEOUT_MS ms")
-                // Sets the engine's cancelled flag so a load that is still blocking does not go on
-                // to start the decode for a request the user has already been told timed out.
-                client.cancel()
+                // Must precede the CancellationException branch: a timeout is one. The engine has
+                // already been cancelled by withLocalTimeout.
                 keepForRetry = true
                 retainForRetry(wavFile, useDedicatedSttForRetry)
                 finishTranscription(
@@ -672,6 +668,25 @@ class VoiceInputManager(
 
     /** Deletes the retained clip now and disarms the expiry timer. Safe to call repeatedly. */
     @Synchronized
+    /**
+     * Clears every field of the transcription state machine and returns to IDLE. Returns the editor
+     * session the cleared attempt started in, which the commit path needs after the reset.
+     *
+     * Three cancel paths used to repeat this block by hand ([failCurrentAttempt], the TRANSCRIBING
+     * branch of [cancelRecording] and [finishTranscription]), so every field added to the state
+     * machine had to be added in three places or one path leaked it into the next attempt.
+     */
+    private fun clearTranscriptionState(): String? {
+        val startedIn = transcriptionEditorSessionId
+        transcriptionJob = null
+        transcriptionClient = null
+        currentProvider = null
+        transcriptionEditorSessionId = null
+        currentUseDedicatedStt = false
+        state = State.IDLE
+        return startedIn
+    }
+
     private fun purgeRetryAudio() {
         mainHandler.removeCallbacks(purgeRetryAudioRunnable)
         retryAudio.purge()
@@ -685,12 +700,7 @@ class VoiceInputManager(
     private fun failCurrentAttempt(message: String) {
         if (state == State.IDLE) return
         activeTranscriptionToken.incrementAndGet()
-        transcriptionJob = null
-        transcriptionClient = null
-        currentProvider = null
-        transcriptionEditorSessionId = null
-        currentUseDedicatedStt = false
-        state = State.IDLE
+        clearTranscriptionState()
         callbacks.onFinished()
         callbacks.onError(message, hasRetryableRecording())
     }
@@ -735,16 +745,11 @@ class VoiceInputManager(
                 activeTranscriptionToken.incrementAndGet()
                 transcriptionClient?.cancel()
                 transcriptionJob?.cancel()
-                transcriptionJob = null
-                transcriptionClient = null
-                currentProvider = null
-                transcriptionEditorSessionId = null
-                currentUseDedicatedStt = false
+                clearTranscriptionState()
                 // The transcription thread's finally block will handle file deletion; only
                 // reach in here if it couldn't start.
                 currentAudioFile?.takeIf { it.exists() }?.delete()
                 currentAudioFile = null
-                state = State.IDLE
                 callbacks.onFinished()
             }
             State.IDLE -> Unit
@@ -842,13 +847,7 @@ class VoiceInputManager(
             if (activeTranscriptionToken.get() != requestToken) {
                 return@post
             }
-            val startedIn = transcriptionEditorSessionId
-            transcriptionJob = null
-            transcriptionClient = null
-            currentProvider = null
-            transcriptionEditorSessionId = null
-            currentUseDedicatedStt = false
-            state = State.IDLE
+            val startedIn = clearTranscriptionState()
             callbacks.onFinished()
             if (!result.isNullOrEmpty() && !transcriptionMayCommit(startedIn, callbacks.getEditorSessionId())) {
                 // The user moved to a different field while the decode was running. Committing here

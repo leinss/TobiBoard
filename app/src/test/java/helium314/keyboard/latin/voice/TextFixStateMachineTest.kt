@@ -49,4 +49,17 @@ class TextFixStateMachineTest {
         // Whitespace inside the text is a change: re-spacing is a fix the user asked for.
         assertFalse(TextFixManager.isNoChange("hello  world", "hello world"))
     }
+
+    @Test
+    fun anOutOfMemoryFailureHandsTheOnDeviceModelBack() {
+        // The ~1 GB handle survives the failed request, so a retry would allocate against the same
+        // held gigabyte. The wrapped form is what a native load failure actually arrives as.
+        assertTrue(TextFixManager.shouldReleaseLocalModel(OutOfMemoryError()))
+        assertTrue(TextFixManager.shouldReleaseLocalModel(RuntimeException(OutOfMemoryError())))
+    }
+
+    @Test
+    fun anOrdinaryFailureKeepsTheOnDeviceModelLoaded() {
+        assertFalse(TextFixManager.shouldReleaseLocalModel(java.io.IOException("no network")))
+    }
 }

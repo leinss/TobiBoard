@@ -80,6 +80,26 @@ class ModelDownloaderTest {
         assertEquals(resumeFrom.toLong(), server.lastRangeStart)
     }
 
+    @Test fun aPreExistingFileThatDoesNotMatchThePinnedHashIsReplaced() = runBlocking {
+        // Non-empty used to be enough, so a truncated or tampered file from an earlier run was
+        // adopted as finished and only surfaced later as an unexplained native load failure.
+        File(tmp.root, "payload.bin").writeBytes(ByteArray(payload.size) { 0 })
+
+        val states = mutableListOf<DownloadState>()
+        ModelDownloader().download(tmp.root, testModel(payloadSha)) { states.add(it) }
+
+        assertTrue("expected Ready, got $states", states.last() is DownloadState.Ready)
+        assertEquals(payloadSha, sha256Hex(File(tmp.root, "payload.bin").readBytes()))
+    }
+
+    @Test fun aPreExistingFileThatMatchesThePinnedHashIsNotDownloadedAgain() = runBlocking {
+        File(tmp.root, "payload.bin").writeBytes(payload)
+
+        ModelDownloader().download(tmp.root, testModel(payloadSha)) { }
+
+        assertEquals("the file was already correct; nothing should have been fetched", -1L, server.lastRangeStart)
+    }
+
     @Test fun forwardsAuthorizationHeaderWhenTokenIsProvided() = runBlocking {
         val model = testModel(payloadSha)
         val states = mutableListOf<DownloadState>()

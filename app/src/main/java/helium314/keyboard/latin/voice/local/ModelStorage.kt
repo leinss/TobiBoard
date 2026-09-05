@@ -73,16 +73,29 @@ internal object ModelStorage {
         dirFor(context, model).deleteRecursively()
     }
 
+    /** [availableBytes] could not measure the volume. Not a number of bytes, and not "full". */
+    const val UNKNOWN_BYTES = -1L
+
     /**
-     * Free space currently available on the volume holding [rootDir], for pre-flight
-     * checks. Returns 0 on any I/O error so the caller treats unknown-state as "no
-     * room" and surfaces a warning rather than letting a multi-hundred-MB download fail
-     * mid-stream.
+     * Free space currently available on the volume holding [rootDir], for pre-flight checks, or
+     * [UNKNOWN_BYTES] when it cannot be measured. It used to return 0 on an error, which reads as
+     * "the disk is full": any caller comparing it against a download size would have refused or
+     * warned about every download on a device whose StatFs call merely failed.
      */
     fun availableBytes(context: Context): Long = try {
         rootDir(context).mkdirs()
         StatFs(rootDir(context).absolutePath).availableBytes
     } catch (_: Exception) {
-        0L
+        UNKNOWN_BYTES
     }
+
+    /**
+     * True when [availableBytes] is known and leaves less than 20% headroom over [requiredBytes].
+     * An unknown or zero measurement is not low space: the user is not warned off a download on the
+     * strength of a reading we do not have.
+     *
+     * Pure, so it is unit-tested.
+     */
+    fun isLowSpace(availableBytes: Long, requiredBytes: Long): Boolean =
+        requiredBytes > 0 && availableBytes in 1..<((requiredBytes * 12) / 10)
 }

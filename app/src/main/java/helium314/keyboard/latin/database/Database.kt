@@ -10,7 +10,21 @@ import helium314.keyboard.latin.utils.GestureDataDao
 import helium314.keyboard.latin.utils.Log
 import java.io.File
 
-class Database private constructor(context: Context, name: String = NAME) : SQLiteOpenHelper(context, name, null, VERSION) {
+class Database private constructor(
+    private val appContext: Context,
+    name: String = NAME,
+) : SQLiteOpenHelper(appContext, name, null, VERSION) {
+
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        // Overwrite deleted rows with zeros instead of leaving them in free pages. Without it a
+        // deleted clip stays readable in the database file until SQLite happens to reuse the page,
+        // which is exactly the offline extraction the clipboard encryption exists to stop.
+        // A PRAGMA that returns a value has to go through rawQuery: execSQL rejects it with
+        // "Queries can be performed using SQLiteDatabase query or rawQuery methods only".
+        db.rawQuery("PRAGMA secure_delete = ON", null).use { it.moveToFirst() }
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         // Create the full current schema directly. Previously this ran onUpgrade(db, 0, VERSION),
         // which re-ALTERed columns CREATE_TABLE already defines ("duplicate column name: USE_COUNT"),
@@ -30,6 +44,10 @@ class Database private constructor(context: Context, name: String = NAME) : SQLi
         if (oldVersion <= 3) {
             db.execSQL("ALTER TABLE CLIPBOARD ADD COLUMN ENCRYPTED INTEGER NOT NULL DEFAULT 0")
             ClipboardDao.encryptExistingRows(db)
+            // Encrypting in place leaves the plaintext in free pages; only rewriting the file
+            // removes it. This runs in a transaction, and VACUUM cannot, so it is deferred to the
+            // next background cache load. See ClipboardDao.requestVacuum.
+            ClipboardDao.requestVacuum(appContext)
         }
     }
 
@@ -49,7 +67,7 @@ class Database private constructor(context: Context, name: String = NAME) : SQLi
         fun copyFromDb(file: File, context: Context) {
             if (!file.exists())
                 return
-            val otherDb = Database(context, file.name) // this upgrades the DB if necessary
+            val otherDb = Database(context.applicationContext, file.name) // this upgrades the DB if necessary
             val clipDao = ClipboardDao.getInstance(context) // insert to dao because of cache
             if (clipDao == null) {
                 Log.e(TAG, "can't transfer clipboard data because ClipboardDao is null")
