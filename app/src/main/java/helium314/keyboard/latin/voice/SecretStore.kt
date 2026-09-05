@@ -31,36 +31,58 @@ object SecretStore {
         securePrefs(context)
     }
 
-    fun getApiKey(context: Context, prefKey: String, default: String): String {
-        val secure = securePrefs(context)
-        if (secure != null) {
-            val encrypted = secure.getString(prefKey, null)
-            if (encrypted != null) return encrypted
-            // First-run migration: if a plaintext value exists in normal prefs, move it here
-            // and scrub the original.
-            val legacy = context.prefs().getString(prefKey, null)
-            if (!legacy.isNullOrBlank()) {
-                // Commit the secure copy to disk before scrubbing the plaintext one. If the process
-                // dies in between, the worst case is a leftover plaintext key that gets re-scrubbed on
-                // the next read — never a lost key.
-                secure.edit(commit = true) { putString(prefKey, legacy) }
-                context.prefs().edit { remove(prefKey) }
-                return legacy
-            }
-            return default
+    fun getApiKey(context: Context, prefKey: String, default: String): String =
+        readApiKey(securePrefs(context), context.prefs(), prefKey, default)
+
+    fun setApiKey(context: Context, prefKey: String, value: String) =
+        writeApiKey(securePrefs(context), context.prefs(), prefKey, value)
+
+    /**
+     * The migration and fallback rules, with both preference files passed in so they can be
+     * exercised without an AndroidKeyStore: [secure] is null exactly when the encrypted store
+     * could not be opened.
+     */
+    @Suppress("UseKtx") // see writeApiKey: commit()'s result is the point
+    internal fun readApiKey(
+        secure: SharedPreferences?,
+        plain: SharedPreferences,
+        prefKey: String,
+        default: String,
+    ): String {
+        // No encrypted store means no key, not a plaintext fallback: handing the caller the legacy
+        // value here would keep it readable on disk forever.
+        if (secure == null) return default
+        val encrypted = secure.getString(prefKey, null)
+        if (encrypted != null) return encrypted
+        // First-run migration: if a plaintext value exists in normal prefs, move it here
+        // and scrub the original.
+        val legacy = plain.getString(prefKey, null)
+        if (!legacy.isNullOrBlank()) {
+            // Commit the secure copy to disk and check it landed before scrubbing the plaintext
+            // one. commit() returns false on a real write failure (full disk, I/O error), and
+            // scrubbing anyway would delete the only remaining copy of the key.
+            val stored = secure.edit().putString(prefKey, legacy).commit()
+            if (stored) plain.edit { remove(prefKey) }
+            else Log.w(TAG, "could not persist the migrated key; keeping the plaintext copy")
+            return legacy
         }
         return default
     }
 
-    fun setApiKey(context: Context, prefKey: String, value: String) {
-        val secure = securePrefs(context)
-        if (secure != null) {
-            secure.edit(commit = true) { putString(prefKey, value) }
-            // Ensure no stale plaintext copy remains (only scrub once the secure write is persisted).
-            context.prefs().edit { remove(prefKey) }
-        } else {
-            throw IllegalStateException("Secure storage unavailable")
-        }
+    // The KTX edit {} helper swallows commit()'s result, and the whole point here is to check it
+    // before scrubbing the only other copy of the key.
+    @Suppress("UseKtx")
+    internal fun writeApiKey(
+        secure: SharedPreferences?,
+        plain: SharedPreferences,
+        prefKey: String,
+        value: String,
+    ) {
+        if (secure == null) throw IllegalStateException("Secure storage unavailable")
+        if (!secure.edit().putString(prefKey, value).commit())
+            throw IllegalStateException("Could not persist the API key")
+        // Ensure no stale plaintext copy remains (only scrub once the secure write is persisted).
+        plain.edit { remove(prefKey) }
     }
 
     private fun securePrefs(context: Context): SharedPreferences? {

@@ -11,8 +11,6 @@ import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.utils.Log
 import java.io.File
 import java.io.RandomAccessFile
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineName
@@ -22,8 +20,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -56,11 +52,9 @@ class AudioRecorder(
 
     companion object {
         private const val TAG = "AudioRecorder"
-        private const val SAMPLE_RATE = 16000
+        private const val SAMPLE_RATE = AUDIO_SAMPLE_RATE
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
-        // Amplitude threshold (0..32767) separating silence from speech for auto-stop heuristic.
-        private const val SPEECH_AMPLITUDE_THRESHOLD = 300.0
     }
 
     private var audioRecord: AudioRecord? = null
@@ -190,62 +184,36 @@ class AudioRecorder(
     }
 
     private suspend fun runRecordingLoop(bufferSize: Int) {
-        val buffer = ByteArray(bufferSize)
-        var hasSpoken = false
-        var silenceRunStartMs = 0L
-        while (isRecording && currentCoroutineContext().isActive) {
-            if (SystemClock.elapsedRealtime() - recordingStartMs > maxDurationMs) {
+        val loop = AudioCaptureLoop(
+            maxDurationMs = maxDurationMs,
+            autoStopSilenceMs = autoStopSilenceMs,
+            inputGain = inputGain,
+            elapsedMs = { SystemClock.elapsedRealtime() - recordingStartMs },
+            read = { buf -> audioRecord?.read(buf, 0, buf.size) ?: AudioRecord.ERROR_INVALID_OPERATION },
+            write = { buf, len -> pcmOutputFile?.write(buf, 0, len) },
+            onChunk = { bytes, amplitude ->
+                pcmBytesWritten += bytes
+                currentAmplitude = amplitude
+                // Running mean for post-stop gate — avoids re-reading the whole file.
+                val samples = bytes / 2
+                amplitudeSum += (amplitude * samples).toLong()
+                amplitudeCount += samples
+            },
+        )
+        when (loop.run(ByteArray(bufferSize)) { isRecording }) {
+            CaptureEnd.MAX_DURATION -> {
                 isRecording = false
                 onMaxDurationReached?.invoke()
-                break
             }
-            val read = audioRecord?.read(buffer, 0, buffer.size) ?: AudioRecord.ERROR_INVALID_OPERATION
-            when {
-                read > 0 -> {
-                    if (inputGain != 1f) applyGain(buffer, read, inputGain)
-                    try {
-                        pcmOutputFile?.write(buffer, 0, read)
-                        pcmBytesWritten += read
-                    } catch (e: java.io.IOException) {
-                        Log.e(TAG, "Failed to write PCM chunk", e)
-                        lastCaptureTruncated = true
-                        isRecording = false
-                        break
-                    }
-                    val amp = chunkMeanAmplitude(buffer, read)
-                    currentAmplitude = amp
-                    // Running mean for post-stop gate — avoids re-reading the whole file.
-                    val samples = read / 2
-                    amplitudeSum += (amp * samples).toLong()
-                    amplitudeCount += samples
-                    if (autoStopSilenceMs > 0L) {
-                        val now = SystemClock.elapsedRealtime()
-                        if (amp >= SPEECH_AMPLITUDE_THRESHOLD) {
-                            hasSpoken = true
-                            silenceRunStartMs = 0L
-                        } else if (hasSpoken) {
-                            if (silenceRunStartMs == 0L) silenceRunStartMs = now
-                            else if (now - silenceRunStartMs >= autoStopSilenceMs) {
-                                isRecording = false
-                                onAutoStopSilence?.invoke()
-                                break
-                            }
-                        }
-                    }
-                }
-                read == 0 -> Unit
-                read == AudioRecord.ERROR_DEAD_OBJECT -> {
-                    Log.e(TAG, "AudioRecord dead object, recording aborted")
-                    lastCaptureTruncated = true
-                    isRecording = false
-                    break
-                }
-                else -> {
-                    Log.e(TAG, "AudioRecord read error: $read")
-                    lastCaptureTruncated = true
-                    isRecording = false
-                }
+            CaptureEnd.SILENCE -> {
+                isRecording = false
+                onAutoStopSilence?.invoke()
             }
+            CaptureEnd.TRUNCATED -> {
+                isRecording = false
+                lastCaptureTruncated = true
+            }
+            CaptureEnd.STOPPED -> Unit
         }
     }
 
@@ -312,14 +280,14 @@ class AudioRecorder(
 
     private fun finalizeOutputFile(): File? {
         val pcmBytes = pcmBytesWritten
-        lastDurationMs = if (pcmBytes >= 2) (pcmBytes * 1000L) / (SAMPLE_RATE.toLong() * 2L) else 0L
-        lastMeanAmplitude = if (amplitudeCount > 0) amplitudeSum.toDouble() / amplitudeCount else 0.0
+        lastDurationMs = pcmDurationMs(pcmBytes, SAMPLE_RATE)
+        lastMeanAmplitude = meanAmplitude(amplitudeSum, amplitudeCount)
         currentAmplitude = 0.0
         val raf = pcmOutputFile
         pcmOutputFile = null
         recordingJob = null
 
-        if (cancelRequested || raf == null || pcmBytes < 2) {
+        if (cancelRequested || raf == null || !hasUsableAudio(pcmBytes)) {
             try { raf?.close() } catch (_: Throwable) {}
             if (outputFile.exists()) outputFile.delete()
             if (cancelRequested) resetCounters()
@@ -400,59 +368,8 @@ class AudioRecorder(
         agc = null
     }
 
-    /** Scales each 16-bit little-endian sample in place by [gain], clipping to the PCM16 range. */
-    private fun applyGain(buf: ByteArray, length: Int, gain: Float) {
-        var i = 0
-        val end = length - 1
-        while (i < end) {
-            val lo = buf[i].toInt() and 0xff
-            val hi = buf[i + 1].toInt()
-            val sample = ((hi shl 8) or lo).toShort().toInt()
-            val boosted = (sample * gain).toInt().coerceIn(-32768, 32767)
-            buf[i] = (boosted and 0xff).toByte()
-            buf[i + 1] = ((boosted shr 8) and 0xff).toByte()
-            i += 2
-        }
-    }
-
-    private fun chunkMeanAmplitude(buf: ByteArray, length: Int): Double {
-        if (length < 2) return 0.0
-        var sum = 0L
-        var count = 0
-        var i = 0
-        val end = length - 1
-        while (i < end) {
-            val lo = buf[i].toInt() and 0xff
-            val hi = buf[i + 1].toInt()
-            val signed = ((hi shl 8) or lo).toShort().toInt()
-            sum += if (signed < 0) -signed else signed
-            count++
-            i += 2
-        }
-        return if (count > 0) sum.toDouble() / count else 0.0
-    }
-
     private fun writeWavHeader(raf: RandomAccessFile, pcmSize: Int) {
-        val totalDataLen = pcmSize + 36
-        val byteRate = SAMPLE_RATE * 1 * 16 / 8
-        val header = ByteBuffer.allocate(WAV_HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN).apply {
-            put("RIFF".toByteArray())
-            putInt(totalDataLen)
-            put("WAVE".toByteArray())
-            put("fmt ".toByteArray())
-            putInt(16)
-            putShort(1)
-            putShort(1)
-            putInt(SAMPLE_RATE)
-            putInt(byteRate)
-            putShort(2)
-            putShort(16)
-            put("data".toByteArray())
-            putInt(pcmSize)
-        }
         raf.seek(0L)
-        raf.write(header.array())
+        raf.write(wavHeaderBytes(pcmSize, SAMPLE_RATE))
     }
 }
-
-private const val WAV_HEADER_SIZE = 44
