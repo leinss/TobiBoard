@@ -9,6 +9,16 @@ name: Self-hosted F-Droid repo
 #   FDROID_KEYSTORE_PASS  keystore password
 #   FDROID_KEY_PASS       key password (== keystore password for PKCS12)
 # and GitHub Pages set to "GitHub Actions" as its source.
+#
+# It also requires the `github-pages` environment to allow the ref this runs on. A
+# `release: published` event runs at refs/tags/<tag>, so the environment's deployment
+# branch policy needs BOTH entries:
+#   branch  main    for workflow_dispatch
+#   tag     v*      for release events
+# Without the tag entry the job is rejected before any step starts, with
+# "Tag "vX.Y.Z" is not allowed to deploy to github-pages due to environment protection
+# rules" — which is why every release event failed while manual dispatches passed. It
+# cannot be handled in this file; check the policy under Settings → Environments.
 
 on:
   release:

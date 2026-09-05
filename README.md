@@ -105,7 +105,26 @@ make fetch-native-libs   # downloads the sherpa-onnx AAR into app/libs/ (not ven
 
 The `sherpa-onnx` AAR is not committed to the repo; `make fetch-native-libs` downloads it (~54 MB) from the upstream sherpa-onnx GitHub release before the Gradle build can resolve it. `make build-fast` runs this step automatically.
 
-Needs JDK 17, Android SDK 35, NDK `28.0.13004108`. APK lands in `app/build/outputs/apk/debug/`.
+Needs JDK 17, Android SDK 36, NDK `28.0.13004108`. APK lands in `app/build/outputs/apk/debug/`.
+
+### Signed release builds
+
+`.github/workflows/build-release-apk.yml` signs the release APK with a keystore held in
+repository secrets. Four secrets are needed:
+
+| Secret | Contents |
+|---|---|
+| `KEYSTORE_BASE64` | the keystore file, base64-encoded (`base64 -i keystore.jks`) |
+| `KEYSTORE_PASSWORD` | keystore password |
+| `KEY_ALIAS` | alias of the signing key inside the keystore |
+| `KEY_PASSWORD` | password of that key |
+
+With `KEYSTORE_BASE64` unset the build job skips and the run is annotated, so a fork does
+not get a permanently red workflow.
+
+`make build-release` signs locally from environment variables instead, and takes the
+keystore as a **path** rather than base64: `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`,
+`KEY_ALIAS`, `KEY_PASSWORD`.
 
 <br>
 

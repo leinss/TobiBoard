@@ -53,6 +53,26 @@ gh secret set FDROID_KEY_PASS      --repo leinss/TobiBoard   # same password (PK
 
 Repo **Settings → Pages → Build and deployment → Source = GitHub Actions**.
 
+### 3b. Allow tag refs to deploy
+
+The publish job targets the `github-pages` environment. A `release: published` event
+runs at `refs/tags/<tag>`, so **Settings → Environments → github-pages → deployment
+branches and tags** must list both:
+
+| Type | Pattern | Needed for |
+|---|---|---|
+| Branch | `main` | `workflow_dispatch` |
+| Tag | `v*` | `release: published` |
+
+With only the branch entry, every release event is rejected before the first step runs:
+
+```
+Tag "v6.8.16" is not allowed to deploy to github-pages due to environment protection rules.
+```
+
+The workflow cannot catch that — the job never starts. If a release did not refresh the
+index, check this list first.
+
 ### 4. First run
 
 The `release: published` trigger only fires from the workflow on the **default

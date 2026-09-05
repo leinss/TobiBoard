@@ -31,10 +31,13 @@ EMULATOR := $(ANDROID_SDK_ROOT)/emulator/emulator
 ADB := $(ANDROID_SDK_ROOT)/platform-tools/adb
 
 # When both emulator and a wifi-paired phone are attached, `adb install` errors
-# with "more than one device". Pick the right serial per make target so the APK
-# never lands on the wrong device.
-ADB_PHONE_SERIAL = $$($(ADB) devices | awk '/_adb-tls-connect|adb-.*-.* / && !/emulator-/ {print $$1; exit}')
-ADB_SIM_SERIAL   = $$($(ADB) devices | awk '/^emulator-/ {print $$1; exit}')
+# with "more than one device", so each target picks a serial rather than letting adb
+# choose. ANDROID_SERIAL overrides both, following the adb convention: several
+# emulators can be attached at once and "the first emulator-* line in adb devices"
+# then silently targets whichever one booted first. Set it, and every target obeys
+# it, including the sim-* ones, so point it at an emulator before running those.
+ADB_PHONE_SERIAL = $$(if [ -n "$$ANDROID_SERIAL" ]; then echo "$$ANDROID_SERIAL"; else $(ADB) devices | awk '/_adb-tls-connect|adb-.*-.* / && !/emulator-/ {print $$1; exit}'; fi)
+ADB_SIM_SERIAL   = $$(if [ -n "$$ANDROID_SERIAL" ]; then echo "$$ANDROID_SERIAL"; else $(ADB) devices | awk '/^emulator-/ {print $$1; exit}'; fi)
 
 .PHONY: help
 help:
@@ -86,7 +89,7 @@ apk-release: build-release ## Build the signed release APK and print its path
 	@echo "  $(abspath $(APK_RELEASE))"
 
 .PHONY: clean
-clean: ## Wipe build outputs
+clean: $(SHERPA_ONNX_AAR) ## Wipe build outputs
 	./gradlew clean
 
 .PHONY: update-fork
@@ -310,15 +313,15 @@ uninstall: ## Remove the debug build from the device
 ## --- tests ----------------------------------------------------------------
 
 .PHONY: test-unit
-test-unit: ## Run JVM (Robolectric) unit tests
+test-unit: $(SHERPA_ONNX_AAR) ## Run JVM (Robolectric) unit tests
 	./gradlew :app:testDebugUnitTest
 
 .PHONY: test-managed
-test-managed: ## Run instrumentation tests on the Gradle Managed Device (headless)
+test-managed: $(SHERPA_ONNX_AAR) ## Run instrumentation tests on the Gradle Managed Device (headless)
 	./gradlew :app:pixel6Api34DebugAndroidTest
 
 .PHONY: test-connected
-test-connected: ## Run instrumentation tests on whatever device adb sees
+test-connected: $(SHERPA_ONNX_AAR) ## Run instrumentation tests on whatever device adb sees
 	./gradlew :app:connectedDebugAndroidTest
 
 ## --- composite flows ------------------------------------------------------
@@ -352,7 +355,7 @@ bundle-release: $(SHERPA_ONNX_AAR) ## Build the signed release AAB for Play Stor
 	@ls -1 app/build/outputs/bundle/release/*.aab
 
 .PHONY: lint
-lint: ## Run Android lint
+lint: $(SHERPA_ONNX_AAR) ## Run Android lint
 	./gradlew :app:lintDebug
 
 .PHONY: check
