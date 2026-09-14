@@ -1,0 +1,5 @@
+- Rebased on the latest upstream keyboard, picking up 19 releases of fixes.
+- Autocorrection no longer loses a correction when you type a space very fast.
+- The settings search no longer crashes, and results are grouped into cards.
+- TalkBack now announces when voice recording starts.
+- Voice input, the AI text fix and the encrypted clipboard are unchanged.
