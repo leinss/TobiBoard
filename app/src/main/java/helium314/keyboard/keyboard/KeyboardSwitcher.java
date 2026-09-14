@@ -13,7 +13,6 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.os.Looper;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -112,16 +111,10 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
         final boolean themeUpdated = updateKeyboardThemeAndContextThemeWrapper(
                 displayContext, KeyboardTheme.getKeyboardTheme(displayContext));
         if (themeUpdated) {
-            // Reloading the settings is only worth it when there is a view to rebuild from them.
-            // With no view yet — i.e. cold start — nothing has been built from the settings, and
-            // both later entry points reload anyway (onCreateInputView when mThemeNeedsReload is
-            // set, and onStartInputViewInternal for the first field), so this was one whole
-            // SettingsValues construction, colour table and punctuation tab thrown away.
-            if (mKeyboardView != null) {
-                Settings settings = Settings.getInstance();
-                settings.loadSettings(displayContext, settings.getCurrent().mLocale, settings.getCurrent().mInputAttributes);
+            Settings settings = Settings.getInstance();
+            settings.loadSettings(displayContext, settings.getCurrent().mLocale, settings.getCurrent().mInputAttributes);
+            if (mKeyboardView != null)
                 mLatinIME.setInputView(onCreateInputView(displayContext, mIsHardwareAcceleratedDrawingEnabled));
-            }
         } else if (mCurrentInputView != null && mLatinIME.hasSuggestionStripView()
                     == (Settings.getValues().mToolbarMode == ToolbarMode.HIDDEN || mLatinIME.isEmojiSearch())) {
             mLatinIME.updateSuggestionStripView(mCurrentInputView);
@@ -161,6 +154,7 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
         mKeyboardLayoutSet = builder.setKeyboardGeometry(keyboardWidth, keyboardHeight)
                 .setSubtype(mRichImm.getCurrentSubtype())
                 .setVoiceInputKeyEnabled(settingsValues.mShowsVoiceInputKey)
+                .setSensitiveField(settingsValues.mSensitiveField)
                 .setNumberRowEnabled(settingsValues.mShowsNumberRow)
                 .setNumberRowInSymbolsEnabled(settingsValues.mShowsNumberRowInSymbols)
                 .setLanguageSwitchKeyEnabled(settingsValues.isLanguageSwitchKeyEnabled())
@@ -178,6 +172,7 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
                 mKeyboardLayoutSet = builder.setKeyboardGeometry(keyboardWidth, keyboardHeight)
                         .setSubtype(RichInputMethodSubtype.Companion.get(defaults))
                         .setVoiceInputKeyEnabled(settingsValues.mShowsVoiceInputKey)
+                        .setSensitiveField(settingsValues.mSensitiveField)
                         .setNumberRowEnabled(settingsValues.mShowsNumberRow)
                         .setNumberRowInSymbolsEnabled(settingsValues.mShowsNumberRowInSymbols)
                         .setLanguageSwitchKeyEnabled(settingsValues.isLanguageSwitchKeyEnabled())
@@ -191,6 +186,10 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
                 Log.e(TAG, "even fallback to defaults failed: " + e2.mKeyboardId, e2.getCause());
             }
         }
+    }
+
+    public void clearShiftLock() {
+        mState.clearShiftLock();
     }
 
     public void saveKeyboardState() {
@@ -220,9 +219,7 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
         mCurrentInputView.setKeyboardTopPadding(newKeyboard.mTopPadding);
         keyboardView.setKeyPreviewPopupEnabled(currentSettingsValues.mKeyPreviewPopupOn);
         keyboardView.setKeyPressRippleEnabled(currentSettingsValues.mKeyPressRippleEnabled);
-        // Was mRichImm.isShortcutImeReady(), i.e. "does some other IME offer a voice shortcut" —
-        // which has nothing to do with whether this keyboard should draw its own mic key.
-        keyboardView.updateShortcutKey(currentSettingsValues.mShowsVoiceInputKey);
+        keyboardView.updateShortcutKey(mRichImm.isShortcutImeReady());
         final boolean subtypeChanged = (oldKeyboard == null) || !newKeyboard.mId.mSubtype.equals(oldKeyboard.mId.mSubtype);
         final int languageOnSpacebarFormatType = LanguageOnSpacebarUtils.getLanguageOnSpacebarFormatType(newKeyboard.mId.mSubtype);
         final boolean hasMultipleEnabledIMEsOrSubtypes = mRichImm.hasMultipleEnabledIMEsOrSubtypes(true);
@@ -230,7 +227,7 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
 
         if (currentSettingsValues.needsToLookupSuggestions()
                                     && (currentSettingsValues.mInlineEmojiSearch || currentSettingsValues.mSuggestEmojis)) {
-            EmojiParserKt.preloadEmojiSkinToneVersions(mThemeContext);
+            EmojiParserKt.loadEmojiDefaultVersionsAndPopupSpecs(mThemeContext);
         }
     }
 
@@ -387,14 +384,12 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
         mKeyboardView.setVisibility(View.GONE);
         mEmojiTabStripView.setVisibility(View.GONE);
         mSuggestionStripView.setVisibility(View.GONE);
-        // No strip above the clipboard panel: the panel carries its own top bar with search, clear
-        // all and close, and is measured a strip taller so the clips get that row.
-        mStripContainer.setVisibility(View.GONE);
-        mClipboardStripScrollView.setVisibility(View.GONE);
+        mStripContainer.setVisibility(getSecondaryStripVisibility());
+        mClipboardStripScrollView.post(() -> mClipboardStripScrollView.fullScroll(HorizontalScrollView.FOCUS_RIGHT));
+        mClipboardStripScrollView.setVisibility(View.VISIBLE);
         mEmojiPalettesView.setVisibility(View.GONE);
         mClipboardHistoryView.startClipboardHistory(mLatinIME.getClipboardHistoryManager(), mKeyboardView.getKeyVisualAttribute(),
-                mLatinIME.getCurrentInputEditorInfo(), mLatinIME.mKeyboardActionListener,
-                mLatinIME.getTranslateManager());
+                mLatinIME.getCurrentInputEditorInfo(), mLatinIME.mKeyboardActionListener);
         mClipboardHistoryView.setVisibility(View.VISIBLE);
     }
 
@@ -570,13 +565,6 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
      * @param briefToast If true, the toast duration will be short; otherwise, it will last longer.
      */
     public void showToast(final String text, final boolean briefToast){
-        // Callers include the suggestion worker thread (InputLogic.getSuggestedWords catches there
-        // and reports through here). Both branches below need the main thread: Toast needs a
-        // looper, and showFakeToast touches an attached View.
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            mLatinIME.mHandler.post(() -> showToast(text, briefToast));
-            return;
-        }
         // In API 32 and below, toasts can be shown without a notification permission.
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
             final int toastLength = briefToast ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG;
@@ -595,8 +583,7 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
 
     // Displays a toast-like message with the provided text for a specified duration.
     private void showFakeToast(final String text, final int timeMillis) {
-        // Keyboard load can fail before onCreateInputView has resolved the view.
-        if (mFakeToastView == null || mFakeToastView.getVisibility() == View.VISIBLE) return;
+        if (mFakeToastView.getVisibility() == View.VISIBLE) return;
 
         final Drawable appIcon = mFakeToastView.getCompoundDrawables()[0];
         if (appIcon != null) {
@@ -727,12 +714,8 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
         final SharedPreferences prefs = KtxKt.prefs(displayContext);
         if (mSuggestionStripView != null)
             prefs.unregisterOnSharedPreferenceChangeListener(mSuggestionStripView);
-        if (mClipboardHistoryView != null) {
+        if (mClipboardHistoryView != null)
             prefs.unregisterOnSharedPreferenceChangeListener(mClipboardHistoryView);
-            // The outgoing view still holds the DAO history listener, which blocks clip retention
-            // for the whole process, and the global typing listener if the panel editor was open.
-            mClipboardHistoryView.stopClipboardHistory();
-        }
         if (mThemeNeedsReload) // necessary in some cases (e.g. theme switch) when mThemeNeedsReload is set before first keyboard load
             Settings.getInstance().loadSettings(displayContext, Settings.getValues().mLocale, Settings.getValues().mInputAttributes);
 

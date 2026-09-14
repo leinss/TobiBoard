@@ -1,123 +1,146 @@
 <div align="center">
 
-<img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="WisprBoard" width="140" />
+<img src="docs/assets/readme-icon.png" alt="TobiBoard" width="132" />
 
-# WisprBoard
+# TobiBoard
 
-### An open-source keyboard with AI superpowers, built for people who care about privacy.
+### Everything runs on your device. Cloud is optional.
 
-An open-source Android keyboard with **AI Voice-to-Text** and **AI Text Fix**. Bring your own [OpenRouter](https://openrouter.ai/) or [PayPerQ](https://ppq.ai/) key; OpenRouter users can keep **zero data retention on by default**.
+[HeliBoard](https://github.com/Helium314/HeliBoard) is already the best privacy-respecting Android keyboard. TobiBoard keeps everything that makes it good and adds what was missing: **on-device voice-to-text**, **on-device text fix**, and a **proper clipboard manager** — all running locally, no account, no key required. Cloud providers are available if you want more powerful models, but you never need one.
 
-[<img src="https://user-images.githubusercontent.com/663460/26973090-f8fdc986-4d14-11e7-995a-e7c5e79ed925.png" alt="Get APK from GitHub" height="64">](https://github.com/Turtlecute33/WisprBoard/releases/latest)
+Along the way: fixed the caps-lock-gets-stuck bug, fixed the keyboard-stops-typing bug, and hardened the input connection so you never have to hide-and-reshow the keyboard to get it working again.
+
+**[Project page → leinss.xyz/projects/TobiBoard](https://leinss.xyz/projects/TobiBoard/)**
+
+[<img src="https://user-images.githubusercontent.com/663460/26973090-f8fdc986-4d14-11e7-995a-e7c5e79ed925.png" alt="Get APK from GitHub" height="64">](https://github.com/leinss/TobiBoard/releases/latest)
 
 </div>
 
 <br>
 
-## Why I built this
-
-I tried Wispr Flow, the trendy dictation app everyone talks about. The Android version is rough: slow, account-locked, and with a very clunky and low-quality user experience. I wanted the same idea (talk, get clean text) but with a better UX and more customization.
-
-So I forked [HeliBoard](https://github.com/Helium314/HeliBoard) and added two AI buttons. You choose OpenRouter or PayPerQ, paste your own API key, and pick the speech or text model you want. WisprBoard asks OpenRouter for zero-data-retention endpoints by default, so nothing about you is logged or trained on when that route is available. I also polished and optimized other minor flaws and bugs of the HeliBoard codebase, offering a smoother experience and more secure and private backup and restore handling.
-
-No subscription. No account. No telemetry. Just a keyboard.
-
-<br>
-
 ## Voice-to-Text
 
-**For when you'd rather talk than type, but still want to send text.**
+**Runs on your device. No account. No key. No audio leaves your phone.**
 
-You're walking down the street. You're somewhere a voice note would be rude or out of place. Long-press Return, tap the mic, speak. Your words land in the chat as polished text. The recipient gets a normal message. You didn't thumb-type a paragraph.
+Long-press Return, tap the mic, speak. Your words land as polished text. Uses an on-device NVIDIA Parakeet TDT 0.6B v3 model by default. The model is multilingual and the app applies no language gate. Nothing is sent anywhere. If you want a more powerful cloud model, switch to OpenRouter or PayPerQ and bring your own key.
 
-- Pick OpenRouter chat audio models or PayPerQ speech models such as Nova
-- Add a custom prompt or vocabulary so it nails names and jargon
-- The local recording is deleted the moment it's sent
-
-<br>
-
-## AI Text Fix
-
-**For when you're writing in a language that isn't yours, or just typed too fast.**
-
-You're chatting in English, Italian, German, whatever isn't your strongest. You hammered out a rough draft. Select it, long-press Return, hit Fix. It comes back as a clean, well-formatted message in the same language. Typos gone. Grammar tidy. Tone intact.
-
-- Works in every language your model supports
-- Good for typos, clumsy phrasing, or shifting tone (formal ↔ casual)
-- Review the message and decide if you want to replace the original one
+- **On-device by default** — Parakeet runs locally, audio never leaves your phone
+- One-time model download of 670 MB on first use, from Hugging Face over Wi-Fi
+- Cloud providers (OpenRouter, PayPerQ) available for larger models — your choice
+- A custom transcription prompt is available on the cloud providers, so they get names and jargon right. The on-device model takes no prompt.
 
 <br>
 
-## Offline speech recognition
+## Text Fix
 
-Prefer that your voice never leaves the phone? Set *WisprBoard Settings → Voice Input → Speech engine* to **On-device**. Dictation then runs through Android's offline recogniser: no API key, no connection, no request. Accuracy is below a cloud model, and auto-polish is skipped — sending the transcript to an LLM afterwards would defeat the point. Needs Android 12 or newer and the offline language pack for the language you dictate in.
+**Rewrites selected text locally. No key required.**
 
-If your device has no offline recogniser, the option cannot be selected — WisprBoard shows you how to install one instead of leaving you on an engine that fails at every dictation.
+Select rough text, long-press Return, hit Fix. It comes back clean in the same language. Runs on-device by default — no API key, no data sent anywhere. Opt into a cloud model if you want something more capable.
 
-Cloud AI stays the default, and Text Fix is unaffected either way.
-
-<br>
-
-## Zero Data Retention
-
-OpenRouter is the default provider, and WisprBoard asks OpenRouter for **zero-data-retention endpoints by default**. When your model offers a [ZDR route](https://openrouter.ai/docs/use-cases/zero-data-retention), your audio and text aren't logged, stored, or used for training. If a model doesn't offer one, WisprBoard tells you and falls back so things still work. You can turn the setting off if you'd rather.
-
-PayPerQ support uses PayPerQ's own API endpoints and policies. Your provider API keys are encrypted with the Android Keystore, excluded from cloud backups, and never written to logs. AI is opt-in: both features stay off until you paste a key in.
+- **On-device by default** — local model, nothing uploaded
+- Works in any language your model supports
+- Cleans typos and awkward phrasing. Both fix prompts are editable, so you can point one at tone instead.
+- You review the rewrite before replacing the original
 
 <br>
 
-## WisprBoard vs HeliBoard
+## Clipboard history
 
-|                                         | HeliBoard | WisprBoard |
-| --------------------------------------- | :-------: | :--------: |
-| Everything HeliBoard does               |     ✅     |     ✅      |
-| Installs alongside HeliBoard            |     —     |     ✅      |
-| Voice-to-text via OpenRouter or PayPerQ |     —     |     ✅      |
-| Offline on-device voice-to-text         |     —     |     ✅      |
-| Text Fix (rewrite selected text)        |     —     |     ✅      |
-| Zero Data Retention requested by default where supported |     —     |     ✅      |
-| API key encrypted on-device             |     —     |     ✅      |
+**Stays on your device. Always.**
 
-If you don't want AI features, stay on HeliBoard. It's wonderful as-is.
+Long-press the clipboard icon to browse everything you've copied. Every entry shows when it was copied and how many times you've pasted it. Long-press any entry to pin it to the top or delete it. Clipboard data is stored only on your device, in the app's private storage, and is excluded from all backups — it is never uploaded or backed up to the cloud. The copied text and your labels are encrypted at rest with AES-256-GCM using an Android Keystore key, hardware-backed where the device supports it, on Android 6 and newer. If the Keystore cannot produce a key, the clip is dropped rather than stored in plain text.
+
+- Search, label, and manage entries from **Settings → Preferences → Manage clipboard history**
+- Pin entries that you paste often so they're always at the top
+- Add labels to find things later
 
 <br>
 
-## Privacy footnote
+## When you do go cloud
 
-WisprBoard has no backend, no analytics, no tracking. Once your audio or selected text reaches OpenRouter, PayPerQ, or the underlying model provider, their policies apply. Read [OpenRouter's policy](https://openrouter.ai/privacy) and [PayPerQ's terms](https://ppq.ai/terms) before pointing this at anything sensitive.
+If you choose a cloud provider, TobiBoard asks OpenRouter for **[zero-data-retention endpoints](https://openrouter.ai/docs/use-cases/zero-data-retention) by default** — your audio and text aren't logged, stored, or used for training when the model supports it. API keys are encrypted with the Android Keystore, excluded from cloud backups, and never written to logs.
 
+<br>
+
+## TobiBoard vs HeliBoard
+
+|                                              | HeliBoard | TobiBoard |
+| -------------------------------------------- | :-------: | :--------: |
+| Everything HeliBoard does                    |     ✅     |     ✅      |
+| Installs alongside HeliBoard                 |     —     |     ✅      |
+| On-device voice-to-text (no key needed)      |     —     |     ✅      |
+| On-device text fix (no key needed)           |     —     |     ✅      |
+| Cloud voice/text via OpenRouter or PayPerQ   |     —     |     ✅      |
+| Clipboard history with use counts + labels   |     —     |     ✅      |
+| Zero Data Retention requested where supported |     —     |     ✅      |
+| API key encrypted on-device                  |     —     |     ✅      |
 
 <br>
 
 ## Get started
 
-1. **Download** the APK from [Releases](https://github.com/Turtlecute33/WisprBoard/releases/latest).
-2. **Enable** WisprBoard in *Settings → System → Keyboards*.
-3. **Pick a speech engine** in *WisprBoard Settings → Voice Input*. On-device needs nothing else; Cloud AI needs a provider and an OpenRouter or PayPerQ API key.
-4. **Long-press Return**, tap the mic, start talking.
+1. **Install** — add the F-Droid repo `https://leinss.xyz/TobiBoard/repo` to your F-Droid client for automatic updates, or download the APK from [Releases](https://github.com/leinss/TobiBoard/releases/latest).
+2. **Enable** TobiBoard in *Android Settings → General Management → Keyboard list and default → Add TobiBoard*, then select it as your default.
+3. **Turn on what you want** — voice input and text fix both ship **off**. Enable them in TobiBoard settings; the on-device models are a one-time download of 670 MB (speech) and 547 MB to 1.6 GB (text fix, depending on the model you pick), over Wi-Fi.
 
-WisprBoard installs side-by-side with HeliBoard, so you can keep both.
+> **Want a cloud model?** TobiBoard settings → Voice Input → Provider → choose OpenRouter or PayPerQ → paste your API key. The key field only appears once you select a cloud provider.
+
+TobiBoard installs side-by-side with HeliBoard, so you can keep both.
+
+<br>
+
+## Privacy
+
+Typing, glide, autocorrect, and dictionaries are **fully on-device**, exactly like HeliBoard. Voice and text fix are **also on-device by default**. If you switch to a cloud provider, audio or text is sent to that provider over HTTPS — TobiBoard has no backend, no analytics, no tracking. Once data reaches your provider, their policy applies. Read [OpenRouter's policy](https://openrouter.ai/privacy) and [PayPerQ's terms](https://ppq.ai/terms) before using them with anything sensitive.
 
 <br>
 
 ## Build from source
 
 ```bash
-git clone https://github.com/Turtlecute33/WisprBoard.git
-cd WisprBoard
+git clone https://github.com/leinss/TobiBoard.git
+cd TobiBoard
+make fetch-native-libs   # downloads the sherpa-onnx AAR into app/libs/ (not vendored)
 ./gradlew assembleDebug
 ```
 
-Needs JDK 17, Android SDK 35, NDK `28.0.13004108`. APK lands in `app/build/outputs/apk/debug/`.
+The `sherpa-onnx` AAR is not committed to the repo; `make fetch-native-libs` downloads it (~54 MB) from the upstream sherpa-onnx GitHub release before the Gradle build can resolve it. `make build-fast` runs this step automatically.
+
+Needs JDK 17, Android SDK 36, NDK `28.0.13004108`. APK lands in `app/build/outputs/apk/debug/`.
+
+### Signed release builds
+
+`.github/workflows/build-release-apk.yml` signs the release APK with a keystore held in
+repository secrets. Four secrets are needed:
+
+| Secret | Contents |
+|---|---|
+| `KEYSTORE_BASE64` | the keystore file, base64-encoded (`base64 -i keystore.jks`) |
+| `KEYSTORE_PASSWORD` | keystore password |
+| `KEY_ALIAS` | alias of the signing key inside the keystore |
+| `KEY_PASSWORD` | password of that key |
+
+With `KEYSTORE_BASE64` unset the build job skips and the run is annotated, so a fork does
+not get a permanently red workflow.
+
+`make build-release` signs locally from environment variables instead, and takes the
+keystore as a **path** rather than base64: `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`,
+`KEY_ALIAS`, `KEY_PASSWORD`.
 
 <br>
 
 ## Open source, top to bottom
 
-WisprBoard stands on the shoulders of giants:
+TobiBoard stands on the shoulders of giants:
 
 - [**HeliBoard**](https://github.com/Helium314/HeliBoard), the keyboard this fork is built on.
 - [**OpenBoard**](https://github.com/openboard-team/openboard) and [**AOSP LatinIME**](https://android.googlesource.com/platform/packages/inputmethods/LatinIME/), the foundation of both.
+
+<br>
+
+## Support
+
+TobiBoard is free and open-source — no ads, no tracking, no paid tiers. If it's useful to you, you can support continued development on [Ko-fi](https://ko-fi.com/leinss). Thank you 🙏
 
 <br>
 
@@ -129,5 +152,5 @@ Bundled dictionaries come from [Helium314/aosp-dictionaries](https://codeberg.or
 
 <div align="center">
 <br>
-<sub>Code changes are AI-assisted but human-reviewed and tested before release; product and architecture decisions are mine. Even with Zero Data Retention, always minimize sensitive data disclosure to 3rd parties.</sub>
+<sub>Code changes are AI-assisted but human-reviewed and tested before release; product and architecture decisions are mine.</sub>
 </div>

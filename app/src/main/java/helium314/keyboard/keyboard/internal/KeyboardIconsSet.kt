@@ -84,6 +84,7 @@ class KeyboardIconsSet private constructor() {
         const val NAME_RESIZE_ONEHANDED_KEY = "resize_onehanded_key"
         const val NAME_TOOLBAR_KEY = "toolbar_key"
         const val NAME_BIN = "bin"
+        const val NAME_ADD_TO_DICTIONARY = "add_to_dictionary"
         const val NAME_TEXT_FIX_KEY = "text_fix_key"
         const val NAME_TEXT_FIX_2_KEY = "text_fix_2_key"
         const val NAME_STT_ACTION_KEY = "stt_action_key"
@@ -129,6 +130,7 @@ class KeyboardIconsSet private constructor() {
             NAME_RESIZE_ONEHANDED_KEY to        R.drawable.ic_arrow_horizontal,
             NAME_TOOLBAR_KEY to                 R.drawable.ic_arrow_right,
             NAME_BIN to                         R.drawable.ic_bin,
+            NAME_ADD_TO_DICTIONARY to           R.drawable.ic_add_to_dictionary,
             NAME_TEXT_FIX_KEY to                R.drawable.ic_text_fix,
             NAME_TEXT_FIX_2_KEY to              R.drawable.ic_text_fix_2,
             NAME_STT_ACTION_KEY to              R.drawable.ic_stt_voice,
@@ -151,6 +153,8 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.INCOGNITO -> R.drawable.sym_keyboard_incognito_holo
                     ToolbarKey.AUTOCORRECT -> R.drawable.ic_autocorrect
                     ToolbarKey.CLEAR_CLIPBOARD -> R.drawable.sym_keyboard_clear_clipboard_holo
+                    ToolbarKey.ADD_TO_DICTIONARY -> R.drawable.ic_add_to_dictionary
+                    ToolbarKey.TEXT_FIX -> R.drawable.ic_text_fix
                     ToolbarKey.CLOSE_HISTORY -> R.drawable.ic_close
                     ToolbarKey.EMOJI -> R.drawable.sym_keyboard_smiley_holo
                     ToolbarKey.LEFT -> R.drawable.ic_dpad_left
@@ -194,6 +198,7 @@ class KeyboardIconsSet private constructor() {
             NAME_RESIZE_ONEHANDED_KEY to        R.drawable.ic_arrow_horizontal,
             NAME_TOOLBAR_KEY to                 R.drawable.ic_arrow_right,
             NAME_BIN to                         R.drawable.ic_bin,
+            NAME_ADD_TO_DICTIONARY to           R.drawable.ic_add_to_dictionary,
             NAME_TEXT_FIX_KEY to                R.drawable.ic_text_fix,
             NAME_TEXT_FIX_2_KEY to              R.drawable.ic_text_fix_2,
             NAME_STT_ACTION_KEY to              R.drawable.ic_stt_voice,
@@ -216,6 +221,8 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.INCOGNITO -> R.drawable.sym_keyboard_incognito_lxx
                     ToolbarKey.AUTOCORRECT -> R.drawable.ic_autocorrect
                     ToolbarKey.CLEAR_CLIPBOARD -> R.drawable.sym_keyboard_clear_clipboard_lxx
+                    ToolbarKey.ADD_TO_DICTIONARY -> R.drawable.ic_add_to_dictionary
+                    ToolbarKey.TEXT_FIX -> R.drawable.ic_text_fix
                     ToolbarKey.CLOSE_HISTORY -> R.drawable.ic_close
                     ToolbarKey.EMOJI -> R.drawable.sym_keyboard_smiley_lxx
                     ToolbarKey.LEFT -> R.drawable.ic_dpad_left
@@ -259,6 +266,7 @@ class KeyboardIconsSet private constructor() {
             NAME_RESIZE_ONEHANDED_KEY to        R.drawable.ic_arrow_horizontal_rounded,
             NAME_TOOLBAR_KEY to                 R.drawable.ic_arrow_right_rounded,
             NAME_BIN to                         R.drawable.ic_bin_rounded,
+            NAME_ADD_TO_DICTIONARY to           R.drawable.ic_add_to_dictionary,
             NAME_TEXT_FIX_KEY to                R.drawable.ic_text_fix,
             NAME_TEXT_FIX_2_KEY to              R.drawable.ic_text_fix_2,
             NAME_STT_ACTION_KEY to              R.drawable.ic_stt_voice,
@@ -281,6 +289,8 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.INCOGNITO -> R.drawable.sym_keyboard_incognito_lxx
                     ToolbarKey.AUTOCORRECT -> R.drawable.ic_autocorrect_rounded
                     ToolbarKey.CLEAR_CLIPBOARD -> R.drawable.sym_keyboard_clear_clipboard_rounded
+                    ToolbarKey.ADD_TO_DICTIONARY -> R.drawable.ic_add_to_dictionary
+                    ToolbarKey.TEXT_FIX -> R.drawable.ic_text_fix
                     ToolbarKey.CLOSE_HISTORY -> R.drawable.ic_close_rounded
                     ToolbarKey.EMOJI -> R.drawable.sym_keyboard_smiley_rounded
                     ToolbarKey.LEFT -> R.drawable.ic_dpad_left_rounded

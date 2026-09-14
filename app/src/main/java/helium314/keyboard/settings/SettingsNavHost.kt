@@ -21,11 +21,13 @@ import helium314.keyboard.latin.settings.getTransitionAnimationScale
 import helium314.keyboard.settings.screens.AboutScreen
 import helium314.keyboard.settings.screens.AdvancedSettingsScreen
 import helium314.keyboard.settings.screens.AppearanceScreen
+import helium314.keyboard.settings.screens.ClipboardManagementScreen
 import helium314.keyboard.settings.screens.ColorsScreen
 import helium314.keyboard.settings.screens.DebugScreen
 import helium314.keyboard.settings.screens.DictionaryScreen
 import helium314.keyboard.settings.screens.GestureTypingScreen
 import helium314.keyboard.settings.screens.LanguageScreen
+import helium314.keyboard.settings.screens.LocalModelsScreen
 import helium314.keyboard.settings.screens.MainSettingsScreen
 import helium314.keyboard.settings.screens.PersonalDictionariesScreen
 import helium314.keyboard.settings.screens.PersonalDictionaryScreen
@@ -35,7 +37,6 @@ import helium314.keyboard.settings.screens.SubtypeScreen
 import helium314.keyboard.settings.screens.TextCorrectionScreen
 import helium314.keyboard.settings.screens.ToolbarScreen
 import helium314.keyboard.settings.screens.TextFixScreen
-import helium314.keyboard.settings.screens.TranslateScreen
 import helium314.keyboard.settings.screens.VoiceScreen
 import helium314.keyboard.settings.screens.gesturedata.GestureDataScreen
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,7 +75,7 @@ fun SettingsNavHost(
                 onClickToolbar = { navController.navigate(SettingsDestination.Toolbar) },
                 onClickVoice = { navController.navigate(SettingsDestination.Voice) },
                 onClickTextFix = { navController.navigate(SettingsDestination.TextFix) },
-                onClickTranslate = { navController.navigate(SettingsDestination.Translate) },
+                onClickLocalModels = { navController.navigate(SettingsDestination.LocalModels) },
                 onClickGestureTyping = { navController.navigate(SettingsDestination.GestureTyping) },
                 onClickDataGathering = { navController.navigate(SettingsDestination.DataGathering) },
                 onClickAdvanced = { navController.navigate(SettingsDestination.Advanced) },
@@ -103,8 +104,8 @@ fun SettingsNavHost(
         composable(SettingsDestination.TextFix) {
             TextFixScreen(onClickBack = ::goBack)
         }
-        composable(SettingsDestination.Translate) {
-            TranslateScreen(onClickBack = ::goBack)
+        composable(SettingsDestination.LocalModels) {
+            LocalModelsScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.GestureTyping) {
             GestureTypingScreen(onClickBack = ::goBack)
@@ -145,6 +146,9 @@ fun SettingsNavHost(
         }
         composable(SettingsDestination.Layouts) {
             SecondaryLayoutScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.ClipboardManagement) {
+            ClipboardManagementScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.Colors + "{theme}") {
             ColorsScreen(isNight = false, theme = it.arguments?.getString("theme"), onClickBack = ::goBack)
@@ -187,7 +191,7 @@ object SettingsDestination {
     const val Toolbar = "toolbar"
     const val Voice = "voice"
     const val TextFix = "text_fix"
-    const val Translate = "translate"
+    const val LocalModels = "local_models"
     const val GestureTyping = "gesture_typing"
     const val DataGathering = "data_gathering" // remove when data gathering phase is done (end of 2026 latest)
     const val DataReview = "data_review" // remove when data gathering phase is done (end of 2026 latest)
@@ -202,6 +206,7 @@ object SettingsDestination {
     const val Subtype = "subtype/"
     const val Layouts = "layouts"
     const val Dictionaries = "dictionaries"
+    const val ClipboardManagement = "clipboard_management"
     val navTarget = MutableStateFlow<SettingsNavigationRequest?>(null)
 
     private val nextNavigationId = AtomicLong(0L)

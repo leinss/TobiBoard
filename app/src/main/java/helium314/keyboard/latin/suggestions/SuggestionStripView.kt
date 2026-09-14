@@ -6,9 +6,11 @@
 package helium314.keyboard.latin.suggestions
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
+import android.widget.Toast
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -26,6 +28,7 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
@@ -37,6 +40,7 @@ import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
 import helium314.keyboard.latin.AudioAndHapticFeedbackManager
 import helium314.keyboard.latin.dictionary.Dictionary
 import helium314.keyboard.latin.R
+import helium314.keyboard.latin.ReportConfig
 import helium314.keyboard.latin.SuggestedWords
 import helium314.keyboard.latin.SuggestedWords.SuggestedWordInfo
 import helium314.keyboard.latin.common.ColorType
@@ -61,8 +65,9 @@ import helium314.keyboard.latin.utils.removeFirst
 import helium314.keyboard.latin.utils.removePinnedKey
 import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
 import helium314.keyboard.latin.voice.RecordingOverlayView
+import helium314.keyboard.latin.voice.TextFixExpandedPopup
 import helium314.keyboard.latin.voice.TextFixOverlayView
-import helium314.keyboard.latin.voice.TranslateOverlayView
+import helium314.keyboard.latin.voice.UndoBarView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.min
@@ -86,6 +91,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         fun pickSuggestionManually(word: SuggestedWordInfo?)
         fun onCodeInput(primaryCode: Int, x: Int, y: Int, isKeyRepeat: Boolean)
         fun removeSuggestion(word: String?)
+        fun addToDictionary(word: String?)
         fun removeExternalSuggestions()
         fun onSwipeDownOnToolbar()
     }
@@ -139,23 +145,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private val defaultToolbarBackground: Drawable = toolbarExpandKey.background
     private val enabledToolKeyBackground = GradientDrawable()
     private var direction = 1 // 1 if LTR, -1 if RTL
-
-    /**
-     * Cached lock-screen state. [isDeviceLocked] is a synchronous binder round trip to
-     * system_server, and it was called once from [setToolbarVisibility] and once from [updateKeys]
-     * on *every* suggestion refresh — up to two IPCs per keystroke at the strip's 100 ms cadence,
-     * on the typing thread.
-     *
-     * Declared here rather than after the init blocks on purpose: `init` calls both of those
-     * methods, and a field initialised later would read `false` during construction and hide the
-     * toolbar on a locked device.
-     *
-     * Refreshed from [refreshLockedState], not on a TTL — the value gates a privacy check, so it
-     * must never be allowed to go stale by accident.
-     */
-    private var deviceLocked = isDeviceLocked(context)
-    /** Last requested toolbar visibility, so an unlock can restore what the user actually had. */
-    private var toolbarWanted = false
 
     private val toolbarKeyLayoutParams = LinearLayout.LayoutParams(
         resources.getDimensionPixelSize(R.dimen.config_suggestions_strip_edge_key_width),
@@ -259,9 +248,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setToolbarVisibility(toolbarVisible: Boolean) {
-        toolbarWanted = toolbarVisible
         // avoid showing toolbar keys when locked
-        val locked = deviceLocked
+        val locked = isDeviceLocked(context)
         pinnedKeys.isVisible = !locked && !toolbarVisible
         suggestionsStrip.isVisible = locked || !toolbarVisible
         toolbarContainer.isVisible = !locked && toolbarVisible
@@ -276,10 +264,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setSuggestions(suggestions: SuggestedWords, isRtlLanguage: Boolean) {
-        // A voice / text fix / translate overlay owns the strip until it is dismissed. Clearing it
-        // for a routine suggestion refresh detached the overlay and left the feature running with
-        // no visible indicator or button.
-        if (hasOverlay) return
         clear()
         setRtl(isRtlLanguage)
         suggestedWords = suggestions
@@ -288,11 +272,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         )
         isExternalSuggestionVisible = false
         updateKeys()
-        // Typing refreshes the strip on every keystroke; fading each of those refreshes
-        // allocates an animator plus a hardware layer in the most latency-sensitive path in
-        // the app, and mostly animates flicker since every word changes anyway. Fade only
-        // non-typing updates (predictions after commit, recorrection, batch results).
-        if (suggestions.mInputStyle != SuggestedWords.INPUT_STYLE_TYPING) animateSuggestionsIn()
+        animateSuggestionsIn()
     }
 
     // Gentle, fast fade so refreshed suggestions ease in instead of hard-swapping on every keystroke.
@@ -311,11 +291,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
-        if (hasOverlay) return // clipboard chips and inline autofill must not evict a live overlay
-        attachExternalSuggestionView(view, addCloseButton)
-    }
-
-    private fun attachExternalSuggestionView(view: View?, addCloseButton: Boolean) {
         clear()
         isExternalSuggestionVisible = true
 
@@ -339,36 +314,16 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         if (Settings.getValues().mAutoHideToolbar) setToolbarVisibility(false)
     }
 
-    // --- Shared overlay plumbing (voice, text fix, translate) ---
-
-    /** Toolbar state to put back once the overlay goes; null while no overlay is installed. */
-    private var toolbarVisibleBeforeOverlay: Boolean? = null
-
-    private val hasOverlay get() = recordingOverlay != null || textFixOverlay != null || translateOverlay != null
-
-    /**
-     * Installs an overlay and makes sure it is actually on screen. These overlays are the only
-     * surface their feature has, so — unlike a clipboard chip — they must show even when the
-     * toolbar is expanded, which hides [suggestionsStrip] entirely.
-     */
-    private fun showOverlay(view: View) {
-        if (toolbarVisibleBeforeOverlay == null) toolbarVisibleBeforeOverlay = toolbarContainer.isVisible
-        setToolbarVisibility(false)
-        pinnedKeys.isVisible = false // an unweighted sibling would squeeze the overlay off-screen
-        attachExternalSuggestionView(view, false)
-    }
-
-    private fun hideOverlay() {
-        clear()
-        isExternalSuggestionVisible = false
-        toolbarVisibleBeforeOverlay?.let { setToolbarVisibility(it) }
-        toolbarVisibleBeforeOverlay = null
-    }
-
     private var recordingOverlay: RecordingOverlayView? = null
     private var onStopRecording: Runnable? = null
     private var onCancelRecording: Runnable? = null
     private var voiceTelemetryProvider: (() -> Pair<Double, Long>)? = null
+    private var voiceMaxDurationProvider: (() -> Long)? = null
+    // The voice and text-fix overlays force the toolbar closed so the overlay (which lives
+    // inside `suggestionsStrip`) is actually visible. Capture the prior state so we can
+    // restore it when the overlay dismisses — users who had the toolbar pinned open expect
+    // it back after a voice round-trip.
+    private var toolbarVisibilityBeforeOverlay: Boolean? = null
 
     fun setOnStopRecording(callback: Runnable?) {
         onStopRecording = callback
@@ -382,35 +337,46 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         voiceTelemetryProvider = provider
     }
 
-    // The overlay is attached before its state is set: announceForAccessibility is a no-op on a
-    // detached view, so TalkBack never heard "recording started" the other way round.
+    /** Recording ceiling in ms, so the overlay timer can read "0:30 / 1:30". Null hides the limit. */
+    fun setVoiceMaxDurationProvider(provider: (() -> Long)?) {
+        voiceMaxDurationProvider = provider
+    }
+
     fun showRecordingOverlay() {
-        ensureRecordingOverlay().showRecording()
+        // The overlay is hosted inside `suggestionsStrip`. If the user opened the toolbar (the
+        // chevron), `suggestionsStrip` is hidden behind `toolbarContainer` — and the overlay
+        // would render into an invisible parent. Force the strip back into view so the overlay
+        // is always seen, regardless of which mic button triggered the recording.
+        captureToolbarStateForOverlay()
+        setToolbarVisibility(false)
+        val overlay = RecordingOverlayView(context)
+        overlay.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+        overlay.onStopClick = { onStopRecording?.run() }
+        overlay.onCancelClick = { onCancelRecording?.run() }
+        overlay.telemetryProvider = voiceTelemetryProvider
+        overlay.maxDurationMsProvider = voiceMaxDurationProvider
+        // Attach before setting the state: announceForAccessibility is a no-op on a detached
+        // view, so ordering it the other way round means TalkBack never says "recording started".
+        setExternalSuggestionView(overlay, false)
+        overlay.showRecording()
+        recordingOverlay = overlay
     }
 
     fun showTranscribingOverlay() {
-        // The overlay may be absent if the strip was recreated while the upload was in flight
-        // (theme reload, configuration change) — create it so the transcribing state still shows.
-        ensureRecordingOverlay().showTranscribing()
+        recordingOverlay?.showTranscribing()
     }
 
-    private fun ensureRecordingOverlay(): RecordingOverlayView {
-        val overlay = recordingOverlay ?: RecordingOverlayView(context).also {
-            it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
-            it.onStopClick = { onStopRecording?.run() }
-            it.onCancelClick = { onCancelRecording?.run() }
-            it.telemetryProvider = voiceTelemetryProvider
-            recordingOverlay = it
-        }
-        if (overlay.parent == null) showOverlay(overlay)
-        return overlay
+    /** On-device recognizer is still loading; see [RecordingOverlayView.showPreparing]. */
+    fun showPreparingOverlay() {
+        recordingOverlay?.showPreparing()
     }
 
     fun hideRecordingOverlay() {
-        val overlay = recordingOverlay ?: return
-        overlay.stopAnimation()
+        recordingOverlay?.stopAnimation()
         recordingOverlay = null
-        hideOverlay()
+        clear()
+        isExternalSuggestionVisible = false
+        restoreToolbarStateAfterOverlay()
     }
 
     // --- Text fix overlay ---
@@ -418,6 +384,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var textFixOverlay: TextFixOverlayView? = null
     private var onReplaceTextFix: Runnable? = null
     private var onDiscardTextFix: Runnable? = null
+    private var textFixProposedText: String? = null
+    private var textFixExpandedPopup: PopupWindow? = null
 
     fun setOnReplaceTextFix(callback: Runnable?) {
         onReplaceTextFix = callback
@@ -427,84 +395,162 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         onDiscardTextFix = callback
     }
 
-    fun showTextFixWorking() {
-        ensureTextFixOverlay().showWorking()
-    }
+    /** On-device model is still loading; see [TextFixOverlayView.showPreparing]. */
+    fun showTextFixPreparing() = showTextFixOverlay(preparing = true)
 
-    fun showTextFixResult(proposed: String) {
-        // The overlay may be absent if the strip was recreated with a proposal still pending
-        // (theme reload, configuration change) — create it so the proposal is still shown.
-        ensureTextFixOverlay().showResult(proposed)
-    }
+    fun showTextFixWorking() = showTextFixOverlay(preparing = false)
 
-    fun showTextFixError(message: String) {
-        ensureTextFixOverlay().showError(message)
-    }
-
-    private fun ensureTextFixOverlay(): TextFixOverlayView {
+    private fun showTextFixOverlay(preparing: Boolean) {
+        // Same reason as showRecordingOverlay(): if the toolbar is open the strip is hidden and
+        // our overlay would be invisible. Force the strip back to make the working state visible.
+        captureToolbarStateForOverlay()
+        setToolbarVisibility(false)
         val overlay = textFixOverlay ?: TextFixOverlayView(context).also {
             it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
             it.onReplaceClick = { onReplaceTextFix?.run() }
             it.onDiscardClick = { onDiscardTextFix?.run() }
+            it.onExpandClick = { showTextFixExpandedPopup() }
+            it.onReportClick = { textFixProposedText?.let { proposed -> launchAiOutputReport(proposed) } }
+        }
+        if (preparing) overlay.showPreparing() else overlay.showWorking()
+        if (textFixOverlay == null) {
+            setExternalSuggestionView(overlay, false)
+            textFixOverlay = overlay
+        }
+    }
+
+    fun showTextFixResult(original: String, proposed: String) {
+        textFixProposedText = proposed
+        textFixOverlay?.showResult(original, proposed)
+    }
+
+    fun showTextFixError(message: String) {
+        val overlay = textFixOverlay ?: TextFixOverlayView(context).also {
+            it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+            captureToolbarStateForOverlay()
+            setToolbarVisibility(false)
+            setExternalSuggestionView(it, false)
             textFixOverlay = it
         }
-        if (overlay.parent == null) showOverlay(overlay)
-        return overlay
+        overlay.showError(message)
     }
 
     fun hideTextFixOverlay() {
-        if (textFixOverlay == null) return
+        textFixExpandedPopup?.dismiss()
+        textFixExpandedPopup = null
+        textFixProposedText = null
         textFixOverlay = null
-        hideOverlay()
+        clear()
+        isExternalSuggestionVisible = false
+        restoreToolbarStateAfterOverlay()
     }
 
-    // --- Translate overlay ---
-
-    private var translateOverlay: TranslateOverlayView? = null
-    private var onPickTranslateLanguage: ((String) -> Unit)? = null
-    private var onCancelTranslate: Runnable? = null
-    private var onRetryTranslate: Runnable? = null
-
-    fun setOnPickTranslateLanguage(callback: ((String) -> Unit)?) {
-        onPickTranslateLanguage = callback
-    }
-
-    fun setOnCancelTranslate(callback: Runnable?) {
-        onCancelTranslate = callback
-    }
-
-    fun setOnRetryTranslate(callback: Runnable?) {
-        onRetryTranslate = callback
-    }
-
-    fun showTranslateLanguages(languages: List<String>) {
-        ensureTranslateOverlay().showLanguages(languages)
-    }
-
-    fun showTranslateWorking() {
-        ensureTranslateOverlay().showWorking()
-    }
-
-    fun showTranslateError(message: String, canRetry: Boolean) {
-        ensureTranslateOverlay().showError(message, canRetry)
-    }
-
-    private fun ensureTranslateOverlay(): TranslateOverlayView {
-        val overlay = translateOverlay ?: TranslateOverlayView(context).also {
-            it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
-            it.onLanguageClick = { language -> onPickTranslateLanguage?.invoke(language) }
-            it.onCancelClick = { onCancelTranslate?.run() }
-            it.onRetryClick = { onRetryTranslate?.run() }
-            translateOverlay = it
+    /** Snapshot the toolbar's visibility on first overlay open; nested re-opens preserve the original. */
+    private fun captureToolbarStateForOverlay() {
+        if (toolbarVisibilityBeforeOverlay == null) {
+            toolbarVisibilityBeforeOverlay = toolbarContainer.isVisible
         }
-        if (overlay.parent == null) showOverlay(overlay)
-        return overlay
     }
 
-    fun hideTranslateOverlay() {
-        if (translateOverlay == null) return
-        translateOverlay = null
-        hideOverlay()
+    private fun restoreToolbarStateAfterOverlay() {
+        val previous = toolbarVisibilityBeforeOverlay ?: return
+        toolbarVisibilityBeforeOverlay = null
+        setToolbarVisibility(previous)
+    }
+
+    private fun showTextFixExpandedPopup() {
+        val proposed = textFixProposedText ?: return
+        // Diagnostic: a user report claims the popup renders the originally-selected text
+        // instead of the model's proposed replacement. The code path here clearly reads from
+        // `textFixProposedText`, which is only ever set in `showTextFixResult(proposed)`. Log
+        // the prefix so we can correlate with the strip's contents from a real reproduction.
+        Log.i(TAG, "showTextFixExpandedPopup proposed.len=${proposed.length} head=\"${proposed.take(60)}\"")
+        textFixExpandedPopup?.dismiss()
+        textFixExpandedPopup = TextFixExpandedPopup.show(
+            anchor = this,
+            proposed = proposed,
+            textColor = Settings.getValues().mColors.get(ColorType.KEY_TEXT),
+            onReplace = { onReplaceTextFix?.run() },
+            onDiscard = { onDiscardTextFix?.run() },
+        )
+    }
+
+    // --- Undo bar (post AI-insertion) ---
+
+    private var undoBar: UndoBarView? = null
+
+    fun showUndoBar(labelText: String, onUndo: Runnable, aiOutput: String) {
+        val bar = UndoBarView(context)
+        bar.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+        bar.setLabel(labelText)
+        bar.onUndoClick = { onUndo.run() }
+        bar.onReportClick = { launchAiOutputReport(aiOutput) }
+        setExternalSuggestionView(bar, false)
+        undoBar = bar
+    }
+
+    /**
+     * Shows a failed-transcription message with a Retry action, reusing the undo bar's layout and
+     * teardown (so [hideUndoBar] clears either one). A toast alone was not enough here: the user has
+     * just lost a dictation and needs somewhere to tap, not a message that fades.
+     */
+    fun showRetryBar(labelText: String, onRetry: Runnable) {
+        val bar = UndoBarView(context)
+        bar.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+        bar.setLabel(labelText)
+        bar.setPrimaryAction(
+            context.getString(R.string.voice_retry),
+            context.getString(R.string.voice_retry_a11y),
+            showReport = false,
+        )
+        bar.onUndoClick = { onRetry.run() }
+        setExternalSuggestionView(bar, false)
+        undoBar = bar
+    }
+
+    /**
+     * Shows a message about a recording that produced no usable audio, with an offer to record
+     * again. Same layout and teardown as [showRetryBar]; the action re-records rather than re-running
+     * a transcription, because there is no clip left to re-run.
+     */
+    fun showRecordAgainBar(labelText: String, onRecordAgain: Runnable) {
+        val bar = UndoBarView(context)
+        bar.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+        bar.setLabel(labelText)
+        bar.setPrimaryAction(
+            context.getString(R.string.voice_record_again),
+            context.getString(R.string.voice_record_again_a11y),
+            showReport = false,
+        )
+        bar.onUndoClick = { onRecordAgain.run() }
+        setExternalSuggestionView(bar, false)
+        undoBar = bar
+    }
+
+    /**
+     * Open the user's mail app pre-filled to report a piece of AI output (Google Play Generative AI
+     * policy). Launched from the IME's context, so it needs FLAG_ACTIVITY_NEW_TASK (set in
+     * [ReportConfig.reportIntent]). The user reviews before sending.
+     */
+    private fun launchAiOutputReport(aiOutput: String) {
+        try {
+            context.startActivity(ReportConfig.reportIntent(context, aiOutput))
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(context, R.string.report_ai_no_mail_app, Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            // A click handler in the IME process must not crash the keyboard if the mail app
+            // launch fails for any other reason (e.g. SecurityException on a guarded compose
+            // activity). Surface a toast and log instead.
+            Log.w(TAG, "Failed to launch AI-output report", e)
+            Toast.makeText(context, R.string.report_ai_no_mail_app, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun hideUndoBar() {
+        if (undoBar == null) return
+        undoBar = null
+        clear()
+        isExternalSuggestionVisible = false
     }
 
     fun setMoreSuggestionsHeight(remainingHeight: Int) {
@@ -572,16 +618,12 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         if (tag is ToolbarKey) {
             val code = getCodeForToolbarKey(tag)
             if (code != KeyCode.UNSPECIFIED) {
-                // Toolbar keys reach the clipboard, selection and text of a possibly locked device,
-                // so the lock state is re-checked here rather than trusted from the cache.
-                if (refuseToolbarActionWhenLocked()) return
                 Log.d(TAG, "click toolbar key $tag")
                 listener.onCodeInput(code, Constants.SUGGESTION_STRIP_COORDINATE, Constants.SUGGESTION_STRIP_COORDINATE, false)
                 return
             }
         }
         if (view === toolbarExpandKey) {
-            if (refuseToolbarActionWhenLocked()) return
             setToolbarVisibility(toolbarContainer.visibility != VISIBLE)
         }
 
@@ -611,7 +653,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
 
     private fun onLongClickToolbarKey(view: View) {
         val tag = view.tag as? ToolbarKey ?: return
-        if (refuseToolbarActionWhenLocked()) return
         if (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys) {
             val longClickCode = getCodeForToolbarKeyLongClick(tag)
             if (longClickCode != KeyCode.UNSPECIFIED) {
@@ -631,40 +672,17 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility") // no need for View#performClick, we only return false mostly anyway
     private fun onLongClickSuggestion(wordView: TextView): Boolean {
-        var showIcon = true
-        if (wordView.tag is Int) {
-            val index = wordView.tag as Int
-            if (index < suggestedWords.size() && suggestedWords.getInfo(index).mSourceDict == Dictionary.DICTIONARY_USER_TYPED)
-                showIcon = false
-        }
-        if (showIcon) {
-            val icon = KeyboardIconsSet.instance.getNewDrawable(KeyboardIconsSet.NAME_BIN, context)!!
-            Settings.getValues().mColors.setColor(icon, ColorType.REMOVE_SUGGESTION_ICON)
-            val w = icon.intrinsicWidth
-            val h = icon.intrinsicHeight
-            wordView.setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null)
-            wordView.ellipsize = TextUtils.TruncateAt.END
-            val downOk = AtomicBoolean(false)
-            wordView.setOnTouchListener { _, motionEvent ->
-                if (motionEvent.action == MotionEvent.ACTION_UP && downOk.get()) {
-                    val x = motionEvent.x
-                    val y = motionEvent.y
-                    if (0 < x && x < w && 0 < y && y < h) {
-                        removeSuggestion(wordView)
-                        wordView.cancelLongPress()
-                        wordView.isPressed = false
-                        return@setOnTouchListener true
-                    }
-                } else if (motionEvent.action == MotionEvent.ACTION_DOWN) {
-                    val x = motionEvent.x
-                    val y = motionEvent.y
-                    if (0 < x && x < w && 0 < y && y < h) {
-                        downOk.set(true)
-                    }
-                }
-                false
+        val index = wordView.tag as? Int
+        val info = if (index != null && index < suggestedWords.size()) suggestedWords.getInfo(index) else null
+        if (info != null) {
+            if (info.mSourceDict == Dictionary.DICTIONARY_USER_TYPED) {
+                // The word is in no dictionary: offer to add it to the personal dictionary.
+                if (wordView.text.isNotBlank())
+                    showWordActionIcon(wordView, KeyboardIconsSet.NAME_ADD_TO_DICTIONARY) { addToDictionary(wordView) }
+            } else {
+                // The word comes from a dictionary: offer to remove it (existing behavior).
+                showWordActionIcon(wordView, KeyboardIconsSet.NAME_BIN) { removeSuggestion(wordView) }
             }
         }
         if (DebugFlags.DEBUG_ENABLED && (isShowingMoreSuggestionPanel || !showMoreSuggestions())) {
@@ -672,6 +690,37 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             return true
         }
         return showMoreSuggestions()
+    }
+
+    /** Draws [iconName] at the start of [wordView] and runs [action] when the icon area is tapped. */
+    @SuppressLint("ClickableViewAccessibility") // no need for View#performClick, we only return false mostly anyway
+    private fun showWordActionIcon(wordView: TextView, iconName: String, action: () -> Unit) {
+        val icon = KeyboardIconsSet.instance.getNewDrawable(iconName, context)!!
+        Settings.getValues().mColors.setColor(icon, ColorType.REMOVE_SUGGESTION_ICON)
+        val w = icon.intrinsicWidth
+        val h = icon.intrinsicHeight
+        wordView.setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null)
+        wordView.ellipsize = TextUtils.TruncateAt.END
+        val downOk = AtomicBoolean(false)
+        wordView.setOnTouchListener { _, motionEvent ->
+            if (motionEvent.action == MotionEvent.ACTION_UP && downOk.get()) {
+                val x = motionEvent.x
+                val y = motionEvent.y
+                if (0 < x && x < w && 0 < y && y < h) {
+                    action()
+                    wordView.cancelLongPress()
+                    wordView.isPressed = false
+                    return@setOnTouchListener true
+                }
+            } else if (motionEvent.action == MotionEvent.ACTION_DOWN) {
+                val x = motionEvent.x
+                val y = motionEvent.y
+                if (0 < x && x < w && 0 < y && y < h) {
+                    downOk.set(true)
+                }
+            }
+            false
+        }
     }
 
     private fun showMoreSuggestions(): Boolean {
@@ -700,6 +749,16 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             moreSuggestionsView.dismissPopupKeysPanel()
         }
         KeyboardSwitcher.getInstance().showToast(text, true)
+    }
+
+    private fun addToDictionary(wordView: TextView) {
+        val word = wordView.text.toString()
+        listener.addToDictionary(word)
+        moreSuggestionsView.dismissPopupKeysPanel()
+        // Drop the "+" icon and its tap handler; the word becomes valid on the next suggestions query.
+        wordView.setOnTouchListener(null)
+        wordView.setCompoundDrawables(null, null, null, null)
+        KeyboardSwitcher.getInstance().showToast(resources.getString(R.string.added_word_to_dictionary, word), false)
     }
 
     private fun removeSuggestion(wordView: TextView) {
@@ -767,42 +826,10 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
 
         // hide pinned keys if device is locked, and avoid expanding toolbar
-        val hideToolbarKeys = deviceLocked
+        val hideToolbarKeys = isDeviceLocked(context)
         toolbarExpandKey.setOnClickListener(if (hideToolbarKeys || !toolbarIsExpandable) null else this)
         pinnedKeys.visibility = if (hideToolbarKeys) GONE else suggestionsStrip.visibility
         isExternalSuggestionVisible = false
-    }
-
-    /**
-     * Re-reads the lock-screen state. Called from `LatinIME.onWindowShown`, which is the only
-     * moment the keyguard can change while this view is alive — it covers replying from the lock
-     * screen and then unlocking.
-     */
-    fun refreshLockedState() {
-        val locked = isDeviceLocked(context)
-        if (locked == deviceLocked) return
-        deviceLocked = locked
-        // An AI overlay owns the strip while it is installed; re-applying visibility underneath it
-        // would tear it down. The flag above is still updated, so the next repaint is correct.
-        if (hasOverlay) return
-        setToolbarVisibility(toolbarWanted)
-        updateKeys()
-    }
-
-    /**
-     * Re-reads the lock state at the moment a toolbar key is actually used.
-     *
-     * The cache is refreshed on window-show, which covers locking and unlocking the device — but
-     * not a trust agent revoking trust *while* the user is replying from the lock screen, where the
-     * reply field keeps focus and the IME window is never hidden. There is no broadcast for that,
-     * so the check happens at the tap. One binder call per toolbar press, which is rare; keystrokes
-     * stay IPC-free, which was the point of the cache.
-     *
-     * @return true when the device is locked and the action must not proceed.
-     */
-    private fun refuseToolbarActionWhenLocked(): Boolean {
-        refreshLockedState()
-        return deviceLocked
     }
 
     private fun addKeyToPinnedKeys(pinnedKey: ToolbarKey) {

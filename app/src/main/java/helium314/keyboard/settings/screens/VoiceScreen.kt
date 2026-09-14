@@ -3,34 +3,23 @@ package helium314.keyboard.settings.screens
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.StringRes
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.lifecycleScope
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.edit
-import androidx.core.net.toUri
 import helium314.keyboard.keyboard.KeyboardSwitcher
-import helium314.keyboard.latin.common.Links
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -38,15 +27,18 @@ import helium314.keyboard.latin.R
 import helium314.keyboard.latin.permissions.PermissionsUtil
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
+import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.latin.voice.AiProvider
+import helium314.keyboard.latin.voice.ApiKeyProbe
+import helium314.keyboard.latin.voice.ApiKeyProbeOutcome
+import helium314.keyboard.latin.voice.ConsentCopy
+import helium314.keyboard.latin.voice.ZdrSupport
 import helium314.keyboard.latin.voice.ModelCatalog
 import helium314.keyboard.latin.voice.OpenRouterClient
 import helium314.keyboard.latin.voice.PolishLevel
-import helium314.keyboard.latin.voice.SpeechEngine
-import helium314.keyboard.latin.voice.isOnDeviceRecognitionAvailable
 import helium314.keyboard.latin.voice.parseVoiceDictionaryTerms
 import helium314.keyboard.latin.voice.parseExpectedLanguages
 import helium314.keyboard.latin.voice.resolveVoiceModel
@@ -54,16 +46,18 @@ import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
 import helium314.keyboard.latin.voice.defaultApiKey
 import helium314.keyboard.latin.voice.isValidCustomModelSlug
-import helium314.keyboard.latin.voice.defaultSttModel
-import helium314.keyboard.latin.voice.supportsSttSlug
+import helium314.keyboard.latin.voice.supportsOpenRouterSttSlug
 import helium314.keyboard.latin.voice.supportsTextFixSlug
 import helium314.keyboard.latin.voice.supportsVoiceSlug
+import helium314.keyboard.latin.voice.UsageTracker
+import helium314.keyboard.latin.voice.local.ModelStorage
+import helium314.keyboard.latin.voice.local.SttModelInfo
 import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.Setting
+import helium314.keyboard.settings.SettingsDestination
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.dialogs.TextInputDialog
-import helium314.keyboard.settings.dialogs.ThreeButtonAlertDialog
 import helium314.keyboard.settings.initPreview
 import helium314.keyboard.settings.preferences.ListPreference
 import helium314.keyboard.settings.preferences.ModelListPreference
@@ -89,10 +83,6 @@ fun VoiceScreen(
     val voiceModel by rememberStringPreferenceState(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
     val sttModel by rememberStringPreferenceState(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
     val providerPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
-    val speechEnginePref by rememberStringPreferenceState(
-        Settings.PREF_VOICE_SPEECH_ENGINE,
-        Defaults.PREF_VOICE_SPEECH_ENGINE
-    )
     val traditionalEnabled by rememberBooleanPreferenceState(
         Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED,
         Defaults.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED
@@ -114,34 +104,17 @@ fun VoiceScreen(
     SearchSettingsScreen(
         onClickBack = onClickBack,
         title = stringResource(R.string.settings_screen_voice),
-        // Remembered so the list (and the key/position maps SearchScreen derives from it) is only
-        // rebuilt when one of the observed preference states actually changes, not on every
-        // recomposition of this screen.
-        settings = remember(
-            voiceInputEnabled,
-            voiceModel,
-            sttModel,
-            providerPref,
-            speechEnginePref,
-            traditionalEnabled,
-            sttEnabled,
-            voiceAutoStop,
-            autoPolishEnabled,
-            polishModel,
-        ) {
-            buildVoiceScreenItems(
-                voiceInputEnabled = voiceInputEnabled,
-                voiceModel = voiceModel,
-                sttModel = sttModel,
-                provider = AiProvider.fromPref(providerPref),
-                speechEngine = SpeechEngine.fromPref(speechEnginePref),
-                traditionalEnabled = traditionalEnabled,
-                sttEnabled = sttEnabled,
-                voiceAutoStop = voiceAutoStop,
-                autoPolishEnabled = autoPolishEnabled,
-                polishModel = polishModel,
-            )
-        }
+        settings = buildVoiceScreenItems(
+            voiceInputEnabled = voiceInputEnabled,
+            voiceModel = voiceModel,
+            sttModel = sttModel,
+            provider = AiProvider.fromPref(providerPref),
+            traditionalEnabled = traditionalEnabled,
+            sttEnabled = sttEnabled,
+            voiceAutoStop = voiceAutoStop,
+            autoPolishEnabled = autoPolishEnabled,
+            polishModel = polishModel,
+        )
     )
 }
 
@@ -150,62 +123,61 @@ internal fun buildVoiceScreenItems(
     voiceModel: String,
     sttModel: String = Defaults.PREF_VOICE_STT_MODEL,
     provider: AiProvider = AiProvider.OPENROUTER,
-    speechEngine: SpeechEngine = SpeechEngine.CLOUD,
     traditionalEnabled: Boolean = Defaults.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED,
     sttEnabled: Boolean = Defaults.PREF_VOICE_STT_ENABLED,
     voiceAutoStop: Boolean = Defaults.PREF_VOICE_AUTO_STOP_SILENCE,
     autoPolishEnabled: Boolean = Defaults.PREF_VOICE_AUTO_POLISH_ENABLED,
     polishModel: String = Defaults.PREF_VOICE_POLISH_MODEL,
 ): List<Any?> {
-    // Everything from the provider key down to auto-polish describes a network request. The
-    // on-device engine makes none, so showing those rows would offer settings that cannot apply.
-    val cloud = voiceInputEnabled && speechEngine == SpeechEngine.CLOUD
+    val cloud = provider.isCloud
     return listOf(
-        Settings.PREF_VOICE_INPUT_ENABLED,
-        if (voiceInputEnabled) Settings.PREF_VOICE_SPEECH_ENGINE else null,
-        if (cloud) Settings.PREF_AI_PROVIDER else null,
-        if (cloud) provider.apiKeyPrefKey() else null,
-        if (cloud && provider == AiProvider.OPENROUTER) Settings.PREF_OPENROUTER_ZDR_ENABLED else null,
-        if (cloud && provider == AiProvider.OPENROUTER) Settings.PREF_AI_ALLOW_REASONING else null,
-        if (cloud) Settings.PREF_VOICE_ACTION_TEST_KEY else null,
-        // Traditional voice (chat-audio) subsection — independent of STT below.
-        if (cloud) R.string.voice_traditional_category else null,
-        if (cloud) Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED else null,
-        if (cloud && traditionalEnabled) Settings.PREF_VOICE_MODEL else null,
-        if (cloud && traditionalEnabled && voiceModel == "custom") Settings.PREF_VOICE_MODEL_CUSTOM else null,
-        if (cloud && traditionalEnabled) Settings.PREF_VOICE_ACTION_PROMPT_PRESET else null,
-        if (cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_PROMPT else null,
-        if (cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_DICTIONARY else null,
-        if (cloud && traditionalEnabled) Settings.PREF_VOICE_EXPECTED_LANGUAGES else null,
-        // Dedicated STT subsection — fully independent toggle and settings. Both providers run a
-        // transcription endpoint, and on both it is the faster of the two routes.
-        if (cloud) R.string.voice_stt_category else null,
-        if (cloud) Settings.PREF_VOICE_STT_ENABLED else null,
-        if (cloud && sttEnabled) Settings.PREF_VOICE_STT_MODEL else null,
-        // PayPerQ's transcription endpoint accepts the `model` field and ignores it, so a custom
-        // slug there would change nothing.
-        if (cloud && sttEnabled && sttModel == "custom" && provider == AiProvider.OPENROUTER) Settings.PREF_VOICE_STT_MODEL_CUSTOM else null,
-        if (cloud && sttEnabled) Settings.PREF_VOICE_STT_PROMPT else null,
-        if (cloud && sttEnabled) Settings.PREF_VOICE_STT_DICTIONARY else null,
-        if (cloud && sttEnabled) Settings.PREF_VOICE_STT_EXPECTED_LANGUAGES else null,
-        // Auto-polish: a second LLM pass that cleans up the raw transcription. Applies to both the
-        // chat-audio and dedicated-STT flows, hence its placement above the shared section.
-        if (cloud) R.string.voice_polish_category else null,
-        if (cloud) Settings.PREF_VOICE_AUTO_POLISH_ENABLED else null,
-        if (cloud && autoPolishEnabled) Settings.PREF_VOICE_POLISH_LEVEL else null,
-        if (cloud && autoPolishEnabled) Settings.PREF_VOICE_POLISH_MODEL else null,
-        if (cloud && autoPolishEnabled && polishModel == "custom") Settings.PREF_VOICE_POLISH_MODEL_CUSTOM else null,
-        // Shared playback / capture options apply to both flows.
-        if (voiceInputEnabled) R.string.voice_shared_category else null,
-        if (voiceInputEnabled) Settings.PREF_VOICE_LANGUAGE_HINT else null,
-        if (voiceInputEnabled) Settings.PREF_VOICE_SPACE_HEURISTIC else null,
-        if (voiceInputEnabled) Settings.PREF_VOICE_HAPTIC_FEEDBACK else null,
-        if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,
-        // The platform recogniser owns the microphone end to end: it applies no capture gain we can
-        // set, and it decides for itself when the utterance ended.
-        if (cloud) Settings.PREF_VOICE_MIC_SENSITIVITY else null,
-        if (cloud) Settings.PREF_VOICE_AUTO_STOP_SILENCE else null,
-        if (cloud && voiceAutoStop) Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS else null,
+    Settings.PREF_VOICE_INPUT_ENABLED,
+    if (voiceInputEnabled) Settings.PREF_AI_PROVIDER else null,
+    if (voiceInputEnabled && !cloud) Settings.PREF_VOICE_ACTION_LOCAL_MODEL else null,
+    if (voiceInputEnabled && cloud) provider.apiKeyPrefKey() else null,
+    if (voiceInputEnabled && provider == AiProvider.OPENROUTER) Settings.PREF_OPENROUTER_ZDR_ENABLED else null,
+    if (voiceInputEnabled && cloud) Settings.PREF_VOICE_ACTION_TEST_KEY else null,
+    // Traditional voice (chat-audio) subsection. The "Show voice button" toggle stays
+    // visible for LOCAL too — it controls whether the mic appears in the long-press-Enter
+    // popup, which is the only voice trigger for either cloud or on-device. Only the
+    // cloud-specific knobs (model picker, prompt, dictionary, expected languages) hide
+    // for LOCAL; Parakeet has nothing to do with any of them.
+    if (voiceInputEnabled) R.string.voice_traditional_category else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_MODEL else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled && voiceModel == "custom") Settings.PREF_VOICE_MODEL_CUSTOM else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_ACTION_PROMPT_PRESET else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_PROMPT else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_DICTIONARY else null,
+    if (voiceInputEnabled && cloud && traditionalEnabled) Settings.PREF_VOICE_EXPECTED_LANGUAGES else null,
+    // Dedicated STT subsection — fully independent toggle and settings.
+    if (voiceInputEnabled && provider == AiProvider.OPENROUTER) R.string.voice_stt_category else null,
+    if (voiceInputEnabled && provider == AiProvider.OPENROUTER) Settings.PREF_VOICE_STT_ENABLED else null,
+    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_MODEL else null,
+    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled && sttModel == "custom") Settings.PREF_VOICE_STT_MODEL_CUSTOM else null,
+    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_PROMPT else null,
+    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_DICTIONARY else null,
+    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_EXPECTED_LANGUAGES else null,
+    // Auto-polish is a cloud-only pass: needs a second model loaded alongside on-device STT,
+    // which we don't ship today.
+    if (voiceInputEnabled && cloud) R.string.voice_polish_category else null,
+    if (voiceInputEnabled && cloud) Settings.PREF_VOICE_AUTO_POLISH_ENABLED else null,
+    if (voiceInputEnabled && cloud && autoPolishEnabled) Settings.PREF_VOICE_POLISH_LEVEL else null,
+    if (voiceInputEnabled && cloud && autoPolishEnabled) Settings.PREF_VOICE_POLISH_MODEL else null,
+    if (voiceInputEnabled && cloud && autoPolishEnabled && polishModel == "custom") Settings.PREF_VOICE_POLISH_MODEL_CUSTOM else null,
+    // Shared playback / capture options apply to both flows.
+    if (voiceInputEnabled) R.string.voice_shared_category else null,
+    // Language hint only feeds cloud STT — Parakeet v3-int8 auto-detects en/de/es/fr.
+    if (voiceInputEnabled && cloud) Settings.PREF_VOICE_LANGUAGE_HINT else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_SPACE_HEURISTIC else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_COPY_TO_CLIPBOARD else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_HAPTIC_FEEDBACK else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_MIC_SENSITIVITY else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_AUTO_STOP_SILENCE else null,
+    if (voiceInputEnabled && voiceAutoStop) Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_OFFLINE_RETRY else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_ACTION_USAGE else null,
     )
 }
 
@@ -213,6 +185,9 @@ fun createVoiceSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_VOICE_INPUT_ENABLED, R.string.voice_input_enabled, R.string.voice_input_enabled_summary) { setting ->
         val ctx = LocalContext.current
         val prefs = ctx.prefs()
+        // The consent copy has to match the provider that will actually run, not the cloud one.
+        val consentProviderPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
+        val consentProvider = AiProvider.fromPref(consentProviderPref)
         val permissionDeniedMessage = stringResource(R.string.voice_error_no_permission)
         val secureStorageMessage = stringResource(R.string.voice_error_secure_storage_unavailable)
         // rememberSaveable so the in-progress enable flow survives a rotation mid-dialog.
@@ -251,7 +226,7 @@ fun createVoiceSettings(context: Context) = listOf(
                     enableAfterPrivacyConfirmation()
                 },
                 title = { Text(stringResource(R.string.voice_enable_privacy_title)) },
-                content = { Text(stringResource(R.string.voice_enable_privacy_message)) },
+                content = { Text(stringResource(ConsentCopy.voiceEnable(consentProvider))) },
                 confirmButtonText = stringResource(R.string.voice_enable_privacy_confirm),
             )
         }
@@ -264,7 +239,7 @@ fun createVoiceSettings(context: Context) = listOf(
                     permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 },
                 title = { Text(stringResource(R.string.voice_mic_rationale_title)) },
-                content = { Text(stringResource(R.string.voice_mic_rationale_message)) },
+                content = { Text(stringResource(ConsentCopy.micRationale(consentProvider))) },
                 confirmButtonText = stringResource(R.string.voice_mic_rationale_confirm),
             )
         }
@@ -291,18 +266,11 @@ fun createVoiceSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_PAYPERQ_API_KEY, R.string.payperq_api_key, R.string.payperq_api_key_summary) {
         VoiceApiKeyPreference(it, AiProvider.PAYPERQ)
     },
-    Setting(
-        context,
-        Settings.PREF_VOICE_SPEECH_ENGINE,
-        R.string.voice_speech_engine,
-        R.string.voice_speech_engine_summary
-    ) {
-        VoiceSpeechEnginePreference(it)
-    },
     Setting(context, Settings.PREF_AI_PROVIDER, R.string.ai_provider) { setting ->
         val ctx = LocalContext.current
         val prefs = ctx.prefs()
         val items = listOf(
+            ctx.getString(R.string.ai_provider_local) to AiProvider.LOCAL.prefValue,
             ctx.getString(R.string.ai_provider_openrouter) to AiProvider.OPENROUTER.prefValue,
             ctx.getString(R.string.ai_provider_payperq) to AiProvider.PAYPERQ.prefValue,
         )
@@ -324,8 +292,8 @@ fun createVoiceSettings(context: Context) = listOf(
                 if (!provider.supportsVoiceSlug(currentVoice)) {
                     putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
                 }
-                if (!provider.supportsSttSlug(currentStt)) {
-                    putString(Settings.PREF_VOICE_STT_MODEL, provider.defaultSttModel())
+                if (provider != AiProvider.OPENROUTER || !supportsOpenRouterSttSlug(currentStt)) {
+                    putString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
                 }
                 if (!provider.supportsTextFixSlug(currentTextFix)) {
                     putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
@@ -336,8 +304,8 @@ fun createVoiceSettings(context: Context) = listOf(
             }
         }
     },
-    Setting(context, Settings.PREF_AI_ALLOW_REASONING, R.string.ai_allow_reasoning, R.string.ai_allow_reasoning_summary) {
-        SwitchPreference(it, Defaults.PREF_AI_ALLOW_REASONING)
+    Setting(context, Settings.PREF_VOICE_ACTION_LOCAL_MODEL, R.string.voice_local_model) { setting ->
+        VoiceLocalModelPreference(setting)
     },
     Setting(context, Settings.PREF_OPENROUTER_ZDR_ENABLED, R.string.openrouter_zdr_enabled, R.string.openrouter_zdr_enabled_summary) {
         SwitchPreference(it, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
@@ -347,6 +315,9 @@ fun createVoiceSettings(context: Context) = listOf(
         val entries = when (AiProvider.fromPref(providerPref)) {
             AiProvider.OPENROUTER -> ModelCatalog.OPENROUTER_VOICE
             AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_VOICE
+            // LOCAL hides the model picker via buildVoiceScreenItems; this branch is unreachable
+            // in practice but keeps the when exhaustive.
+            AiProvider.LOCAL -> emptyList()
         }
         ModelListPreference(setting, entries, Defaults.PREF_VOICE_MODEL)
     },
@@ -363,38 +334,13 @@ fun createVoiceSettings(context: Context) = listOf(
             KeyboardSwitcher.getInstance().setThemeNeedsReload()
         }
     },
-    Setting(context, Settings.PREF_VOICE_STT_ENABLED, R.string.voice_stt_enabled, R.string.voice_stt_enabled_summary) { setting ->
-        val prefs = LocalContext.current.prefs()
-        val providerPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
-        SwitchPreference(setting, Defaults.PREF_VOICE_STT_ENABLED) { enabled ->
-            // The saved slug can belong to the other provider — the section is only reachable once
-            // the toggle is on, so a user who never switched provider has never had the chance to
-            // pick one. Point it at something this provider offers instead of opening the picker on
-            // a model it will report as unavailable.
-            if (enabled) {
-                val provider = AiProvider.fromPref(providerPref)
-                val current = prefs.getString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
-                    ?: Defaults.PREF_VOICE_STT_MODEL
-                if (!provider.supportsSttSlug(current)) {
-                    prefs.edit { putString(Settings.PREF_VOICE_STT_MODEL, provider.defaultSttModel()) }
-                }
-            }
+    Setting(context, Settings.PREF_VOICE_STT_ENABLED, R.string.voice_stt_enabled, R.string.voice_stt_enabled_summary) {
+        SwitchPreference(it, Defaults.PREF_VOICE_STT_ENABLED) {
             KeyboardSwitcher.getInstance().setThemeNeedsReload()
         }
     },
     Setting(context, Settings.PREF_VOICE_STT_MODEL, R.string.voice_stt_model) { setting ->
-        val providerPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
-        val provider = AiProvider.fromPref(providerPref)
-        val entries = when (provider) {
-            AiProvider.OPENROUTER -> ModelCatalog.OPENROUTER_STT
-            AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_STT
-        }
-        ModelListPreference(
-            setting,
-            entries,
-            provider.defaultSttModel(),
-            allowCustom = provider == AiProvider.OPENROUTER,
-        )
+        ModelListPreference(setting, ModelCatalog.OPENROUTER_STT, Defaults.PREF_VOICE_STT_MODEL)
     },
     Setting(context, Settings.PREF_VOICE_STT_MODEL_CUSTOM, R.string.voice_stt_model_custom, R.string.voice_stt_model_custom_summary) {
         TextInputPreference(it, Defaults.PREF_VOICE_STT_MODEL_CUSTOM, checkTextValid = ::isValidCustomModelSlug)
@@ -469,11 +415,17 @@ fun createVoiceSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_VOICE_ACTION_TEST_KEY, R.string.voice_validate_key) {
         VoiceTestKeyPreference(it)
     },
+    Setting(context, Settings.PREF_VOICE_ACTION_USAGE, R.string.voice_usage_meter) {
+        VoiceUsageMeterPreference(it)
+    },
     Setting(context, Settings.PREF_VOICE_LANGUAGE_HINT, R.string.voice_language_hint, R.string.voice_language_hint_summary) {
         SwitchPreference(it, Defaults.PREF_VOICE_LANGUAGE_HINT)
     },
     Setting(context, Settings.PREF_VOICE_SPACE_HEURISTIC, R.string.voice_space_heuristic, R.string.voice_space_heuristic_summary) {
         SwitchPreference(it, Defaults.PREF_VOICE_SPACE_HEURISTIC)
+    },
+    Setting(context, Settings.PREF_VOICE_COPY_TO_CLIPBOARD, R.string.voice_copy_to_clipboard, R.string.voice_copy_to_clipboard_summary) {
+        SwitchPreference(it, Defaults.PREF_VOICE_COPY_TO_CLIPBOARD)
     },
     Setting(context, Settings.PREF_VOICE_HAPTIC_FEEDBACK, R.string.voice_haptic_feedback, R.string.voice_haptic_feedback_summary) {
         SwitchPreference(it, Defaults.PREF_VOICE_HAPTIC_FEEDBACK)
@@ -507,6 +459,7 @@ fun createVoiceSettings(context: Context) = listOf(
         val entries = when (AiProvider.fromPref(providerPref)) {
             AiProvider.OPENROUTER -> ModelCatalog.OPENROUTER_TEXT_FIX
             AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_TEXT_FIX
+            AiProvider.LOCAL -> emptyList()
         }
         ModelListPreference(setting, entries, Defaults.PREF_VOICE_POLISH_MODEL)
     },
@@ -548,141 +501,30 @@ fun createVoiceSettings(context: Context) = listOf(
             range = 1f..10f,
         )
     },
+    Setting(context, Settings.PREF_VOICE_OFFLINE_RETRY, R.string.voice_offline_retry, R.string.voice_offline_retry_summary) {
+        SwitchPreference(it, Defaults.PREF_VOICE_OFFLINE_RETRY)
+    },
 )
 
-/**
- * Whether [engine] may be selected. The on-device engine is the only one a device can fail to
- * support, and selecting it there would leave every dictation failing at the microphone.
- */
-internal fun canSelectSpeechEngine(engine: SpeechEngine, onDeviceAvailable: Boolean): Boolean =
-    engine != SpeechEngine.ON_DEVICE || onDeviceAvailable
-
-/** Picker label for [engine], flagging the on-device entry when the device cannot run it. */
-@StringRes
-internal fun speechEngineLabelRes(engine: SpeechEngine, onDeviceAvailable: Boolean): Int = when {
-    engine == SpeechEngine.CLOUD -> R.string.voice_speech_engine_cloud
-    onDeviceAvailable -> R.string.voice_speech_engine_on_device
-    else -> R.string.voice_speech_engine_on_device_unavailable
-}
-
-/**
- * Engine picker that refuses to select the on-device engine on a device that cannot run it.
- *
- * A plain [ListPreference] would save first and complain second, leaving the user on an engine that
- * fails at every dictation. Selecting it here is blocked instead, and the user gets the steps that
- * actually make it work.
- */
 @Composable
-private fun VoiceSpeechEnginePreference(setting: Setting) {
+private fun VoiceLocalModelPreference(setting: Setting) {
     val ctx = LocalContext.current
-    val prefs = ctx.prefs()
-    val selectedValue by rememberStringPreferenceState(setting.key, Defaults.PREF_VOICE_SPEECH_ENGINE)
-    var showPicker by rememberSaveable { mutableStateOf(false) }
-    var showSetupGuide by rememberSaveable { mutableStateOf(false) }
-    // Probed on demand, not on every recomposition: this queries the PackageManager, and the
-    // settings list recomposes far more often than a speech service gets installed. Re-probed when
-    // the picker opens so returning from the system settings screen immediately unblocks the option.
-    var availabilityProbe by remember { mutableIntStateOf(0) }
-    val onDeviceAvailable = remember(availabilityProbe) { isOnDeviceRecognitionAvailable(ctx) }
-
-    val items = SpeechEngine.entries.map {
-        stringResource(speechEngineLabelRes(it, onDeviceAvailable)) to it.prefValue
-    }
-    val selectedItem = items.firstOrNull { it.second == selectedValue }
-
+    val isReady = remember { ModelStorage.isReady(ctx, SttModelInfo.ParakeetTdt06b) }
     Preference(
         name = setting.title,
-        description = selectedItem?.first,
-        onClick = {
-            availabilityProbe++
-            showPicker = true
-        },
+        description = if (isReady)
+            stringResource(R.string.voice_local_model_ready)
+        else
+            stringResource(R.string.voice_local_model_not_downloaded),
+        onClick = { SettingsDestination.navigateTo(SettingsDestination.LocalModels) },
     )
-    if (showPicker) {
-        ListPickerDialog(
-            onDismissRequest = { showPicker = false },
-            items = items,
-            onItemSelected = { item ->
-                // Re-probed rather than reusing onDeviceAvailable: the user may have installed a
-                // speech service since the picker opened.
-                if (!canSelectSpeechEngine(SpeechEngine.fromPref(item.second), isOnDeviceRecognitionAvailable(ctx))) {
-                    availabilityProbe++
-                    showSetupGuide = true
-                    return@ListPickerDialog
-                }
-                if (item.second == selectedValue) return@ListPickerDialog
-                prefs.edit { putString(setting.key, item.second) }
-                // The engine decides which voice buttons the long-press Return menu offers.
-                KeyboardSwitcher.getInstance().setThemeNeedsReload()
-            },
-            selectedItem = selectedItem,
-            title = { Text(setting.title) },
-            getItemName = { it.first },
-        )
-    }
-    if (showSetupGuide) {
-        val noSettingsScreenMessage = stringResource(R.string.voice_on_device_settings_unavailable)
-        // ThreeButtonAlertDialog rather than ConfirmationDialog: the setup steps are long enough to
-        // clip on a short screen without scrollContent. "Get the app" deliberately leaves the dialog
-        // open, so the user can come straight back for the settings step.
-        ThreeButtonAlertDialog(
-            onDismissRequest = { showSetupGuide = false },
-            title = { Text(stringResource(R.string.voice_on_device_unavailable_title)) },
-            content = { Text(stringResource(R.string.voice_on_device_unavailable_message)) },
-            scrollContent = true,
-            confirmButtonText = stringResource(R.string.voice_on_device_open_settings),
-            onConfirmed = {
-                // Package visibility makes resolveActivity unreliable for another app's settings
-                // screen, so just try it and report the miss.
-                runCatching {
-                    ctx.startActivity(Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS))
-                }.onFailure {
-                    Toast.makeText(ctx, noSettingsScreenMessage, Toast.LENGTH_LONG).show()
-                }
-            },
-            neutralButtonText = stringResource(R.string.voice_on_device_get_app),
-            onNeutral = {
-                runCatching {
-                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Links.ON_DEVICE_SPEECH_SERVICE.toUri()))
-                }.onFailure {
-                    Toast.makeText(ctx, noSettingsScreenMessage, Toast.LENGTH_LONG).show()
-                }
-            },
-        )
-    }
 }
 
 @Composable
 private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
     var showDialog by rememberSaveable { mutableStateOf(false) }
-    var storedLength by remember {
-        mutableIntStateOf(SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).length)
-    }
-
-    /**
-     * Persists the key off the main thread. `SecretStore.setApiKey` does a synchronous
-     * `commit()` into EncryptedSharedPreferences, which means a disk write plus an AndroidKeyStore
-     * round trip — hundreds of milliseconds on some devices, and it was landing on the UI thread.
-     * The optimistic length update keeps the masked row in sync immediately either way.
-     */
-    fun saveApiKey(key: String) {
-        storedLength = key.length
-        scope.launch {
-            val failed = withContext(Dispatchers.IO) {
-                runCatching { SecretStore.setApiKey(ctx, provider.apiKeyPrefKey(), key) }.isFailure
-            }
-            if (failed) {
-                Toast.makeText(ctx, R.string.voice_error_secure_storage_unavailable, Toast.LENGTH_SHORT).show()
-                // Restore the mask from the actually-stored key; also a KeyStore read, so keep it off the UI thread.
-                storedLength = withContext(Dispatchers.IO) {
-                    SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).length
-                }
-            }
-        }
-    }
-
+    var stored by remember { mutableStateOf(SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey())) }
     Preference(
         name = setting.title,
         onClick = {
@@ -695,30 +537,49 @@ private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {
         // Mask the key but reflect its length so the user can spot accidental truncation
         // ("did I paste the whole thing?") without ever exposing the value itself. Capped to
         // keep the row layout stable.
-        description = if (storedLength > 0) "•".repeat(storedLength.coerceIn(8, 24)) else setting.description,
+        description = if (stored.isNotEmpty()) "•".repeat(stored.length.coerceIn(8, 24)) else setting.description,
     )
     if (showDialog) {
-        val hasStoredKey = storedLength > 0
         TextInputDialog(
             onDismissRequest = { showDialog = false },
-            onConfirmed = { saveApiKey(it.trim()) },
-            // Deliberately not prefilled with the stored key. Loading the secret into an editable
-            // field means anyone who can open Settings can read it back, and it puts the key in one
-            // more place in memory for no benefit — you don't need to see a key to replace it.
-            // Confirm stays disabled while the field is empty (checkTextValid defaults to
-            // isNotBlank), so an untouched dialog can't wipe a working key; removing one is the
-            // explicit neutral button below.
-            initialText = "",
-            description = if (hasStoredKey) {
-                { Text(stringResource(R.string.voice_api_key_replace_hint)) }
-            } else null,
-            neutralButtonText = if (hasStoredKey) stringResource(R.string.voice_api_key_remove) else null,
-            onNeutral = { saveApiKey("") },
+            onConfirmed = {
+                SecretStore.setApiKey(ctx, provider.apiKeyPrefKey(), it.trim())
+                stored = it.trim()
+            },
+            initialText = stored,
             title = { Text(setting.title) },
             singleLine = true,
             isPassword = true,
         )
     }
+}
+
+@Composable
+private fun VoiceUsageMeterPreference(setting: Setting) {
+    val ctx = LocalContext.current
+    // Bump to force a recomposition after a reset; usage is otherwise read once when the row shows.
+    var refresh by remember { mutableStateOf(0) }
+    @Suppress("UNUSED_EXPRESSION") refresh // establish the recomposition dependency
+    val requests = UsageTracker.sessionRequests
+    val tokens = UsageTracker.sessionTokens
+    val description = if (requests <= 0) {
+        stringResource(R.string.voice_usage_meter_empty)
+    } else {
+        stringResource(
+            R.string.voice_usage_meter_value,
+            String.format(java.util.Locale.getDefault(), "%,d", tokens),
+            requests,
+        )
+    }
+    Preference(
+        name = setting.title,
+        description = description,
+        onClick = {
+            UsageTracker.reset()
+            refresh++
+            Toast.makeText(ctx, R.string.voice_usage_meter_reset, Toast.LENGTH_SHORT).show()
+        },
+    )
 }
 
 @Composable
@@ -919,31 +780,14 @@ private fun VoiceExpectedLanguagesPreference(setting: Setting) {
 private fun VoiceTestKeyPreference(setting: Setting) {
     val ctx = LocalContext.current
     val prefs = ctx.prefs()
-    // Activity-scoped, not composition-scoped. This row lives inside a LazyColumn, so
-    // rememberCoroutineScope() was cancelled as soon as the row scrolled out of view — scrolling
-    // while the probe ran silently abandoned it and no result or toast ever appeared. The
-    // lifecycle scope is cancelled when the settings screen really goes away, which is the
-    // behaviour that was intended.
-    val scope = LocalLifecycleOwner.current.lifecycleScope
-    // Deliberately NOT rememberSaveable: the probe cannot survive a rotation or process death, so
-    // restoring busy=true would leave the row stuck on "Testing…" swallowing taps, with no live
-    // coroutine left to clear it. The lazy list hands the same MutableState back when the row
-    // scrolls out and in, so plain remember is enough to survive a scroll.
+    val scope = rememberCoroutineScope()
+    // Deliberately not rememberSaveable: the probe can't survive process death, so restoring
+    // busy=true would leave the UI stuck. rememberCoroutineScope() cancels on dispose, which
+    // is enough to abandon the in-flight request on navigation.
     var busy by remember { mutableStateOf(false) }
-    // The outcome used to be a toast only, which is easy to miss and gone a few seconds later —
-    // leaving no way to tell whether the key was ever validated. Keep it under the row as well,
-    // and keep it across a scroll, which is when the row is disposed and recreated.
-    var lastResult by rememberSaveable { mutableStateOf<TestResult?>(null) }
     Preference(
         name = setting.title,
-        description = when {
-            busy -> stringResource(R.string.voice_test_key_testing)
-            lastResult != null -> stringResource(lastResult!!.messageRes)
-            else -> setting.description
-        },
-        // Announce the result to screen readers when it lands, rather than leaving them to
-        // rediscover the row.
-        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        description = if (busy) stringResource(R.string.voice_test_key_testing) else null,
         onClick = {
             if (busy) return@Preference
             if (!SecretStore.isSecureStorageAvailable(ctx)) {
@@ -963,32 +807,19 @@ private fun VoiceTestKeyPreference(setting: Setting) {
                 Toast.makeText(ctx, R.string.voice_error_no_model, Toast.LENGTH_SHORT).show()
                 return@Preference
             }
+            val useZdr = provider == AiProvider.OPENROUTER &&
+                prefs.getBoolean(Settings.PREF_OPENROUTER_ZDR_ENABLED, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
             busy = true
-            lastResult = null
             scope.launch {
-                try {
-                    val result = withContext(Dispatchers.IO) { probeApiKey(provider, apiKey, model) }
-                    Toast.makeText(ctx, result.messageRes, Toast.LENGTH_SHORT).show()
-                    lastResult = result
-                } finally {
-                    // Also on cancellation: the row must never be left claiming it is still testing.
-                    busy = false
-                }
+                val result = withContext(Dispatchers.IO) { probeApiKey(provider, apiKey, model, useZdr) }
+                Toast.makeText(ctx, result.messageResId, Toast.LENGTH_SHORT).show()
+                busy = false
             }
         }
     )
 }
 
-private enum class TestResult(@StringRes val messageRes: Int) {
-    OK(R.string.voice_test_key_success),
-    INVALID(R.string.voice_test_key_invalid),
-    INVALID_MODEL(R.string.voice_test_key_invalid_model),
-    NETWORK(R.string.voice_test_key_network_error),
-    /** HTTP 200, but the body exceeded the read cap — not a connectivity problem. */
-    TOO_LARGE(R.string.voice_test_key_response_too_large),
-}
-
-private fun probeApiKey(provider: AiProvider, apiKey: String, model: String): TestResult {
+private fun probeApiKey(provider: AiProvider, apiKey: String, model: String, useZdr: Boolean): ApiKeyProbeOutcome {
     if (provider == AiProvider.PAYPERQ) return probePayPerQApiKey(apiKey, model)
     val keyConn = (java.net.URL(OpenRouterClient.KEY_ENDPOINT).openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
@@ -998,50 +829,46 @@ private fun probeApiKey(provider: AiProvider, apiKey: String, model: String): Te
         readTimeout = 10_000
     }
     return try {
-        when (keyConn.responseCode) {
-            200 -> probeModel(apiKey, model)
-            401, 403 -> TestResult.INVALID
-            else -> TestResult.NETWORK
-        }
-    } catch (_: Exception) {
-        TestResult.NETWORK
+        // A 404 on the key endpoint is not a bad model id, so map it like any other odd status.
+        val code = keyConn.responseCode
+        if (code == 200) probeModel(apiKey, model, useZdr)
+        else ApiKeyProbe.forStatus(code)?.takeUnless { it == ApiKeyProbeOutcome.INVALID_MODEL }
+            ?: ApiKeyProbeOutcome.PROVIDER_ERROR
+    } catch (e: Exception) {
+        Log.w(PROBE_TAG, "API key probe failed", e)
+        ApiKeyProbe.forException(e)
     } finally {
         keyConn.disconnect()
     }
 }
 
-private fun probePayPerQApiKey(apiKey: String, model: String): TestResult {
-    if (model.isBlank()) return TestResult.INVALID_MODEL
-    val modelsEndpoint = payPerQModelsEndpoint(model)
-    val conn = (java.net.URL(modelsEndpoint).openConnection() as HttpURLConnection).apply {
+private fun probePayPerQApiKey(apiKey: String, model: String): ApiKeyProbeOutcome {
+    if (model.isBlank()) return ApiKeyProbeOutcome.INVALID_MODEL
+    val conn = (java.net.URL(OpenRouterClient.PAYPERQ_AUDIO_MODELS_ENDPOINT).openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
         setRequestProperty("Authorization", "Bearer $apiKey")
         connectTimeout = OpenRouterClient.DEFAULT_CONNECT_TIMEOUT_MS
         readTimeout = 10_000
     }
     return try {
-        when (conn.responseCode) {
-            200 -> if (payPerQModelResponseContains(readProbeResponseCapped(conn.inputStream), model)) {
-                TestResult.OK
-            } else {
-                TestResult.INVALID_MODEL
-            }
-            401, 403 -> TestResult.INVALID
-            else -> TestResult.NETWORK
-        }
-    } catch (_: ProbeResponseTooLargeException) {
-        TestResult.TOO_LARGE
-    } catch (_: Exception) {
-        TestResult.NETWORK
+        // This is the model-listing endpoint, so a 404 here is a routing problem, not a bad model
+        // id; only the per-model endpoint below can tell those apart.
+        val code = conn.responseCode
+        if (code == 200) ApiKeyProbeOutcome.OK
+        else ApiKeyProbe.forStatus(code)?.takeUnless { it == ApiKeyProbeOutcome.INVALID_MODEL }
+            ?: ApiKeyProbeOutcome.PROVIDER_ERROR
+    } catch (e: Exception) {
+        Log.w(PROBE_TAG, "PayPerQ API key probe failed", e)
+        ApiKeyProbe.forException(e)
     } finally {
         conn.disconnect()
     }
 }
 
-private fun probeModel(apiKey: String, model: String): TestResult {
+private fun probeModel(apiKey: String, model: String, useZdr: Boolean): ApiKeyProbeOutcome {
     val parts = model.trim().split("/", limit = 2)
     if (parts.size != 2 || parts.any { it.isBlank() }) {
-        return TestResult.INVALID_MODEL
+        return ApiKeyProbeOutcome.INVALID_MODEL
     }
     val author = URLEncoder.encode(parts[0], StandardCharsets.UTF_8.name())
     val slug = URLEncoder.encode(parts[1], StandardCharsets.UTF_8.name())
@@ -1053,34 +880,55 @@ private fun probeModel(apiKey: String, model: String): TestResult {
         readTimeout = 10_000
     }
     return try {
-        when (conn.responseCode) {
-            200 -> TestResult.OK
-            401, 403 -> TestResult.INVALID
-            404 -> TestResult.INVALID_MODEL
-            else -> TestResult.NETWORK
+        val outcome = ApiKeyProbe.forStatus(conn.responseCode)
+        when {
+            outcome != null -> outcome
+            useZdr -> ApiKeyProbe.withZdr(probeZdrModelSupport(apiKey, model))
+            else -> ApiKeyProbeOutcome.OK
         }
-    } catch (_: Exception) {
-        TestResult.NETWORK
+    } catch (e: Exception) {
+        Log.w(PROBE_TAG, "Model probe failed", e)
+        ApiKeyProbe.forException(e)
     } finally {
         conn.disconnect()
     }
 }
 
-internal fun payPerQModelResponseContains(body: String, model: String): Boolean {
-    val models = JSONObject(body).optJSONArray("data") ?: return false
-    for (i in 0 until models.length()) {
-        if (models.optJSONObject(i)?.optString("id") == model) return true
+private fun probeZdrModelSupport(apiKey: String, model: String): ZdrSupport {
+    // The catalog is the authoritative source for known slugs — its `zdr` flags are verified
+    // against OpenRouter's ZDR endpoint list, and they're what the request path actually keys
+    // off when deciding to send `provider.zdr: true`. Hitting `/endpoints/zdr` here used to
+    // false-negative for every `~author/...-latest` alias because OpenRouter returns canonical
+    // model IDs without the leading tilde, so the exact-string match never landed.
+    if (ModelCatalog.openRouterSupportsZdr(model)) return ZdrSupport.SUPPORTED
+    val conn = (java.net.URL(OpenRouterClient.ZDR_ENDPOINT).openConnection() as HttpURLConnection).apply {
+        requestMethod = "GET"
+        setRequestProperty("Authorization", "Bearer $apiKey")
+        OpenRouterClient.applyOpenRouterAttributionHeaders(this)
+        connectTimeout = OpenRouterClient.DEFAULT_CONNECT_TIMEOUT_MS
+        readTimeout = 10_000
     }
-    return false
+    return try {
+        // Fail closed. Every branch below used to answer "supported", so a user with zero data
+        // retention switched on was told the guarantee held whenever the check itself had failed.
+        if (conn.responseCode != 200) return ZdrSupport.UNKNOWN
+        val body = readProbeResponseCapped(conn.inputStream)
+        val endpoints = JSONObject(body).optJSONArray("data") ?: return ZdrSupport.UNKNOWN
+        // Belt-and-suspenders for custom slugs: also accept a match against the tilde-stripped
+        // form, since the user can paste either shape into the Custom Model ID field.
+        val tildeStripped = model.removePrefix("~")
+        for (i in 0 until endpoints.length()) {
+            val id = endpoints.optJSONObject(i)?.optString("model_id") ?: continue
+            if (id == model || id == tildeStripped) return ZdrSupport.SUPPORTED
+        }
+        ZdrSupport.UNSUPPORTED
+    } catch (e: Exception) {
+        Log.w(PROBE_TAG, "ZDR endpoint probe failed", e)
+        ZdrSupport.UNKNOWN
+    } finally {
+        conn.disconnect()
+    }
 }
-
-internal fun payPerQModelsEndpoint(model: String): String = if ("/" in model) {
-    OpenRouterClient.PAYPERQ_MODELS_ENDPOINT
-} else {
-    OpenRouterClient.PAYPERQ_AUDIO_MODELS_ENDPOINT
-}
-
-private class ProbeResponseTooLargeException : IllegalArgumentException("Probe response too large")
 
 private fun readProbeResponseCapped(input: java.io.InputStream): String {
     val out = java.io.ByteArrayOutputStream()
@@ -1091,7 +939,7 @@ private fun readProbeResponseCapped(input: java.io.InputStream): String {
             val read = stream.read(buffer)
             if (read == -1) break
             total += read
-            if (total > MAX_PROBE_RESPONSE_BYTES) throw ProbeResponseTooLargeException()
+            if (total > MAX_PROBE_RESPONSE_BYTES) throw IllegalArgumentException("Probe response too large")
             out.write(buffer, 0, read)
         }
     }
@@ -1099,6 +947,7 @@ private fun readProbeResponseCapped(input: java.io.InputStream): String {
 }
 
 private const val MAX_PROBE_RESPONSE_BYTES = 512 * 1024
+private const val PROBE_TAG = "VoiceKeyProbe"
 
 @Preview
 @Composable

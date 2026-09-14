@@ -10,7 +10,6 @@ import android.os.Looper
 import android.provider.Settings as AndroidSettings
 import android.widget.Toast
 import android.view.inputmethod.InputMethodManager
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -45,11 +44,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +56,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -77,75 +79,85 @@ import helium314.keyboard.latin.utils.UncachedInputMethodManagerUtils
 import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.latin.voice.AiProvider
+import helium314.keyboard.latin.voice.ConsentCopy
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
 import helium314.keyboard.latin.voice.defaultApiKey
-import helium314.keyboard.latin.voice.defaultSttModel
 import helium314.keyboard.latin.voice.parseExpectedLanguages
-import helium314.keyboard.latin.voice.supportsSttSlug
-import helium314.keyboard.latin.voice.supportsTextFixSlug
-import helium314.keyboard.latin.voice.supportsVoiceSlug
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.dialogs.TextInputDialog
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+
+// The numbered row and the two action shapes carry no text of their own that tells them apart:
+// which circle is current and which button is the forward action are expressed by colour only.
+// These tags let a UI test address them without changing what the user sees.
+const val WIZARD_STEP_INDICATOR_TAG = "wizardStepIndicator"
+const val WIZARD_PRIMARY_ACTION_TAG = "wizardPrimaryAction"
+const val WIZARD_SECONDARY_ACTION_TAG = "wizardSecondaryAction"
 
 @Composable
 fun WelcomeWizard(
     close: () -> Unit,
     finish: () -> Unit
 ) {
-    val welcomeStep = 0
-    val enableStep = 1
-    val switchStep = 2
-    val providerStep = 3
-    val apiKeyStep = 4
-    val languageStep = 5
-    val voiceStep = 6
-    val doneStep = 7
-    val totalSetupSteps = 7
+    val welcomeStep = WizardStepResolver.WELCOME
+    val enableStep = WizardStepResolver.ENABLE
+    val switchStep = WizardStepResolver.SWITCH
+    val providerStep = WizardStepResolver.PROVIDER
+    val modelStep = WizardStepResolver.MODEL      // LOCAL only: download on-device STT model
+    val apiKeyStep = WizardStepResolver.API_KEY   // cloud only: enter API key
+    val languageStep = WizardStepResolver.LANGUAGE
+    val voiceStep = WizardStepResolver.VOICE
+    val doneStep = WizardStepResolver.DONE
     val ctx = LocalContext.current
     val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+    // Which branch of the AI sub-flow the user is on decides how many steps there are, so the
+    // step indicator needs it. Kept here rather than inside AiProviderSetupStep because the
+    // indicator is drawn for the gating steps too.
+    var providerIsCloud by rememberSaveable {
+        mutableStateOf(
+            AiProvider.fromPref(ctx.prefs().getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)).isCloud
+        )
+    }
     var aiSetupSkipped by rememberSaveable { mutableStateOf(false) }
     fun isAiProviderReady(): Boolean {
         val prefs = ctx.prefs()
         val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
-        return SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).isNotBlank()
+        val credentialReady = when {
+            provider.isCloud -> SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).isNotBlank()
+            // LOCAL: Parakeet must be downloaded before voice works
+            else -> helium314.keyboard.latin.voice.local.ModelStorage.isReady(
+                ctx, helium314.keyboard.latin.voice.local.SttModelInfo.ParakeetTdt06b
+            )
+        }
+        return credentialReady
                 && prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)
                 && PermissionsUtil.checkAllPermissionsGranted(ctx, Manifest.permission.RECORD_AUDIO)
     }
-    fun determineStep(): Int = when {
-        !UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm) -> welcomeStep
-        !UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm) -> switchStep
-        isAiProviderReady() || aiSetupSkipped -> doneStep
-        else -> providerStep
-    }
-
-    /**
-     * Re-evaluates the step after the user has been outside the app.
-     *
-     * The IME enable/switch gates genuinely need re-checking (the user changes those in system
-     * settings), and once they're satisfied we push forward out of those steps. But past that point
-     * the user is driving: recomputing from scratch collapsed the API-key, language and voice steps
-     * back to the provider step every single resume, because [isAiProviderReady] isn't true until
-     * the whole flow is finished. Leaving to a browser to fetch an API key and coming back is the
-     * common case, and it used to lose your place.
-     */
-    fun refreshStep(current: Int): Int = when {
-        !UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm) -> welcomeStep
-        !UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm) -> switchStep
-        current <= switchStep -> determineStep()
-        else -> current
-    }
-    var step by rememberSaveable { mutableIntStateOf(determineStep()) }
+    // First mount, no saved position: derive purely from system + provider state.
+    fun seedStep(): Int = WizardStepResolver.seed(
+        imeEnabled = UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm),
+        imeCurrent = UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm),
+        aiReady = isAiProviderReady(),
+        aiSkipped = aiSetupSkipped,
+    )
+    // Re-evaluate against live system state WITHOUT discarding manual progress inside the AI
+    // sub-flow (steps 4-7). Used on resume / IME-change / switch-poll, where a coarse re-derivation
+    // would otherwise snap the user back to the provider step mid-download.
+    fun reconcileStep(current: Int): Int = WizardStepResolver.reconcile(
+        current = current,
+        imeEnabled = UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm),
+        imeCurrent = UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm),
+        aiReady = isAiProviderReady(),
+        aiSkipped = aiSetupSkipped,
+    )
+    var step by rememberSaveable { mutableIntStateOf(seedStep()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(ctx, imm, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                step = refreshStep(step)
+                step = reconcileStep(step)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -156,7 +168,7 @@ fun WelcomeWizard(
     DisposableEffect(ctx, imm) {
         val inputMethodObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                step = refreshStep(step)
+                step = reconcileStep(step)
             }
         }
         ctx.contentResolver.registerContentObserver(
@@ -168,19 +180,10 @@ fun WelcomeWizard(
             ctx.contentResolver.unregisterContentObserver(inputMethodObserver)
         }
     }
-    // Back used to fall through to SearchScreen's handler and finish the whole Activity from any
-    // of the eight steps. Now it walks back a step, and only closes the wizard from the first
-    // step the user can actually be parked on. The clamp at providerStep matters: below it,
-    // switchStep re-arms a LaunchedEffect that pushes forward again, so stepping back there would
-    // bounce. `>=` rather than `>` so the handler stays enabled at providerStep and swallows the
-    // Back that would otherwise close Settings.
-    BackHandler(step >= providerStep) {
-        if (step > providerStep) step-- else close()
-    }
     LaunchedEffect(step) {
         if (step == switchStep) {
             repeat(20) {
-                val nextStep = determineStep()
+                val nextStep = reconcileStep(step)
                 if (nextStep != switchStep) {
                     step = nextStep
                     return@LaunchedEffect
@@ -220,24 +223,31 @@ fun WelcomeWizard(
                 )
         }
     }
+    // One affordance for the position, the numbered row. The progress bar that used to sit under
+    // it said the same thing a second time and drew a stop indicator at the end of the track,
+    // which read as an extra, unreachable step.
     @Composable
     fun ProgressHeader(currentStep: Int) {
+        val visibleSteps = wizardVisibleSteps(providerIsCloud)
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            (1..totalSetupSteps).forEach {
-                val isSelected = currentStep == it
+            visibleSteps.forEachIndexed { index, stepId ->
+                val isSelected = currentStep == stepId
                 Surface(
                     shape = CircleShape,
                     color = if (isSelected) primaryActionColor else actionContainerColor.copy(alpha = 0.5f),
                     contentColor = if (isSelected) primaryActionContentColor else textColorDim,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier
+                        .size(28.dp)
+                        .semantics(mergeDescendants = true) { selected = isSelected }
+                        .testTag(WIZARD_STEP_INDICATOR_TAG)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            it.toString(),
+                            (index + 1).toString(),
                             style = MaterialTheme.typography.labelMedium,
                             color = if (isSelected) primaryActionContentColor else textColorDim
                         )
@@ -245,13 +255,6 @@ fun WelcomeWizard(
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        LinearProgressIndicator(
-            progress = { currentStep / totalSetupSteps.toFloat() },
-            modifier = Modifier.fillMaxWidth(),
-            color = primaryActionColor,
-            trackColor = actionContainerColor.copy(alpha = 0.35f)
-        )
         Spacer(Modifier.height(20.dp))
     }
     @Composable
@@ -263,7 +266,7 @@ fun WelcomeWizard(
                 containerColor = primaryActionColor,
                 contentColor = primaryActionContentColor
             ),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().testTag(WIZARD_PRIMARY_ACTION_TAG)
         ) {
             Icon(
                 icon,
@@ -286,7 +289,7 @@ fun WelcomeWizard(
             shape = RoundedCornerShape(20.dp),
             border = BorderStroke(1.dp, primaryActionColor.copy(alpha = 0.45f)),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = primaryActionColor),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().testTag(WIZARD_SECONDARY_ACTION_TAG)
         ) {
             if (icon != null) Icon(icon, null, Modifier.padding(end = 8.dp).size(20.dp))
             Text(actionText, Modifier.weight(1f), textAlign = TextAlign.Center)
@@ -302,6 +305,8 @@ fun WelcomeWizard(
         primaryAction: () -> Unit,
         secondaryText: String? = null,
         secondaryAction: (() -> Unit)? = null,
+        tertiaryText: String? = null,
+        tertiaryAction: (() -> Unit)? = null,
     ) {
         Surface(
             shape = RoundedCornerShape(28.dp),
@@ -332,6 +337,16 @@ fun WelcomeWizard(
                     Spacer(Modifier.height(10.dp))
                     SecondaryAction(secondaryText, null, secondaryAction)
                 }
+                if (tertiaryText != null && tertiaryAction != null) {
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(
+                        onClick = tertiaryAction,
+                        colors = ButtonDefaults.textButtonColors(contentColor = textColorDim),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(tertiaryText)
+                    }
+                }
             }
         }
     }
@@ -346,7 +361,7 @@ fun WelcomeWizard(
         else
             Column {
                 val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-                    step = determineStep()
+                    step = reconcileStep(step)
                 }
                 if (step == enableStep) {
                     WizardPage(
@@ -371,7 +386,7 @@ fun WelcomeWizard(
                         primaryText = stringResource(R.string.setup_step2_action),
                         primaryAction = imm::showInputMethodPicker,
                         secondaryText = stringResource(R.string.setup_continue_action),
-                        secondaryAction = { step = determineStep() }
+                        secondaryAction = { step = reconcileStep(step) }
                     )
                 } else if (step in providerStep..voiceStep) {
                     AiProviderSetupStep(
@@ -386,18 +401,23 @@ fun WelcomeWizard(
                         progressHeader = { ProgressHeader(it) },
                         primaryAction = { actionText, icon, action -> PrimaryAction(actionText, icon, action) },
                         secondaryAction = { actionText, icon, action -> SecondaryAction(actionText, icon, action) },
-                        onProviderConfigured = { step = apiKeyStep },
+                        onProviderChanged = { providerIsCloud = it },
+                        onProviderConfigured = {
+                            val picked = AiProvider.fromPref(
+                                ctx.prefs().getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
+                            )
+                            step = if (picked.isCloud) apiKeyStep else modelStep
+                        },
+                        onModelConfigured = { step = languageStep },
                         onApiKeyConfigured = { step = languageStep },
                         onLanguageConfigured = { step = voiceStep },
                         onVoiceConfigured = { step = doneStep },
+                        // The persistent bottom action: abandon AI setup entirely and jump to the
+                        // finish step. Distinct from the per-step "Continue" actions, which advance
+                        // one step. Marking it skipped keeps determineStep/reconcile on DONE.
                         onSkip = {
-                            if (step == voiceStep) aiSetupSkipped = true
-                            step = when (step) {
-                                providerStep -> apiKeyStep
-                                apiKeyStep -> languageStep
-                                languageStep -> voiceStep
-                                else -> doneStep
-                            }
+                            aiSetupSkipped = true
+                            step = doneStep
                         },
                         onOpenVoiceSettings = {
                             close()
@@ -414,6 +434,25 @@ fun WelcomeWizard(
                         primaryAction = finish,
                         secondaryText = stringResource(R.string.setup_step3_action),
                         secondaryAction = close
+                    )
+                    // Surface the opt-in clipboard-history feature here so users discover it exists;
+                    // it's off by default (privacy) and easy to miss otherwise.
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        stringResource(R.string.setup_step3_tip_clipboard),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                    )
+                    // The wizard has no text-fix step (it is already eight steps), so the feature
+                    // would otherwise never be mentioned: it ships off and its model is a separate
+                    // download, so a user who finishes the wizard has no way to know it exists.
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.setup_step3_tip_text_fix),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                     )
                 }
             }
@@ -455,6 +494,24 @@ fun WelcomeWizard(
     }
 }
 
+/**
+ * The steps the wizard actually shows, in order, for one provider choice.
+ *
+ * The AI sub-flow branches: a cloud provider gets the API-key step and never the model download,
+ * an on-device provider gets the download and never the key step. A fixed 1..8 row therefore
+ * numbers a step the user never reaches, and the count jumps (6 to 8) when the skipped step sits
+ * in the middle. The indicator numbers this list 1..N instead.
+ */
+internal fun wizardVisibleSteps(providerIsCloud: Boolean): List<Int> = listOf(
+    WizardStepResolver.ENABLE,
+    WizardStepResolver.SWITCH,
+    WizardStepResolver.PROVIDER,
+    if (providerIsCloud) WizardStepResolver.API_KEY else WizardStepResolver.MODEL,
+    WizardStepResolver.LANGUAGE,
+    WizardStepResolver.VOICE,
+    WizardStepResolver.DONE,
+)
+
 @Composable
 private fun AiProviderSetupStep(
     step: Int,
@@ -468,7 +525,9 @@ private fun AiProviderSetupStep(
     progressHeader: @Composable (Int) -> Unit,
     primaryAction: @Composable (String, Painter, () -> Unit) -> Unit,
     secondaryAction: @Composable (String, Painter?, () -> Unit) -> Unit,
+    onProviderChanged: (Boolean) -> Unit,
     onProviderConfigured: () -> Unit,
+    onModelConfigured: () -> Unit,
     onApiKeyConfigured: () -> Unit,
     onLanguageConfigured: () -> Unit,
     onVoiceConfigured: () -> Unit,
@@ -477,6 +536,8 @@ private fun AiProviderSetupStep(
 ) {
     val ctx = LocalContext.current
     val prefs = ctx.prefs()
+    // Asks for POST_NOTIFICATIONS the first time, so download progress and failures are visible.
+    val startModelDownload = rememberModelDownloadStarter()
     var showApiKeyDialog by rememberSaveable { mutableStateOf(false) }
     var showProviderDialog by rememberSaveable { mutableStateOf(false) }
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
@@ -508,39 +569,28 @@ private fun AiProviderSetupStep(
     fun providerName(provider: AiProvider): String = when (provider) {
         AiProvider.OPENROUTER -> ctx.getString(R.string.ai_provider_openrouter)
         AiProvider.PAYPERQ -> ctx.getString(R.string.ai_provider_payperq)
+        AiProvider.LOCAL -> ctx.getString(R.string.ai_provider_local)
     }
     fun refreshApiKeyState(provider: AiProvider = selectedProvider) {
         apiKeySet = SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).isNotBlank()
     }
     fun selectProvider(provider: AiProvider) {
         providerPref = provider.prefValue
-        // Only reset model selections the new provider cannot serve — same policy as VoiceScreen.
-        // Unconditionally resetting here would wipe a deliberate model choice just because the
-        // user re-ran setup (or re-picked the same provider).
-        val currentVoice = prefs.getString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
-            ?: Defaults.PREF_VOICE_MODEL
-        val currentStt = prefs.getString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
-            ?: Defaults.PREF_VOICE_STT_MODEL
-        val currentTextFix = prefs.getString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
-            ?: Defaults.PREF_TEXT_FIX_MODEL
-        val currentPolish = prefs.getString(Settings.PREF_VOICE_POLISH_MODEL, Defaults.PREF_VOICE_POLISH_MODEL)
-            ?: Defaults.PREF_VOICE_POLISH_MODEL
         prefs.edit {
             putString(Settings.PREF_AI_PROVIDER, provider.prefValue)
-            if (!provider.supportsVoiceSlug(currentVoice)) {
-                putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
-            }
-            if (!provider.supportsSttSlug(currentStt)) {
-                putString(Settings.PREF_VOICE_STT_MODEL, provider.defaultSttModel())
-            }
-            if (!provider.supportsTextFixSlug(currentTextFix)) {
-                putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
-            }
-            if (!provider.supportsTextFixSlug(currentPolish)) {
-                putString(Settings.PREF_VOICE_POLISH_MODEL, Defaults.PREF_VOICE_POLISH_MODEL)
+            when (provider) {
+                AiProvider.OPENROUTER, AiProvider.PAYPERQ -> {
+                    putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
+                    putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
+                }
+                // LOCAL has no slug picker; the manager bypasses model resolution for it.
+                AiProvider.LOCAL -> Unit
             }
         }
         refreshApiKeyState(provider)
+        // The step indicator counts a different number of steps for cloud (API key) and
+        // on-device (model download).
+        onProviderChanged(provider.isCloud)
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -556,34 +606,16 @@ private fun AiProviderSetupStep(
     }
 
     if (showApiKeyDialog) {
-        val scope = rememberCoroutineScope()
         TextInputDialog(
             onDismissRequest = { showApiKeyDialog = false },
             onConfirmed = {
                 val key = it.trim()
-                // Optimistic state; the encrypted-prefs write is a disk commit plus a KeyStore
-                // round trip and must not run on the UI thread (see VoiceScreen.saveApiKey).
+                SecretStore.setApiKey(ctx, selectedProvider.apiKeyPrefKey(), key)
                 apiKeySet = key.isNotBlank()
-                scope.launch {
-                    val failed = withContext(Dispatchers.IO) {
-                        runCatching { SecretStore.setApiKey(ctx, selectedProvider.apiKeyPrefKey(), key) }.isFailure
-                    }
-                    if (failed) {
-                        val stillSet = withContext(Dispatchers.IO) {
-                            SecretStore.getApiKey(ctx, selectedProvider.apiKeyPrefKey(), selectedProvider.defaultApiKey()).isNotBlank()
-                        }
-                        Toast.makeText(ctx, R.string.voice_error_secure_storage_unavailable, Toast.LENGTH_SHORT).show()
-                        apiKeySet = stillSet
-                    }
-                }
                 showApiKeyDialog = false
                 if (key.isNotBlank()) onApiKeyConfigured()
             },
-            // Deliberately not prefilled with the stored key (see VoiceScreen): loading the secret
-            // into an editable field exposes it to anyone who can open the setup flow on a
-            // configured device. Confirm stays disabled while the field is empty, so an
-            // untouched dialog can't wipe a working key.
-            initialText = "",
+            initialText = SecretStore.getApiKey(ctx, selectedProvider.apiKeyPrefKey(), selectedProvider.defaultApiKey()),
             title = {
                 Text(
                     if (selectedProvider == AiProvider.PAYPERQ) {
@@ -600,7 +632,7 @@ private fun AiProviderSetupStep(
     if (showProviderDialog) {
         ListPickerDialog(
             onDismissRequest = { showProviderDialog = false },
-            items = listOf(AiProvider.OPENROUTER, AiProvider.PAYPERQ),
+            items = listOf(AiProvider.LOCAL, AiProvider.OPENROUTER, AiProvider.PAYPERQ),
             onItemSelected = {
                 selectProvider(it)
                 showProviderDialog = false
@@ -635,7 +667,7 @@ private fun AiProviderSetupStep(
                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             },
             title = { Text(stringResource(R.string.voice_mic_rationale_title)) },
-            content = { Text(stringResource(R.string.voice_mic_rationale_message)) },
+            content = { Text(stringResource(ConsentCopy.micRationale(selectedProvider))) },
             confirmButtonText = stringResource(R.string.voice_mic_rationale_confirm),
         )
     }
@@ -677,26 +709,120 @@ private fun AiProviderSetupStep(
                         stringResource(R.string.setup_ai_provider_choice_instruction),
                         style = MaterialTheme.typography.bodyLarge.merge(color = textColor)
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(14.dp))
+                    // Compact trade-off so the choice is informed rather than blind: privacy/offline
+                    // (one-time download) vs. instant/no-download (BYO key, text leaves the device).
                     Text(
-                        stringResource(R.string.setup_ai_provider_current_provider, providerName(selectedProvider)),
-                        style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim)
+                        stringResource(R.string.setup_ai_provider_compare_local),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColor)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stringResource(R.string.setup_ai_provider_compare_cloud),
+                        style = MaterialTheme.typography.bodyMedium.merge(color = textColor)
                     )
                     Spacer(Modifier.height(24.dp))
-                    primaryAction(
+                    // The provider button already names the current provider, so no separate
+                    // "current provider" line above it. It stays a secondary control: it opens a
+                    // picker rather than advancing, and the filled button is the forward action.
+                    secondaryAction(
                         stringResource(R.string.setup_ai_provider_select, providerName(selectedProvider)),
                         painterResource(R.drawable.ic_settings_preferences)
                     ) {
                         showProviderDialog = true
                     }
                     Spacer(Modifier.height(10.dp))
-                    secondaryAction(
+                    primaryAction(
                         stringResource(R.string.setup_continue_action),
                         painterResource(R.drawable.ic_setup_check),
                         onProviderConfigured
                     )
                 }
                 4 -> {
+                    // LOCAL only: download the on-device STT model.
+                    val downloadStates by helium314.keyboard.latin.voice.local.ModelDownloadRepository.states.collectAsState()
+                    val model = helium314.keyboard.latin.voice.local.SttModelInfo.ParakeetTdt06b
+                    val downloadState = downloadStates[model.id] ?: if (
+                        helium314.keyboard.latin.voice.local.ModelStorage.isReady(ctx, model)
+                    ) helium314.keyboard.latin.voice.local.DownloadState.Ready
+                    else helium314.keyboard.latin.voice.local.DownloadState.NotDownloaded
+                    val isReady = downloadState is helium314.keyboard.latin.voice.local.DownloadState.Ready
+                    val isInProgress = downloadState is helium314.keyboard.latin.voice.local.DownloadState.Downloading
+                        || downloadState is helium314.keyboard.latin.voice.local.DownloadState.Queued
+                        || downloadState is helium314.keyboard.latin.voice.local.DownloadState.Verifying
+                    val isFailed = downloadState is helium314.keyboard.latin.voice.local.DownloadState.Failed
+                    Text(
+                        stringResource(R.string.setup_model_download_title),
+                        style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.setup_model_download_instruction),
+                        style = MaterialTheme.typography.bodyLarge.merge(color = textColor)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    when (downloadState) {
+                        is helium314.keyboard.latin.voice.local.DownloadState.Ready ->
+                            Text(stringResource(R.string.setup_model_download_ready),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim))
+                        is helium314.keyboard.latin.voice.local.DownloadState.Downloading -> {
+                            val pct = if (downloadState.bytesTotal > 0L)
+                                downloadState.bytesDownloaded.toFloat() / downloadState.bytesTotal
+                            else 0f
+                            Text(
+                                if (pct > 0f) stringResource(R.string.setup_model_download_progress, (pct * 100).toInt())
+                                else stringResource(R.string.setup_model_download_connecting),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { pct },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        is helium314.keyboard.latin.voice.local.DownloadState.Verifying -> {
+                            Text(stringResource(R.string.setup_model_download_connecting),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim))
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        is helium314.keyboard.latin.voice.local.DownloadState.Failed ->
+                            Text(stringResource(R.string.setup_model_download_failed, downloadState.reason),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = MaterialTheme.colorScheme.error))
+                        else ->
+                            Text(stringResource(R.string.setup_model_download_size, model.sizeLabel.orEmpty()),
+                                style = MaterialTheme.typography.bodyMedium.merge(color = textColorDim))
+                    }
+                    Spacer(Modifier.height(24.dp))
+                    if (!isReady) {
+                        primaryAction(
+                            when {
+                                isInProgress -> stringResource(R.string.setup_model_download_downloading)
+                                isFailed -> stringResource(R.string.setup_model_download_retry)
+                                else -> stringResource(R.string.setup_model_download_action)
+                            },
+                            painterResource(R.drawable.ic_settings_preferences)
+                        ) {
+                            if (!isInProgress) {
+                                startModelDownload(model.id)
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    // Non-blocking: the download is a foreground service, so the user can move on
+                    // and finish setup while it keeps running. This is NOT the same as the bottom
+                    // "skip AI setup" action — it advances to the next step rather than abandoning.
+                    secondaryAction(
+                        when {
+                            isReady -> stringResource(R.string.setup_continue_action)
+                            isInProgress -> stringResource(R.string.setup_model_download_continue_downloading)
+                            else -> stringResource(R.string.setup_model_download_continue_later)
+                        },
+                        if (isReady) painterResource(R.drawable.ic_setup_check) else null,
+                        onModelConfigured
+                    )
+                }
+                5 -> {
                     Text(
                         stringResource(R.string.setup_ai_provider_key_title),
                         style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)
@@ -738,7 +864,7 @@ private fun AiProviderSetupStep(
                         )
                     }
                 }
-                5 -> {
+                6 -> {
                     Text(
                         stringResource(R.string.setup_ai_provider_language_title),
                         style = MaterialTheme.typography.headlineSmall.merge(color = titleColor)

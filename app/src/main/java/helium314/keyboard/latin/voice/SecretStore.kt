@@ -17,8 +17,7 @@ import helium314.keyboard.latin.utils.prefs
 object SecretStore {
 
     private const val TAG = "SecretStore"
-    private const val ENCRYPTED_FILE = "wisprboard_secrets"
-    @Volatile private var cachedSecurePrefs: SharedPreferences? = null
+    private const val ENCRYPTED_FILE = "tobiboard_secrets"
 
     fun isSecureStorageAvailable(context: Context): Boolean = securePrefs(context) != null
 
@@ -32,65 +31,75 @@ object SecretStore {
         securePrefs(context)
     }
 
-    fun getApiKey(context: Context, prefKey: String, default: String): String {
-        val secure = securePrefs(context) ?: return default
-        // EncryptedSharedPreferences throws an unchecked SecurityException when a stored blob
-        // cannot be decrypted with the current AndroidKeyStore master key — which happens after
-        // some restores and OS updates. Every caller of this is on the IME main thread, and an
-        // escaping SecurityException kills the whole keyboard process on every mic tap, then again
-        // on every retry. Report "no key" instead: re-entering it in Settings overwrites the bad
-        // blob and self-heals. Deliberately does NOT fall through to the plaintext-legacy branch.
-        val encrypted = runCatching { secure.getString(prefKey, null) }.getOrElse { e ->
-            Log.w(TAG, "Failed to read stored key", e)
-            return default
-        }
+    fun getApiKey(context: Context, prefKey: String, default: String): String =
+        readApiKey(securePrefs(context), context.prefs(), prefKey, default)
+
+    fun setApiKey(context: Context, prefKey: String, value: String) =
+        writeApiKey(securePrefs(context), context.prefs(), prefKey, value)
+
+    /**
+     * The migration and fallback rules, with both preference files passed in so they can be
+     * exercised without an AndroidKeyStore: [secure] is null exactly when the encrypted store
+     * could not be opened.
+     */
+    @Suppress("UseKtx") // see writeApiKey: commit()'s result is the point
+    internal fun readApiKey(
+        secure: SharedPreferences?,
+        plain: SharedPreferences,
+        prefKey: String,
+        default: String,
+    ): String {
+        // No encrypted store means no key, not a plaintext fallback: handing the caller the legacy
+        // value here would keep it readable on disk forever.
+        if (secure == null) return default
+        val encrypted = secure.getString(prefKey, null)
         if (encrypted != null) return encrypted
         // First-run migration: if a plaintext value exists in normal prefs, move it here
         // and scrub the original.
-        val legacy = context.prefs().getString(prefKey, null)
+        val legacy = plain.getString(prefKey, null)
         if (!legacy.isNullOrBlank()) {
-            // Commit the secure copy to disk before scrubbing the plaintext one. If the process
-            // dies in between, the worst case is a leftover plaintext key that gets re-scrubbed on
-            // the next read — never a lost key.
-            val migrated = runCatching {
-                secure.edit(commit = true) { putString(prefKey, legacy) }
-            }.isSuccess
-            // Only scrub the plaintext copy once the encrypted one is actually on disk, or the
-            // migration would destroy the user's key.
-            if (migrated) context.prefs().edit { remove(prefKey) }
+            // Commit the secure copy to disk and check it landed before scrubbing the plaintext
+            // one. commit() returns false on a real write failure (full disk, I/O error), and
+            // scrubbing anyway would delete the only remaining copy of the key.
+            val stored = secure.edit().putString(prefKey, legacy).commit()
+            if (stored) plain.edit { remove(prefKey) }
+            else Log.w(TAG, "could not persist the migrated key; keeping the plaintext copy")
             return legacy
         }
         return default
     }
 
-    fun setApiKey(context: Context, prefKey: String, value: String) {
-        val secure = securePrefs(context)
-        if (secure != null) {
-            secure.edit(commit = true) { putString(prefKey, value) }
-            // Ensure no stale plaintext copy remains (only scrub once the secure write is persisted).
-            context.prefs().edit { remove(prefKey) }
-        } else {
-            throw IllegalStateException("Secure storage unavailable")
-        }
+    // The KTX edit {} helper swallows commit()'s result, and the whole point here is to check it
+    // before scrubbing the only other copy of the key.
+    @Suppress("UseKtx")
+    internal fun writeApiKey(
+        secure: SharedPreferences?,
+        plain: SharedPreferences,
+        prefKey: String,
+        value: String,
+    ) {
+        if (secure == null) throw IllegalStateException("Secure storage unavailable")
+        if (!secure.edit().putString(prefKey, value).commit())
+            throw IllegalStateException("Could not persist the API key")
+        // Ensure no stale plaintext copy remains (only scrub once the secure write is persisted).
+        plain.edit { remove(prefKey) }
     }
 
     private fun securePrefs(context: Context): SharedPreferences? {
         // EncryptedSharedPreferences relies on KeyGenParameterSpec (API 23+). Keep the reference
         // inside this method so the class isn't loaded on older devices.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
-        cachedSecurePrefs?.let { return it }
-        return synchronized(this) {
-            cachedSecurePrefs?.let { return@synchronized it }
-            try {
-                EncryptedPrefsFactory.create(context.applicationContext, ENCRYPTED_FILE).also {
-                    cachedSecurePrefs = it
-                }
-            } catch (e: Exception) {
-                // Do not cache failures: AndroidKeyStore can be transiently unavailable before
-                // user unlock or during an OS update, and a later call should be allowed to retry.
-                Log.w(TAG, "Failed to open encrypted prefs", e)
-                null
-            }
+        return try {
+            EncryptedPrefsFactory.create(context, ENCRYPTED_FILE)
+        } catch (e: Exception) {
+            // Transient AndroidKeyStore failures (e.g. user has not unlocked the device yet,
+            // OS update mid-flight) used to trigger an automatic destructive recovery here that
+            // wiped the user's stored API keys. That made one-shot transient hiccups permanent.
+            // Now we just surface the failure: callers see "no API key" and can retry, or the
+            // user can hit `clearSecureStorage()` from settings if the prefs file really is
+            // corrupted. Cause chain is logged for diagnosis.
+            Log.w(TAG, "Failed to open encrypted prefs", e)
+            null
         }
     }
 
@@ -101,20 +110,15 @@ object SecretStore {
      * that resolve on their own.
      */
     fun clearSecureStorage(context: Context) {
-        synchronized(this) {
-            try {
-                cachedSecurePrefs?.edit(commit = true) { clear() }
-                    ?: context.getSharedPreferences(ENCRYPTED_FILE, Context.MODE_PRIVATE).edit(commit = true) {
-                        clear()
-                    }
-                cachedSecurePrefs = null
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    context.deleteSharedPreferences(ENCRYPTED_FILE)
-                }
-            } catch (e: Exception) {
-                cachedSecurePrefs = null
-                Log.w(TAG, "Failed to clear encrypted prefs file", e)
+        try {
+            context.getSharedPreferences(ENCRYPTED_FILE, Context.MODE_PRIVATE).edit(commit = true) {
+                clear()
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                context.deleteSharedPreferences(ENCRYPTED_FILE)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clear encrypted prefs file", e)
         }
     }
 }

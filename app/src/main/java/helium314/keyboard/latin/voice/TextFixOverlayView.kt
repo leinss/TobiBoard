@@ -2,77 +2,130 @@
 package helium314.keyboard.latin.voice
 
 import android.content.Context
+import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
-import android.text.TextUtils
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.method.ScrollingMovementMethod
+import android.text.style.ForegroundColorSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import helium314.keyboard.latin.R
-import kotlin.reflect.KMutableProperty0
 
 /**
  * Overlay shown in the suggestion strip during a text-fix round-trip.
  *
  * States:
+ *  - preparing: on-device model is loading; spinner plus a status that says a discard cannot
+ *    stop the load, because `LlmInference.createFromOptions` ignores interrupts.
  *  - working: shows "Fixing…" status while the request is in flight.
  *  - result: shows the proposed text plus Replace/Discard buttons.
  */
 class TextFixOverlayView(context: Context) : LinearLayout(context) {
 
-    private val pulseView: AiPulseView
+    private val spinner: ProgressBar
     private val statusText: TextView
     private val resultText: TextView
+    private val expandButton: ImageView
+    private val reportButton: TextView
     private val replaceButton: TextView
     private val discardButton: TextView
 
     var onReplaceClick: (() -> Unit)? = null
     var onDiscardClick: (() -> Unit)? = null
-    private var lastReplaceClickMs = 0L
-    private var lastDiscardClickMs = 0L
+    /** Invoked when the user taps the proposed text to view it in a popup. Only fires in result state. */
+    var onExpandClick: (() -> Unit)? = null
+    /** Report the proposed text as objectionable AI output (Google Play Generative AI policy). */
+    var onReportClick: (() -> Unit)? = null
+    private var lastClickMs = 0L
+    private var baseTextColor: Int = 0xFF000000.toInt()
 
     init {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-        setPadding(dp(12), 0, dp(12), 0)
+        setPadding(dp(12), dp(4), dp(12), dp(4))
 
-        pulseView = AiPulseView(context).apply {
-            layoutParams = LayoutParams(dp(44), dp(20)).apply { marginEnd = dp(12) }
+        spinner = ProgressBar(context).apply {
+            isIndeterminate = true
+            layoutParams = LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(10) }
             visibility = View.GONE
         }
         statusText = TextView(context).apply {
             textSize = 13f
-            maxLines = 2
-            ellipsize = TextUtils.TruncateAt.END
-            // Weighted like every sibling overlay's status line. With WRAP_CONTENT it was the only
-            // weightless child in the error state, so a long provider message soaked up the whole
-            // strip and squeezed Discard — the one button that state offers — to zero width.
-            layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply {
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
                 marginEnd = dp(12)
             }
             visibility = View.GONE
         }
         resultText = TextView(context).apply {
             textSize = 13f
-            maxLines = 2
-            ellipsize = TextUtils.TruncateAt.END
+            // Fits within the strip's row height. Long results overflow vertically and are
+            // touch-scrollable; the user can also tap the text to expand it into a popup. A
+            // little more room than a single-line result so the inline diff (which carries the
+            // struck-through removals alongside the additions) stays legible before scrolling.
+            maxLines = 3
+            isVerticalScrollBarEnabled = true
+            movementMethod = ScrollingMovementMethod()
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { debounceClick { onExpandClick?.invoke() } }
             layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply {
                 marginEnd = dp(12)
             }
         }
-        discardButton = makePillButton(R.string.text_fix_discard, isPrimary = false) {
-            debounceClick(::lastDiscardClickMs) { onDiscardClick?.invoke() }
+        // Icon-only square button signalling that the truncated result can be expanded into
+        // a popup. Uses a vector drawable rather than a unicode glyph — typographic glyphs
+        // like ⛶ have inconsistent baseline metrics across system fonts and refuse to
+        // visually center inside a small pill no matter how the padding is tuned.
+        expandButton = ImageView(context).apply {
+            val size = dp(36)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_expand_overlay)?.mutate())
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            isClickable = true
+            isFocusable = true
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(20).toFloat()
+            }
+            layoutParams = LayoutParams(size, size).apply { marginStart = dp(4) }
+            setOnClickListener { debounceClick { onExpandClick?.invoke() } }
+            visibility = View.GONE
         }
-        replaceButton = makePillButton(R.string.text_fix_replace, isPrimary = true) {
-            debounceClick(::lastReplaceClickMs) { onReplaceClick?.invoke() }
+        // Recessive text-only action so the Replace/Discard pills stay dominant.
+        reportButton = TextView(context).apply {
+            text = context.getString(R.string.report_ai_output)
+            contentDescription = context.getString(R.string.report_ai_output_a11y)
+            textSize = 12f
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            gravity = Gravity.CENTER
+            isClickable = true
+            isFocusable = true
+            isAllCaps = false
+            minHeight = dp(36)
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = dp(4) }
+            visibility = View.GONE
+            setOnClickListener { debounceClick { onReportClick?.invoke() } }
         }
+        discardButton = makePillButton(R.string.text_fix_discard, isPrimary = false) { debounceClick { onDiscardClick?.invoke() } }
+        replaceButton = makePillButton(R.string.text_fix_replace, isPrimary = true) { debounceClick { onReplaceClick?.invoke() } }
 
-        addView(pulseView)
+        addView(spinner)
         addView(statusText)
         addView(resultText)
+        addView(expandButton)
+        addView(reportButton)
         addView(discardButton)
         addView(replaceButton)
     }
@@ -87,7 +140,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
             isClickable = true
             isFocusable = true
             isAllCaps = false
-            minHeight = dp(48)
+            minHeight = dp(36)
             minWidth = dp(64)
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -104,7 +157,8 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
     }
 
     fun setColors(textColor: Int) {
-        pulseView.meterColor = textColor
+        baseTextColor = textColor
+        spinner.indeterminateDrawable?.mutate()?.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         statusText.setTextColor(textColor)
         resultText.setTextColor(textColor)
         // Primary (Replace): strong filled background with full-opacity text.
@@ -115,60 +169,93 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         discardButton.setTextColor((textColor and 0x00FFFFFF) or 0xB0000000.toInt())
         (discardButton.background as? GradientDrawable)
             ?.setColor((textColor and 0x00FFFFFF) or 0x18000000)
+        // Expand: same secondary tone as Discard so it reads as an action affordance.
+        expandButton.drawable?.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
+        (expandButton.background as? GradientDrawable)
+            ?.setColor((textColor and 0x00FFFFFF) or 0x18000000)
+        // Report: muted text-only, recessive next to the Replace/Discard pills.
+        reportButton.setTextColor((textColor and 0x00FFFFFF) or 0xB0000000.toInt())
+    }
+
+    /** On-device model load: distinct from [showWorking], which used to cover both. */
+    fun showPreparing() {
+        showStatus(context.getString(R.string.text_fix_preparing))
     }
 
     fun showWorking() {
-        statusText.text = context.getString(R.string.text_fix_working)
-        // Something has to move while the provider thinks, or a multi-second wait behind static
-        // text reads as a dead keyboard.
-        pulseView.visibility = View.VISIBLE
-        pulseView.resetToIdlePulse()
+        showStatus(context.getString(R.string.text_fix_working))
+    }
+
+    private fun showStatus(text: CharSequence) {
+        statusText.text = text
+        spinner.visibility = View.VISIBLE
         statusText.visibility = View.VISIBLE
         resultText.visibility = View.GONE
+        expandButton.visibility = View.GONE
+        reportButton.visibility = View.GONE
         replaceButton.visibility = View.GONE
         discardButton.visibility = View.VISIBLE
         announceForAccessibility(statusText.text)
     }
 
-    fun showResult(proposed: String) {
-        stopPulse()
+    fun showResult(original: String, proposed: String) {
+        spinner.visibility = View.GONE
         statusText.visibility = View.GONE
-        resultText.text = proposed
+        // Inline word-diff: additions are bold + underlined, removals struck through and dimmed,
+        // so the user sees what the fix changed rather than just the final text. Theme-safe — no
+        // hardcoded hues, only emphasis derived from the current strip text color.
+        resultText.text = buildDiffSpannable(original, proposed)
+        resultText.scrollTo(0, 0)
         resultText.visibility = View.VISIBLE
+        expandButton.visibility = View.VISIBLE
+        reportButton.visibility = View.VISIBLE
         replaceButton.visibility = View.VISIBLE
         discardButton.visibility = View.VISIBLE
+        // Announce the final proposed text (not the diff markup) for screen readers.
         announceForAccessibility(context.getString(R.string.text_fix_result_a11y, proposed))
     }
 
+    private fun buildDiffSpannable(original: String, proposed: String): CharSequence {
+        val segments = WordDiff.diff(original, proposed)
+        // Dim removals to ~50% alpha of the base text color so they recede behind the additions.
+        val dimColor = (baseTextColor and 0x00FFFFFF) or (0x80 shl 24)
+        val sb = SpannableStringBuilder()
+        for (segment in segments) {
+            val start = sb.length
+            sb.append(segment.text)
+            val end = sb.length
+            when (segment.op) {
+                WordDiff.Op.ADDED -> {
+                    sb.setSpan(StyleSpan(android.graphics.Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    sb.setSpan(UnderlineSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                WordDiff.Op.REMOVED -> {
+                    sb.setSpan(StrikethroughSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    sb.setSpan(ForegroundColorSpan(dimColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                WordDiff.Op.COMMON -> Unit
+            }
+        }
+        return sb
+    }
+
     fun showError(message: String) {
-        stopPulse()
         statusText.text = message
         statusText.visibility = View.VISIBLE
         resultText.visibility = View.GONE
+        expandButton.visibility = View.GONE
+        reportButton.visibility = View.GONE
         replaceButton.visibility = View.GONE
         discardButton.visibility = View.VISIBLE
         announceForAccessibility(message)
     }
 
-    /** Every state that is not "waiting" must stop the animator, or the IME window never idles. */
-    private fun stopPulse() {
-        pulseView.stopPulse()
-        pulseView.visibility = View.GONE
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        pulseView.stopPulse()
-    }
-
-    private fun debounceClick(lastClickMs: KMutableProperty0<Long>, action: () -> Unit) {
+    private inline fun debounceClick(action: () -> Unit) {
         // Replace and Discard both mutate persistent state (cancelling an in-flight request or
         // committing a text replacement). A double-tap should never fire the callback twice.
-        // The window is per-button: a shared one let a tap on Replace swallow a deliberate tap on
-        // Discard moments later, which is a different action, not a double-tap.
         val now = SystemClock.elapsedRealtime()
-        if (now - lastClickMs.get() < 300L) return
-        lastClickMs.set(now)
+        if (now - lastClickMs < 300L) return
+        lastClickMs = now
         action()
     }
 

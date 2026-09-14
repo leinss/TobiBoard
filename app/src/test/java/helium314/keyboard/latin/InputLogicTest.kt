@@ -27,6 +27,7 @@ import helium314.keyboard.latin.utils.ScriptUtils
 import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.utils.getTimestampFormatter
 import helium314.keyboard.latin.utils.prefs
+import kotlinx.coroutines.Dispatchers
 import org.junit.runner.RunWith
 import org.mockito.Mockito
 import org.robolectric.Robolectric
@@ -64,9 +65,24 @@ class InputLogicTest {
     private val connectionTextBeforeComposingText get() = (beforeComposingReader.get(connection) as CharSequence).toString()
     private val composingReader = RichInputConnection::class.java.getDeclaredField("mComposingText").apply { isAccessible = true }
     private val connectionComposingText get() = (composingReader.get(connection) as CharSequence).toString()
+    // early-keystroke buffer (the "first few keystrokes don't respond" fix) — private LatinIME state
+    private val readyField = LatinIME::class.java.getDeclaredField("mInputConnectionReady").apply { isAccessible = true }
+    private var inputConnectionReady: Boolean
+        get() = readyField.getBoolean(latinIME)
+        set(value) = readyField.setBoolean(latinIME, value)
+    private val pendingBufferField = LatinIME::class.java.getDeclaredField("mPendingEarlyEvents").apply { isAccessible = true }
+    private val pendingBufferSize: Int get() {
+        val buffer = pendingBufferField.get(latinIME)
+        return buffer.javaClass.getMethod("getSize").invoke(buffer) as Int
+    }
+    private val onInputConnectionReadyMethod = LatinIME::class.java.getDeclaredMethod("onInputConnectionReady").apply { isAccessible = true }
 
     @BeforeTest
     fun setUp() {
+        // Run the clipboard background cache-load synchronously so its main-thread continuation
+        // doesn't race this test's manual message pump (handleMessages) and leave stray messages.
+        ClipboardHistoryManager.loadDispatcher = Dispatchers.Unconfined
+        ClipboardHistoryManager.applyDispatcher = Dispatchers.Unconfined
         latinIME = Robolectric.setupService(LatinIME::class.java)
         // start logging only after latinIME is created, avoids showing the stack traces if library is not found
         ShadowLog.setupLogging()
@@ -82,6 +98,89 @@ class InputLogicTest {
         assertEquals("c", composingText)
         latinIME.mHandler.onFinishInput()
         assertEquals("", composingText)
+    }
+
+    // --- early-keystroke buffering (the "first few keystrokes don't respond" fix) ---
+
+    @Test fun earlyKeystrokesBufferWhileNotReadyThenReplayInOrder() {
+        reset()
+        // Simulate the resetCaches-failed window. The gate MUST use this flag, not isConnected():
+        // in that window mIC is non-null-but-inert, so isConnected() would wrongly read true and the
+        // keystrokes would commit into a broken connection and be lost (the original bug).
+        inputConnectionReady = false
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('a'.code))
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('b'.code))
+        handleMessages()
+        assertEquals("", getText()) // nothing committed while not ready
+        assertEquals(2, pendingBufferSize)
+
+        // Connection becomes ready -> buffered keystrokes replay in press order.
+        onInputConnectionReadyMethod.invoke(latinIME)
+        handleMessages()
+        assertEquals("ab", getText())
+        assertEquals(0, pendingBufferSize)
+    }
+
+    @Test fun normalTypingIsNotBufferedWhenConnectionReady() {
+        reset()
+        assertEquals(true, inputConnectionReady) // onStartInputView success marks the connection ready
+        input('x') // input() asserts the commit actually happened
+        assertEquals("x", getText())
+        assertEquals(0, pendingBufferSize)
+    }
+
+    @Test fun bufferedKeystrokesAreDiscardedWhenADifferentFieldStarts() {
+        reset()
+        inputConnectionReady = false
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('a'.code))
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('b'.code))
+        handleMessages()
+        assertEquals(2, pendingBufferSize)
+
+        // A different field starts (restarting=false): the buffer must be dropped, never replayed
+        // into the new field — the cross-field-leak guard.
+        setText("")
+        handleMessages()
+        assertEquals("", getText())
+        assertEquals(0, pendingBufferSize)
+    }
+
+    @Test fun exhaustedResetRetriesUngateInputInsteadOfHidingTheKeyboard() {
+        reset()
+        inputConnectionReady = false
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('a'.code))
+        handleMessages()
+        assertEquals(1, pendingBufferSize)
+
+        // The last retry (remainingTries == 0) still finds the connection inert. We must NOT
+        // requestHideSelf here: a composer that keeps focus while the IME hides never asks for the
+        // keyboard back, so it was gone for good. Fail open instead.
+        failingTextReads = 1
+        latinIME.mHandler.postResetCaches(false, 0)
+        handleMessages()
+
+        assertEquals(true, inputConnectionReady)
+        assertEquals(0, pendingBufferSize)
+        assertEquals("a", getText()) // the buffered keystroke landed rather than being dropped
+    }
+
+    @Test fun finishingTheInputViewClearsAStaleNotReadyGate() {
+        reset()
+        inputConnectionReady = false
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('a'.code))
+        handleMessages()
+        assertEquals(1, pendingBufferSize)
+
+        // A not-ready flag left set past the end of the session would silently swallow every
+        // keystroke of the next one, because only a full onStartInputViewInternal clears it and that
+        // does not always run.
+        latinIME.onFinishInputViewInternal(true)
+        assertEquals(true, inputConnectionReady)
+        assertEquals(0, pendingBufferSize)
+
+        setText("")
+        input('b')
+        assertEquals("b", getText())
     }
 
     @Test fun delete() {
@@ -749,6 +848,7 @@ class InputLogicTest {
         batchEdit = 0
         currentInputType = InputType.TYPE_CLASS_TEXT
         lastAddedWord = ""
+        failingTextReads = 0
 
         // reset settings
         latinIME.prefs().edit { clear() }
@@ -953,6 +1053,8 @@ private var currentScript = ScriptUtils.SCRIPT_LATIN
 private val messages = mutableListOf<Message>() // for latinIME / ShadowInputMethodService
 private val delayedMessages = mutableListOf<Message>() // for latinIME / ShadowInputMethodService
 // inputconnection stuff
+// How many upcoming text reads should fail, i.e. how long the connection stays inert (see ic below)
+private var failingTextReads = 0
 private var batchEdit = 0
 private var text = ""
 private var selectionStart = 0
@@ -973,7 +1075,15 @@ private val composingText get() = if (composingStart == -1 || composingEnd == -1
 private val ic = object : InputConnection {
     // pretty clear (though this may be slow depending on the editor)
     // bad return value here is likely the cause for that weird bug improved/fixed by fixIncorrectLength
-    override fun getTextBeforeCursor(p0: Int, p1: Int): CharSequence = textBeforeCursor.take(p0)
+    override fun getTextBeforeCursor(p0: Int, p1: Int): CharSequence? {
+        // Simulate the inert-connection window: the framework hands back a non-null InputConnection
+        // whose text reads return null, which is what makes resetCachesUponCursorMove fail.
+        if (failingTextReads > 0) {
+            failingTextReads--
+            return null
+        }
+        return textBeforeCursor.take(p0)
+    }
     // pretty clear (though this may be slow depending on the editor)
     override fun getTextAfterCursor(p0: Int, p1: Int): CharSequence = textAfterCursor.take(p0)
     // pretty clear

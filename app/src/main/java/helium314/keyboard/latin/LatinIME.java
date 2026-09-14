@@ -9,6 +9,8 @@ package helium314.keyboard.latin;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -32,7 +34,6 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InlineSuggestion;
 import android.view.inputmethod.InlineSuggestionsRequest;
 import android.view.inputmethod.InlineSuggestionsResponse;
-import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodSubtype;
 import android.widget.Toast;
 
@@ -63,6 +64,7 @@ import helium314.keyboard.latin.common.CoordinateUtils;
 import helium314.keyboard.latin.common.InputPointers;
 import helium314.keyboard.latin.common.ViewOutlineProviderUtilsKt;
 import helium314.keyboard.latin.define.DebugFlags;
+import helium314.keyboard.latin.inputlogic.EarlyInputBuffer;
 import helium314.keyboard.latin.inputlogic.InputLogic;
 import helium314.keyboard.latin.personalization.PersonalizationHelper;
 import helium314.keyboard.latin.settings.Defaults;
@@ -87,12 +89,11 @@ import helium314.keyboard.latin.utils.SubtypeLocaleUtils;
 import helium314.keyboard.latin.utils.SubtypeSettings;
 import helium314.keyboard.latin.utils.SubtypeState;
 import helium314.keyboard.latin.utils.ToolbarMode;
-import helium314.keyboard.latin.voice.AiProvider;
-import helium314.keyboard.latin.voice.OpenRouterClient;
 import helium314.keyboard.latin.voice.TextFixManager;
-import helium314.keyboard.latin.voice.TranslateManager;
-import helium314.keyboard.latin.voice.VoiceDestinationGuard;
+import helium314.keyboard.latin.voice.TextReplaceGuard;
 import helium314.keyboard.latin.voice.VoiceInputManager;
+import helium314.keyboard.latin.voice.local.LocalLiteRtEngine;
+import helium314.keyboard.latin.voice.local.LocalSherpaEngine;
 import helium314.keyboard.settings.SettingsActivity2;
 import kotlin.Unit;
 
@@ -120,6 +121,8 @@ public class LatinIME extends InputMethodService implements
     private static final int EXTENDED_TOUCHABLE_REGION_HEIGHT = 100;
     private static final int PERIOD_FOR_AUDIO_AND_HAPTIC_FEEDBACK_IN_KEY_REPEAT = 2;
     private static final int PENDING_IMS_CALLBACK_DURATION_MILLIS = 800;
+    /** Spacing between the 5 input-connection reset retries, so they span ~250 ms, not ~0. */
+    static final long RESET_CACHES_RETRY_DELAY_MILLIS = 50;
     static final long DELAY_WAIT_FOR_DICTIONARY_LOAD_MILLIS = TimeUnit.SECONDS.toMillis(2);
     static final long DELAY_DEALLOCATE_MEMORY_MILLIS = TimeUnit.SECONDS.toMillis(10);
 
@@ -152,38 +155,18 @@ public class LatinIME extends InputMethodService implements
     private TextFixManager mTextFixManager;
     private String mPendingTextFixOriginal;
     private String mPendingTextFixProposed;
-    private TranslateManager mTranslateManager;
-    /** Text captured when the Translate key was pressed, kept until the request settles. */
-    private String mPendingTranslateSource;
-    /** Target language of the pending request, kept so a failure can offer Retry. */
-    private String mPendingTranslateLanguage;
-    /** True when the pending source came from the clipboard, so the result is inserted, not replaced. */
-    private boolean mPendingTranslateFromClipboard;
-    /** True while the language middle menu is on screen, so a recreated strip can restore it. */
-    private boolean mTranslateMenuOpen;
-    /**
-     * Identity of the editor a voice recording was started against, or null when there is nothing
-     * in flight. Compared against the current editor before a transcription is inserted so audio
-     * dictated into one field can never land in another.
-     */
-    private String mVoiceTargetEditorId;
-    /** Monotonically identifies non-restarting input sessions, including fields with no view id. */
-    private long mInputSessionGeneration;
-    private long mVoiceTargetSessionGeneration = -1L;
-    private InputConnection mVoiceTargetInputConnection;
-    /**
-     * The selection as it was when recording started. Needed to tell "the selection the user
-     * deliberately dictated over" from "a selection made while the upload was in flight" — the
-     * commit-time refusal cannot distinguish those from a bare hasSelection() check, and refusing
-     * both means select-then-dictate never works at all.
-     */
-    private int mVoiceTargetSelectionStart = Constants.NOT_A_CURSOR_POSITION;
-    private int mVoiceTargetSelectionEnd = Constants.NOT_A_CURSOR_POSITION;
-    private boolean mVoiceTargetSelectionChanged;
+    // True when the pending fix operates on the whole field (nothing was selected) rather than a
+    // selection. Set when the text to fix is read; consumed when the replacement is committed.
+    private boolean mPendingTextFixWholeField;
     private final android.os.Handler mTextFixOverlayHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable mTextFixErrorOverlayHideRunnable;
-    private Runnable mTranslateErrorOverlayHideRunnable;
+    // Undo-last-AI-insertion state. mUndoInserted is the text now sitting before the cursor that an
+    // undo would remove; mUndoRestore is what to put back in its place ("" for voice = just delete).
+    private String mUndoInserted;
+    private String mUndoRestore;
+    private Runnable mUndoHideRunnable;
+    private static final long UNDO_BAR_HIDE_MS = 5000L;
 
     private RichInputMethodManager mRichImm;
     final KeyboardSwitcher mKeyboardSwitcher;
@@ -203,6 +186,16 @@ public class LatinIME extends InputMethodService implements
 
     private final BroadcastReceiver mDictionaryDumpBroadcastReceiver =
             new DictionaryDumpBroadcastReceiver(this);
+
+    private final BroadcastReceiver mDebugTextFixReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.d(TAG, "mDebugTextFixReceiver: triggering startTextFix, state=" + (mTextFixManager != null ? mTextFixManager.getState() : "null"));
+            if (mTextFixManager != null && mTextFixManager.getState() == TextFixManager.State.IDLE) {
+                mTextFixManager.startTextFix(TextFixManager.Variant.PRIMARY);
+            }
+        }
+    };
 
     final static class RestartAfterDeviceUnlockReceiver extends BroadcastReceiver {
         @Override
@@ -229,6 +222,23 @@ public class LatinIME extends InputMethodService implements
     private GestureConsumer mGestureConsumer = GestureConsumer.NULL_GESTURE_CONSUMER;
 
     private final ClipboardHistoryManager mClipboardHistoryManager = new ClipboardHistoryManager(this);
+
+    // --- Early-keystroke buffering -------------------------------------------------------------
+    // Taps can arrive in the brief window after onStartInputView while the input connection caches
+    // are still being (re)established (the resetCaches-failed path in onStartInputViewInternal).
+    // Committing then would write to a broken connection and silently drop the character — the
+    // reported "first few keystrokes don't respond" bug. We buffer those events and replay them
+    // once the connection is ready. See onEvent() (the gate), onInputConnectionReady() (the flush
+    // trigger), replayPendingInputs() (re-dispatch) and EarlyInputBuffer (tested FIFO/cap policy).
+    // TODO: pick the cap. How many early taps are worth preserving before we start dropping?
+    //  Too small loses a fast typer's leading characters; too large risks replaying a stale burst.
+    private static final int MAX_PENDING_EARLY_EVENTS = 8;
+    private final EarlyInputBuffer<Event> mPendingEarlyEvents =
+            new EarlyInputBuffer<>(MAX_PENDING_EARLY_EVENTS);
+    // Whether the input connection is ready to accept commits. Driven by onStartInputViewInternal's
+    // resetCaches branches and the MSG_RESET_CACHES retry (see onInputConnectionReady/NotReady).
+    // Default true: before any onStartInputView there is nothing to buffer.
+    private boolean mInputConnectionReady = true;
 
     public static final class UIHandler extends LeakGuardHandlerWrapper<LatinIME> {
         private static final int MSG_UPDATE_SHIFT_STATE = 0;
@@ -336,6 +346,22 @@ public class LatinIME extends InputMethodService implements
                         // If we were able to reset the caches, then we can reload the keyboard.
                         // Otherwise, we'll do it when we can.
                         latinIme.mKeyboardSwitcher.reloadMainKeyboard();
+                        // Connection is back: flush keystrokes buffered during the not-ready window.
+                        latinIme.onInputConnectionReady();
+                    } else if (msg.arg2 == 0) {
+                        // All retries exhausted and the input connection is still broken. Fail OPEN:
+                        // ungate input and flush the buffer through the normal path. Worst case a
+                        // keystroke is lost, exactly as upstream behaves.
+                        //
+                        // We used to requestHideSelf(0) here to force the framework into a fresh
+                        // onStartInput. That assumed the user must re-tap the field to get the
+                        // keyboard back. False for a composer that keeps focus while the IME hides
+                        // (e.g. an in-app chat bubble): Android does not re-show the IME on its own
+                        // and an app that only calls showSoftInput on a focus *change* never asks
+                        // again, so the keyboard was gone for good. Leaving it up is recoverable;
+                        // hiding it is not.
+                        Log.w(TAG, "Input connection reset failed after all retries; ungating input and keeping the keyboard visible.");
+                        latinIme.onInputConnectionReady();
                     }
                     break;
                 case MSG_WAIT_FOR_DICTIONARY_LOAD:
@@ -352,11 +378,6 @@ public class LatinIME extends InputMethodService implements
 
         public void postUpdateSuggestionStrip(final int inputStyle) {
             final int updateSequenceNumber = ++mSuggestionStripSequenceNumber;
-            // Drop any older pending update before enqueuing this one. Without this, typing faster
-            // than the debounce delay leaves several messages queued: the oldest one fires first,
-            // removes the newer ones (see MSG_UPDATE_SUGGESTION_STRIP), then discards itself on the
-            // sequence check — so the strip stops updating until some other event kicks it.
-            removeMessages(MSG_UPDATE_SUGGESTION_STRIP);
             sendMessageDelayed(obtainMessage(MSG_UPDATE_SUGGESTION_STRIP, inputStyle,
                     updateSequenceNumber), mDelayInMillisecondsToUpdateSuggestions);
         }
@@ -385,8 +406,11 @@ public class LatinIME extends InputMethodService implements
 
         public void postResetCaches(final boolean tryResumeSuggestions, final int remainingTries) {
             removeMessages(MSG_RESET_CACHES);
-            sendMessage(obtainMessage(MSG_RESET_CACHES, tryResumeSuggestions ? 1 : 0,
-                    remainingTries, null));
+            // Delayed, not immediate: retryResetCachesAndReturnSuccess reposts on failure, so with
+            // sendMessage all remaining tries drained in a single message-loop burst microseconds
+            // apart and a connection that needed a few tens of ms to come back was declared dead.
+            sendMessageDelayed(obtainMessage(MSG_RESET_CACHES, tryResumeSuggestions ? 1 : 0,
+                    remainingTries, null), RESET_CACHES_RETRY_DELAY_MILLIS);
         }
 
         public void postWaitForDictionaryLoad() {
@@ -416,13 +440,10 @@ public class LatinIME extends InputMethodService implements
         }
 
         /**
-         * True while a suggestion result computed on the worker thread is queued for this thread
-         * but has not been applied yet.
-         *
-         * The in-flight counter that {@code commitCurrentAutoCorrection} also consults is
-         * decremented by the worker as soon as it posts, so it does not cover this interval — and
-         * input events are dispatched ahead of queued messages, so a fast space really can land
-         * inside it and commit the raw typed word instead of the correction.
+         * True while a suggestions result has been posted but not yet applied. The in-flight
+         * counter is decremented by the worker as soon as it posts, so it does not cover this
+         * interval, and input events are dispatched ahead of queued messages: a fast space really
+         * can land inside it and commit the raw typed word instead of the correction.
          */
         public boolean hasPendingSetSuggestions() {
             return hasMessages(MSG_SHOW_GESTURE_PREVIEW_AND_SET_SUGGESTIONS);
@@ -640,6 +661,12 @@ public class LatinIME extends InputMethodService implements
         filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
         registerReceiver(mRingerModeChangeReceiver, filter);
 
+        // Debug-only: broadcast receiver to trigger text fix from adb without keyboard UI.
+        if (BuildConfig.DEBUG) {
+            final IntentFilter debugFilter = new IntentFilter("helium314.keyboard.DEBUG_TEXT_FIX");
+            ContextCompat.registerReceiver(this, mDebugTextFixReceiver, debugFilter, ContextCompat.RECEIVER_EXPORTED);
+        }
+
         // Register to receive installation and removal of a dictionary pack.
         final IntentFilter packageFilter = new IntentFilter();
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -665,34 +692,15 @@ public class LatinIME extends InputMethodService implements
         StatsUtils.onCreate(mSettings.getCurrent(), mRichImm);
 
         mVoiceInputManager = new VoiceInputManager(this, new VoiceInputManager.Callbacks() {
-            @Nullable
-            @Override
-            public Integer getBlockedErrorResId() {
-                final SettingsValues settingsValues = mSettings.getCurrent();
-                if (settingsValues == null) return R.string.voice_error_unsupported_field;
-                final EditorInfo ei = getCurrentInputEditorInfo();
-                final int imeOptions = ei != null ? ei.imeOptions : 0;
-                return VoiceInputManager.getBlockedErrorResId(
-                        settingsValues.mInputAttributes.mInputType,
-                        settingsValues.mInputAttributes.mIsPasswordField,
-                        settingsValues.mInputAttributes.mNoLearning,
-                        settingsValues.mIncognitoModeEnabled,
-                        imeOptions);
-            }
-
             @Override
             public void onRecordingStarted() {
-                mVoiceTargetEditorId = currentEditorIdentity();
-                mVoiceTargetSessionGeneration = mInputSessionGeneration;
-                mVoiceTargetInputConnection = getCurrentInputConnection();
-                mVoiceTargetSelectionStart = mInputLogic.mConnection.getExpectedSelectionStart();
-                mVoiceTargetSelectionEnd = mInputLogic.mConnection.getExpectedSelectionEnd();
-                mVoiceTargetSelectionChanged = false;
                 if (isVoiceHapticEnabled()) AudioAndHapticFeedbackManager.getInstance().vibrate(25L);
                 if (mSuggestionStripView != null) {
                     mSuggestionStripView.setVoiceTelemetryProvider(() ->
                         new kotlin.Pair<>(mVoiceInputManager.getCurrentAmplitude(),
                             mVoiceInputManager.getCurrentDurationMs()));
+                    mSuggestionStripView.setVoiceMaxDurationProvider(
+                        () -> mVoiceInputManager.getMaxDurationMs());
                     mSuggestionStripView.showRecordingOverlay();
                 }
             }
@@ -704,75 +712,80 @@ public class LatinIME extends InputMethodService implements
             }
 
             @Override
+            public void onPreparing() {
+                if (mSuggestionStripView != null) mSuggestionStripView.showPreparingOverlay();
+            }
+
+            @Override
             public void onFinished() {
                 if (mSuggestionStripView != null) {
                     mSuggestionStripView.setVoiceTelemetryProvider(null);
+                    mSuggestionStripView.setVoiceMaxDurationProvider(null);
                     mSuggestionStripView.hideRecordingOverlay();
                 }
             }
 
             @Override
             public void onTranscriptionResult(@NonNull final String text) {
-                // Everything below re-validates the destination. The sensitive-field and
-                // supported-field checks ran when recording started, but insertion targets whatever
-                // InputConnection is current *now* — and focus can move to another field, including
-                // a password box, while the upload is in flight. Committing blind there would leak
-                // dictated text into a field the user never authorised, so drop it instead.
-                final String target = mVoiceTargetEditorId;
-                final long targetSession = mVoiceTargetSessionGeneration;
-                final InputConnection targetConnection = mVoiceTargetInputConnection;
-                final boolean selectionChanged = mVoiceTargetSelectionChanged;
-                final int targetSelStart = mVoiceTargetSelectionStart;
-                final int targetSelEnd = mVoiceTargetSelectionEnd;
-                clearVoiceTarget();
-                final String current = currentEditorIdentity();
-                // The InputConnection identity check stays. In Compose apps every text field shares
-                // one host View, so EditorInfo.fieldId is identical between them, restartInput()
-                // does not bump the session generation, and onFinishInput never fires — without
-                // this the dictation would commit into the wrong field.
-                if (targetConnection == null || targetConnection != getCurrentInputConnection()
-                        || !VoiceDestinationGuard.isUnchanged(
-                        target, current, targetSession, mInputSessionGeneration, selectionChanged)) {
-                    Log.i(TAG, "Discarding transcription: editor changed since recording started");
-                    rescueTranscription(text);
-                    return;
-                }
-                // Refuse only the case that actually destroys work: committing over a selection
-                // that is not the one the recording started against. Dictating over a selection to
-                // replace it is a deliberate, supported action, so the positions have to be
-                // compared — a plain hasSelection() check refuses that too, and would also wrongly
-                // accept a selection the IME itself made mid-upload (Select All, shift+arrow), for
-                // which the move is "expected" and never arms mVoiceTargetSelectionChanged.
-                if (mInputLogic.mConnection.hasSelection()
-                        && (mInputLogic.mConnection.getExpectedSelectionStart() != targetSelStart
-                        || mInputLogic.mConnection.getExpectedSelectionEnd() != targetSelEnd)) {
-                    Log.i(TAG, "Discarding transcription: a different selection exists now");
-                    rescueTranscription(text);
-                    return;
-                }
-                final Integer blocked = getBlockedErrorResId();
-                if (blocked != null) {
-                    Log.i(TAG, "Discarding transcription: editor no longer accepts voice input");
-                    Toast.makeText(LatinIME.this, blocked, Toast.LENGTH_LONG).show();
-                    return;
-                }
                 if (isVoiceHapticEnabled())
                     AudioAndHapticFeedbackManager.getInstance().vibrateVoiceSuccess();
+                // Copy before inserting: if the insert lands in the wrong field or the connection is
+                // gone, the clipboard is the user's remaining copy of what they dictated.
+                copyTranscriptionToClipboardIfEnabled(text);
                 onTextInput(text);
+                armUndo(text, "", getString(R.string.voice_undo_inserted));
             }
 
             @Override
-            public void onError(@NonNull final String message) {
-                clearVoiceTarget();
+            public void onTranscriptionDiscarded(@NonNull final String text) {
+                // The insert is refused, so the clipboard is the only place the dictation survives.
+                copyTranscriptionToClipboardIfEnabled(text);
+            }
+
+            @Override
+            public void onError(@NonNull final String message, final boolean canRetry) {
                 if (isVoiceHapticEnabled())
                     AudioAndHapticFeedbackManager.getInstance().vibrateVoiceError();
                 Toast.makeText(LatinIME.this, message, Toast.LENGTH_LONG).show();
+                // A toast fades; a lost dictation needs something to tap. Offer Retry on the strip
+                // for as long as the failed clip is retained.
+                if (canRetry && mSuggestionStripView != null) {
+                    mSuggestionStripView.showRetryBar(message, LatinIME.this::retryVoiceTranscription);
+                }
+            }
+
+            @Override
+            public void onRecordingRejected(@NonNull final String message) {
+                if (isVoiceHapticEnabled())
+                    AudioAndHapticFeedbackManager.getInstance().vibrateVoiceError();
+                Toast.makeText(LatinIME.this, message, Toast.LENGTH_LONG).show();
+                // The overlay vanishes at the same moment, so a toast on its own is easy to miss:
+                // the screen goes back to looking exactly as it did before the user spoke.
+                if (mSuggestionStripView != null) {
+                    mSuggestionStripView.showRecordAgainBar(message, LatinIME.this::recordVoiceAgain);
+                }
             }
 
             @Override
             public void onMaxDurationReached() {
-                AudioAndHapticFeedbackManager.getInstance().vibrate(50L);
+                if (isVoiceHapticEnabled()) AudioAndHapticFeedbackManager.getInstance().vibrate(50L);
                 Toast.makeText(LatinIME.this, R.string.voice_max_duration_reached, Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onWaitingForNetwork() {
+                Toast.makeText(LatinIME.this, R.string.voice_waiting_for_network, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public boolean isSensitiveField() {
+                return LatinIME.this.isSensitiveField();
+            }
+
+            @Nullable
+            @Override
+            public String getEditorSessionId() {
+                return LatinIME.this.getEditorSessionId();
             }
 
             @Nullable
@@ -804,21 +817,63 @@ public class LatinIME extends InputMethodService implements
                     return null;
                 }
             }
+
+            @Override
+            public void onOpenSettings(@NonNull final String settingsDestination, @NonNull final String reason) {
+                // Say what is missing before the keyboard disappears. Hiding and opening settings
+                // with no message is indistinguishable from a crash.
+                Toast.makeText(LatinIME.this, reason, Toast.LENGTH_LONG).show();
+                requestHideSelf(0);
+                final Intent intent = new Intent();
+                intent.setClass(LatinIME.this, SettingsActivity2.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                intent.putExtra("start_destination", settingsDestination);
+                startActivity(intent);
+            }
         });
 
         mTextFixManager = new TextFixManager(this, new TextFixManager.Callbacks() {
             @Nullable
             @Override
             public Integer getBlockedErrorResId() {
-                return currentFieldBlockedErrorResId();
+                final SettingsValues settingsValues = mSettings.getCurrent();
+                if (settingsValues == null) {
+                    Log.d(TAG, "getBlockedErrorResId: settingsValues=null → unsupported_field");
+                    return R.string.text_fix_error_unsupported_field;
+                }
+                final int imeOptions = settingsValues.mInputAttributes.getImeOptions();
+                Log.d(TAG, String.format("getBlockedErrorResId: inputType=0x%08X isPassword=%b noLearning=%b incognito=%b imeOptions=0x%08X",
+                        settingsValues.mInputAttributes.mInputType,
+                        settingsValues.mInputAttributes.mIsPasswordField,
+                        settingsValues.mInputAttributes.mNoLearning,
+                        settingsValues.mIncognitoModeEnabled,
+                        imeOptions));
+                return TextFixManager.getBlockedErrorResId(
+                        settingsValues.mInputAttributes.mInputType,
+                        settingsValues.mInputAttributes.mIsPasswordField,
+                        settingsValues.mInputAttributes.mNoLearning,
+                        settingsValues.mIncognitoModeEnabled,
+                        imeOptions);
             }
 
             @Nullable
             @Override
-            public CharSequence getSelectedText() {
+            public CharSequence getTextToFix() {
                 try {
-                    return mInputLogic.mConnection.getSelectedText(0);
+                    final CharSequence selected = mInputLogic.mConnection.getSelectedText(0);
+                    if (selected != null && selected.length() > 0) {
+                        mPendingTextFixWholeField = false;
+                        return selected;
+                    }
+                    // Nothing selected: fall back to the entire field so the user doesn't have to
+                    // select anything. The commit path replaces the whole field in this mode.
+                    final CharSequence whole = mInputLogic.mConnection.getWholeFieldText(0);
+                    mPendingTextFixWholeField = whole != null && whole.length() > 0;
+                    return whole;
                 } catch (Exception e) {
+                    mPendingTextFixWholeField = false;
                     return null;
                 }
             }
@@ -834,6 +889,16 @@ public class LatinIME extends InputMethodService implements
             }
 
             @Override
+            public void onPreparing() {
+                cancelPendingTextFixErrorOverlayHide();
+                if (mSuggestionStripView != null) {
+                    mSuggestionStripView.setOnReplaceTextFix(LatinIME.this::commitTextFixReplacement);
+                    mSuggestionStripView.setOnDiscardTextFix(LatinIME.this::discardTextFix);
+                    mSuggestionStripView.showTextFixPreparing();
+                }
+            }
+
+            @Override
             public void onFinished() {
                 // Keep overlay visible until the user replaces or discards — only hide on error/cancel.
             }
@@ -843,7 +908,7 @@ public class LatinIME extends InputMethodService implements
                 cancelPendingTextFixErrorOverlayHide();
                 mPendingTextFixOriginal = originalText;
                 mPendingTextFixProposed = proposedText;
-                if (mSuggestionStripView != null) mSuggestionStripView.showTextFixResult(proposedText);
+                if (mSuggestionStripView != null) mSuggestionStripView.showTextFixResult(originalText, proposedText);
             }
 
             @Override
@@ -870,38 +935,22 @@ public class LatinIME extends InputMethodService implements
                     mTextFixOverlayHandler.postDelayed(hideRunnable, TEXT_FIX_ERROR_OVERLAY_HIDE_MS);
                 }
             }
-        });
 
-        // Translation writes into the same editor as Text Fix, so it is gated by the same field
-        // check — only the wording of the refusal differs.
-        mTranslateManager = new TranslateManager(this, () -> {
-            final Integer blocked = currentFieldBlockedErrorResId();
-            if (blocked == null) return null;
-            if (blocked == R.string.text_fix_error_sensitive_field) {
-                return R.string.translate_error_sensitive_field;
+            @Override
+            public void onOpenSettings(@NonNull final String settingsDestination, @NonNull final String reason) {
+                // Say what is missing before the keyboard disappears. Hiding and opening settings
+                // with no message is indistinguishable from a crash.
+                Toast.makeText(LatinIME.this, reason, Toast.LENGTH_LONG).show();
+                requestHideSelf(0);
+                final Intent intent = new Intent();
+                intent.setClass(LatinIME.this, SettingsActivity2.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                intent.putExtra("start_destination", settingsDestination);
+                startActivity(intent);
             }
-            return R.string.translate_error_unsupported_field;
         });
-    }
-
-    /**
-     * A string resource explaining why the focused editor must not receive AI-generated text
-     * (password field, incognito, unsupported input type, …), or null when it may.
-     */
-    @Nullable
-    private Integer currentFieldBlockedErrorResId() {
-        final SettingsValues settingsValues = mSettings.getCurrent();
-        if (settingsValues == null) {
-            return R.string.text_fix_error_unsupported_field;
-        }
-        final EditorInfo ei = getCurrentInputEditorInfo();
-        final int imeOptions = ei != null ? ei.imeOptions : 0;
-        return TextFixManager.getBlockedErrorResId(
-                settingsValues.mInputAttributes.mInputType,
-                settingsValues.mInputAttributes.mIsPasswordField,
-                settingsValues.mInputAttributes.mNoLearning,
-                settingsValues.mIncognitoModeEnabled,
-                imeOptions);
     }
 
     private static final long TEXT_FIX_ERROR_OVERLAY_HIDE_MS = 3500L;
@@ -912,310 +961,154 @@ public class LatinIME extends InputMethodService implements
         mTextFixErrorOverlayHideRunnable = null;
     }
 
-    // region Translate
-
-    /** The clipboard panel drives its own translations through this same manager. */
-    @Nullable
-    public TranslateManager getTranslateManager() {
-        return mTranslateManager;
-    }
-
-    /**
-     * Long-press Return → Translate. Opens the language middle menu, or closes it (cancelling an
-     * in-flight request) when it is already up, so the key toggles like the voice key does.
-     *
-     * <p>The source is the selection when there is one, and the clipboard otherwise: with "ciao"
-     * selected the field becomes "hello", and with an empty field and "albero" on the clipboard
-     * the translation "tree" is written at the cursor.
-     */
-    private void onTranslateKeyPressed() {
-        if (mTranslateManager == null) return;
-        if (mTranslateMenuOpen || mTranslateManager.getState() == TranslateManager.State.WORKING) {
-            clearPendingTranslateState();
-            return;
-        }
-        final String reason = mTranslateManager.unavailableReason();
-        if (reason != null) {
-            Toast.makeText(this, reason, Toast.LENGTH_LONG).show();
-            return;
-        }
-        CharSequence source;
-        try {
-            source = mInputLogic.mConnection.getSelectedText(0);
-        } catch (Exception e) {
-            source = null;
-        }
-        final boolean fromClipboard = source == null || source.toString().trim().isEmpty();
-        if (fromClipboard) source = mClipboardHistoryManager.retrieveClipboardContentForAi();
-        if (source == null || source.toString().trim().isEmpty()) {
-            Toast.makeText(this, R.string.translate_error_no_selection, Toast.LENGTH_LONG).show();
-            return;
-        }
-        if (mSuggestionStripView == null) return;
-        // Voice, Text Fix and Translate all take over the suggestion strip; make them mutually
-        // exclusive instead of letting the newest one stomp the previous one's overlay.
-        cancelVoiceRecordingIfCapturing();
-        clearPendingTextFixState();
-        clearPendingTranslateState();
-        mPendingTranslateSource = source.toString();
-        mPendingTranslateFromClipboard = fromClipboard;
-        // Every precondition has passed, so a request is committed bar the language choice. Use
-        // the seconds the user spends reading the chips to get the TCP+TLS handshake out of the
-        // way — it is 10-30% of a text-only translation.
-        OpenRouterClient.prewarm(AiProvider.fromPref(
-                DeviceProtectedUtils.getSharedPreferences(this)
-                        .getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)));
-        showTranslateLanguageMenu();
-    }
-
-    private void showTranslateLanguageMenu() {
-        if (mSuggestionStripView == null || mTranslateManager == null) return;
-        mTranslateMenuOpen = true;
-        mSuggestionStripView.setOnPickTranslateLanguage(language -> {
-            startTranslate(language);
-            return Unit.INSTANCE;
-        });
-        mSuggestionStripView.setOnCancelTranslate(this::clearPendingTranslateState);
-        mSuggestionStripView.showTranslateLanguages(mTranslateManager.languages());
-    }
-
-    private void startTranslate(@NonNull final String language) {
-        if (mTranslateManager == null) return;
-        if (mPendingTranslateSource == null) {
-            clearPendingTranslateState();
-            return;
-        }
-        mTranslateMenuOpen = false;
-        mPendingTranslateLanguage = language;
-        mTranslateManager.startTranslate(mPendingTranslateSource, language, new TranslateManager.Callbacks() {
-            @Override
-            public void onWorking() {
-                cancelPendingTranslateErrorOverlayHide();
-                if (mSuggestionStripView != null) {
-                    mSuggestionStripView.setOnCancelTranslate(LatinIME.this::clearPendingTranslateState);
-                    mSuggestionStripView.showTranslateWorking();
-                }
-            }
-
-            @Override
-            public void onFinished() {
-                // The overlay is dismissed by whichever of onResult / onError follows.
-            }
-
-            @Override
-            public void onResult(@NonNull final String originalText, @NonNull final String translatedText) {
-                commitTranslation(translatedText);
-            }
-
-            @Override
-            public void onError(@NonNull final String message) {
-                showTranslateError(message);
-            }
-        });
-    }
-
-    /**
-     * Writes the translation into the field. A translation made from a selection replaces it, and
-     * the selection is re-read first: the user may have tapped elsewhere while the request was in
-     * flight, and overwriting whatever they selected in the meantime would silently destroy
-     * unrelated text. A translation made from the clipboard is inserted at the cursor, like a
-     * paste, and is refused if the user has selected something since.
-     */
-    private void commitTranslation(@NonNull final String translated) {
-        final String original = mPendingTranslateSource;
-        final boolean fromClipboard = mPendingTranslateFromClipboard;
-        clearPendingTranslateState();
-        if (original == null) {
-            rescueTranslation(translated);
-            return;
-        }
-        if (fromClipboard) {
-            if (mInputLogic.mConnection.hasSelection()) {
-                rescueTranslation(translated);
-                return;
-            }
-            onTextInput(translated);
-            return;
-        }
-        final CharSequence selected;
-        try {
-            selected = mInputLogic.mConnection.getSelectedText(0);
-        } catch (Exception e) {
-            rescueTranslation(translated);
-            return;
-        }
-        if (selected == null || !original.contentEquals(selected)) {
-            rescueTranslation(translated);
-            return;
-        }
-        mInputLogic.mConnection.commitText(translated, 1);
-    }
-
-    /**
-     * Last resort for a translation the user has already paid for but that can no longer be
-     * written where it was meant to go — they moved the caret, changed the selection, or the host
-     * replaced the editor while the request was in flight.
-     *
-     * Every one of these paths used to drop the finished string on the floor and show "selection
-     * changed; select the same text and try again", which means paying for the same translation
-     * twice. Putting it on the clipboard costs nothing and makes the work recoverable with one
-     * paste. Deliberately not marked EXTRA_IS_SENSITIVE: that would suppress the Android 13+
-     * clipboard preview but also keep the text out of clipboard history, which is the whole
-     * recovery mechanism.
-     */
-    /**
-     * The dictation equivalent of {@link #rescueTranslation}: the user has already paid for this
-     * transcription, so a destination that can no longer accept it should not mean the words are
-     * simply deleted. The old message ("the text field changed, try again") also asserted
-     * something the user cannot act on — re-recording produces the same refusal.
-     *
-     * Not used for the sensitive-field refusal below: a password box or an incognito field is
-     * exactly where dictated text must not be quietly parked on the clipboard.
-     */
-    private void rescueTranscription(@NonNull final String text) {
-        if (mClipboardHistoryManager == null) {
-            Toast.makeText(this, R.string.voice_error_field_changed, Toast.LENGTH_LONG).show();
-            return;
-        }
-        mClipboardHistoryManager.copyToSystemClipboard(text);
-        Toast.makeText(this, R.string.voice_copied_field_changed, Toast.LENGTH_LONG).show();
-    }
-
-    private void rescueTranslation(@NonNull final String translated) {
-        if (mClipboardHistoryManager == null) {
-            Toast.makeText(this, R.string.translate_error_selection_changed, Toast.LENGTH_LONG).show();
-            return;
-        }
-        mClipboardHistoryManager.copyToSystemClipboard(translated);
-        Toast.makeText(this, R.string.translate_copied_selection_changed, Toast.LENGTH_LONG).show();
-    }
-
-    /**
-     * Reports a failed translation and, when the source text and target language are still known,
-     * offers Retry. Most translate failures are transient — a rate limit, a provider hiccup — and
-     * throwing the source away meant the only way to try again was to reselect the text and walk
-     * the long-press-Return menu a second time.
-     *
-     * The pending state is deliberately kept alive for the 3.5 s the overlay is up, and cleared by
-     * the hide runnable through {@link #clearPendingTranslateState()} rather than by hiding the
-     * overlay directly: leaving {@code mTranslateMenuOpen} true would make the next Translate press
-     * a dead key, which is exactly the 6.8.x bug class.
-     */
-    private void showTranslateError(@NonNull final String message) {
-        cancelPendingTranslateErrorOverlayHide();
-        mTranslateMenuOpen = false;
-        final boolean canRetry = mPendingTranslateSource != null && mPendingTranslateLanguage != null;
-        // The strip is unavailable in ToolbarMode.HIDDEN, during emoji search, and while the
-        // clipboard panel owns the view, so a toast is the only channel there.
-        if (mSuggestionStripView == null || !mSuggestionStripView.isShown()) {
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
-            clearPendingTranslateState();
-            return;
-        }
-        mSuggestionStripView.setOnRetryTranslate(this::retryTranslate);
-        mSuggestionStripView.showTranslateError(message, canRetry);
-        final SuggestionStripView strip = mSuggestionStripView;
-        final Runnable hideRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (mTranslateErrorOverlayHideRunnable != this) return;
-                mTranslateErrorOverlayHideRunnable = null;
-                if (mSuggestionStripView == strip) {
-                    clearPendingTranslateState();
-                }
-            }
-        };
-        mTranslateErrorOverlayHideRunnable = hideRunnable;
-        mTextFixOverlayHandler.postDelayed(hideRunnable, TEXT_FIX_ERROR_OVERLAY_HIDE_MS);
-    }
-
-    private void retryTranslate() {
-        cancelPendingTranslateErrorOverlayHide();
-        final String language = mPendingTranslateLanguage;
-        if (language == null || mPendingTranslateSource == null) {
-            clearPendingTranslateState();
-            return;
-        }
-        startTranslate(language);
-    }
-
-    private void cancelPendingTranslateErrorOverlayHide() {
-        if (mTranslateErrorOverlayHideRunnable == null) return;
-        mTextFixOverlayHandler.removeCallbacks(mTranslateErrorOverlayHideRunnable);
-        mTranslateErrorOverlayHideRunnable = null;
-    }
-
-    private void clearPendingTranslateState() {
-        cancelPendingTranslateErrorOverlayHide();
-        mPendingTranslateSource = null;
-        mPendingTranslateLanguage = null;
-        mPendingTranslateFromClipboard = false;
-        mTranslateMenuOpen = false;
-        if (mTranslateManager != null) mTranslateManager.cancel();
-        if (mSuggestionStripView != null) mSuggestionStripView.hideTranslateOverlay();
-    }
-
-    // endregion
-
-    /**
-     * Applies the proposal behind the Replace button.
-     *
-     * The pending state is cleared only once the replacement actually lands. Clearing it up front
-     * — as this used to — made a failed Replace unrecoverable: the toast told the user to reselect
-     * and try again, but the proposal they had already paid for was gone, so Replace was a
-     * one-shot button that silently armed itself into a dead state. Note the overlay is left up on
-     * failure on purpose, so Replace stays available after the user restores the selection.
-     */
     private void commitTextFixReplacement() {
+        cancelPendingTextFixErrorOverlayHide();
         final String original = mPendingTextFixOriginal;
         final String proposed = mPendingTextFixProposed;
-        if (proposed == null || original == null) {
-            cancelPendingTextFixErrorOverlayHide();
-            mPendingTextFixOriginal = null;
-            mPendingTextFixProposed = null;
-            if (mSuggestionStripView != null) mSuggestionStripView.hideTextFixOverlay();
-            return;
-        }
-        final CharSequence selected;
+        final boolean wholeField = mPendingTextFixWholeField;
+        mPendingTextFixOriginal = null;
+        mPendingTextFixProposed = null;
+        mPendingTextFixWholeField = false;
+        if (mSuggestionStripView != null) mSuggestionStripView.hideTextFixOverlay();
+        if (proposed == null || original == null) return;
+
+        // Re-read the source text and verify it still matches what we sent — the user may have
+        // typed or moved the cursor while the model was working. Bail with the same warning in
+        // both modes if it changed.
+        final CharSequence current;
         try {
-            selected = mInputLogic.mConnection.getSelectedText(0);
+            current = wholeField
+                    ? mInputLogic.mConnection.getWholeFieldText(0)
+                    : mInputLogic.mConnection.getSelectedText(0);
         } catch (Exception e) {
             Toast.makeText(this, R.string.text_fix_error_selection_changed, Toast.LENGTH_LONG).show();
             return;
         }
-        if (selected == null || !original.contentEquals(selected)) {
+        if (!TextReplaceGuard.liveTextStillMatches(original, current)) {
             Toast.makeText(this, R.string.text_fix_error_selection_changed, Toast.LENGTH_LONG).show();
             return;
         }
-        cancelPendingTextFixErrorOverlayHide();
-        mPendingTextFixOriginal = null;
-        mPendingTextFixProposed = null;
-        if (mSuggestionStripView != null) mSuggestionStripView.hideTextFixOverlay();
-        // Selection is still live at this point — commitText replaces it.
+        if (wholeField) {
+            // No selection was made: select the entire field, then commitText replaces it.
+            mInputLogic.mConnection.setSelection(0, current.length());
+        }
+        // Selection (real or just-applied whole-field) is live — commitText replaces it.
         mInputLogic.mConnection.commitText(proposed, 1);
+        armUndo(proposed, original, getString(R.string.voice_undo_fixed));
     }
 
     private void discardTextFix() {
         clearPendingTextFixState();
     }
 
-    /**
-     * A supplemental fingerprint of the focused editor. It is deliberately combined with an input
-     * session generation and selection snapshot because field ids may be missing or reused.
-     */
-    @Nullable
-    private String currentEditorIdentity() {
-        final EditorInfo editorInfo = getCurrentInputEditorInfo();
-        if (editorInfo == null) return null;
-        return editorInfo.packageName + '/' + editorInfo.fieldId + '/' + editorInfo.inputType;
-    }
-
     private void clearPendingTextFixState() {
         cancelPendingTextFixErrorOverlayHide();
         mPendingTextFixOriginal = null;
         mPendingTextFixProposed = null;
+        mPendingTextFixWholeField = false;
         if (mTextFixManager != null) mTextFixManager.cancel();
         if (mSuggestionStripView != null) mSuggestionStripView.hideTextFixOverlay();
+        clearUndo();
+    }
+
+    /**
+     * Re-runs transcription over the clip retained by the last failed attempt. If the retention
+     * window already expired the clip is gone, so say so rather than failing silently.
+     */
+    private void retryVoiceTranscription() {
+        if (mSuggestionStripView != null) mSuggestionStripView.hideUndoBar();
+        if (mVoiceInputManager == null || !mVoiceInputManager.retryLastTranscription()) {
+            Toast.makeText(this, R.string.voice_retry_unavailable, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** Starts a fresh recording from the "Record again" bar after an unusable one. */
+    private void recordVoiceAgain() {
+        if (mSuggestionStripView != null) mSuggestionStripView.hideUndoBar();
+        if (mVoiceInputManager != null) mVoiceInputManager.startRecording(false);
+    }
+
+    /**
+     * Opt-in safety net for dictation: also place the finished transcription on the system
+     * clipboard, so a long dictation is not lost if the insert goes somewhere unexpected. Off by
+     * default because it overwrites whatever the user had copied.
+     */
+    private void copyTranscriptionToClipboardIfEnabled(final String text) {
+        if (text == null || text.isEmpty()) return;
+        try {
+            // Read straight from prefs, matching how the other voice options are consumed
+            // (VoiceInputManager does the same) rather than widening SettingsValues for one flag.
+            if (!DeviceProtectedUtils.getSharedPreferences(this)
+                    .getBoolean(Settings.PREF_VOICE_COPY_TO_CLIPBOARD, Defaults.PREF_VOICE_COPY_TO_CLIPBOARD)) {
+                return;
+            }
+            final ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm == null) return;
+            cm.setPrimaryClip(ClipData.newPlainText("TobiBoard", text));
+            Toast.makeText(this, R.string.voice_copied_to_clipboard, Toast.LENGTH_SHORT).show();
+        } catch (final Exception e) {
+            // Some OEM/managed profiles refuse clipboard writes from an IME. Never let the safety
+            // net take down the insertion it was meant to protect.
+            Log.w(TAG, "Could not copy transcription to clipboard", e);
+        }
+    }
+
+    /**
+     * Offer a one-tap undo of an AI insertion. [inserted] is the text now before the cursor;
+     * [restore] is what to put back ("" for a plain voice insertion — undo just deletes). The
+     * offer auto-expires after a few seconds and is cleared by any subsequent user input.
+     */
+    private void armUndo(final String inserted, final String restore, final String label) {
+        if (inserted == null || inserted.isEmpty()) return;
+        mUndoInserted = inserted;
+        mUndoRestore = restore != null ? restore : "";
+        // `inserted` is the AI output (voice transcript or text-fix result); pass it so the undo
+        // bar can offer a "Report" action per Google Play's Generative AI policy.
+        if (mSuggestionStripView != null) mSuggestionStripView.showUndoBar(label, this::performUndo, inserted);
+        if (mUndoHideRunnable != null) mTextFixOverlayHandler.removeCallbacks(mUndoHideRunnable);
+        final Runnable hide = new Runnable() {
+            @Override
+            public void run() {
+                if (mUndoHideRunnable != this) return;
+                clearUndo();
+            }
+        };
+        mUndoHideRunnable = hide;
+        mTextFixOverlayHandler.postDelayed(hide, UNDO_BAR_HIDE_MS);
+    }
+
+    private void performUndo() {
+        final String inserted = mUndoInserted;
+        final String restore = mUndoRestore;
+        clearUndo();
+        if (inserted == null) return;
+        // Only undo if the field still ends with exactly what we inserted — the user may have typed
+        // or moved the cursor since. Mirrors the text-fix replacement guard.
+        final CharSequence before;
+        try {
+            before = mInputLogic.mConnection.getTextBeforeCursor(inserted.length(), 0);
+        } catch (Exception e) {
+            Toast.makeText(this, R.string.voice_undo_nothing, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!TextReplaceGuard.liveTextStillMatches(inserted, before)) {
+            Toast.makeText(this, R.string.voice_undo_nothing, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        mInputLogic.mConnection.deleteTextBeforeCursor(inserted.length());
+        if (restore != null && !restore.isEmpty()) {
+            mInputLogic.mConnection.commitText(restore, 1);
+        }
+    }
+
+    private void clearUndo() {
+        mUndoInserted = null;
+        mUndoRestore = null;
+        if (mUndoHideRunnable != null) {
+            mTextFixOverlayHandler.removeCallbacks(mUndoHideRunnable);
+            mUndoHideRunnable = null;
+        }
+        if (mSuggestionStripView != null) mSuggestionStripView.hideUndoBar();
     }
 
     private boolean isVoiceHapticEnabled() {
@@ -1336,9 +1229,15 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onDestroy() {
-        if (mVoiceInputManager != null) mVoiceInputManager.release();
+        if (BuildConfig.DEBUG) unregisterReceiver(mDebugTextFixReceiver);
+        mVoiceInputManager.release();
         if (mTextFixManager != null) mTextFixManager.release();
-        if (mTranslateManager != null) mTranslateManager.release();
+        // Hand both on-device models back. The IME service dies here but the application process
+        // does not, so without this the recognizer's ~660 MB and the LLM's ~1 GB stay resident
+        // until the system kills the process. Async because freeing that much native memory is
+        // slow and onDestroy runs on the main thread; both rebuild lazily on the next request.
+        LocalLiteRtEngine.releaseSharedAsync();
+        LocalSherpaEngine.releaseSharedAsync();
         mClipboardHistoryManager.onDestroy();
         mDictionaryFacilitator.closeDictionaries();
         mInputLogic.onDestroy();
@@ -1427,49 +1326,6 @@ public class LatinIME extends InputMethodService implements
             mSuggestionStripView.setOnCancelRecording(() -> {
                 if (mVoiceInputManager != null) mVoiceInputManager.cancelRecording();
             });
-            reconcileOverlaysWithManagers();
-        }
-    }
-
-    /**
-     * A recreated input view (theme reload, configuration change) starts with a fresh strip that
-     * has none of the overlays or callbacks the managers' earlier callbacks registered. If voice
-     * input is live or a Text Fix proposal is pending, re-apply the matching overlay here so the
-     * user keeps an indicator and a Cancel button instead of a silently running recording.
-     */
-    private void reconcileOverlaysWithManagers() {
-        if (mSuggestionStripView == null) return;
-        if (mVoiceInputManager != null) {
-            final VoiceInputManager.State voiceState = mVoiceInputManager.getState();
-            if (voiceState != VoiceInputManager.State.IDLE) {
-                mSuggestionStripView.setVoiceTelemetryProvider(() -> new kotlin.Pair<>(
-                        mVoiceInputManager.getCurrentAmplitude(),
-                        mVoiceInputManager.getCurrentDurationMs()));
-                if (voiceState == VoiceInputManager.State.TRANSCRIBING) {
-                    mSuggestionStripView.showTranscribingOverlay();
-                } else {
-                    mSuggestionStripView.showRecordingOverlay();
-                }
-            }
-        }
-        if (mTextFixManager != null) {
-            if (mPendingTextFixProposed != null) {
-                mSuggestionStripView.setOnReplaceTextFix(this::commitTextFixReplacement);
-                mSuggestionStripView.setOnDiscardTextFix(this::discardTextFix);
-                mSuggestionStripView.showTextFixResult(mPendingTextFixProposed);
-            } else if (mTextFixManager.getState() == TextFixManager.State.WORKING) {
-                mSuggestionStripView.setOnReplaceTextFix(this::commitTextFixReplacement);
-                mSuggestionStripView.setOnDiscardTextFix(this::discardTextFix);
-                mSuggestionStripView.showTextFixWorking();
-            }
-        }
-        if (mTranslateManager != null) {
-            if (mTranslateManager.getState() == TranslateManager.State.WORKING) {
-                mSuggestionStripView.setOnCancelTranslate(this::clearPendingTranslateState);
-                mSuggestionStripView.showTranslateWorking();
-            } else if (mTranslateMenuOpen) {
-                showTranslateLanguageMenu();
-            }
         }
     }
 
@@ -1540,13 +1396,6 @@ public class LatinIME extends InputMethodService implements
     private void onStartInputInternal(final EditorInfo editorInfo, final boolean restarting) {
         super.onStartInput(editorInfo, restarting);
 
-        // EditorInfo.fieldId is frequently missing or reused. A non-restarting onStartInput is the
-        // authoritative boundary between input sessions, so include it in asynchronous voice
-        // destination validation even when the package, field id, and input type are identical.
-        if (!restarting) {
-            mInputSessionGeneration++;
-        }
-
         final RichInputMethodSubtype subtypeForApp = editorInfo == null
             ? null :
             mSettings.getSubtypeForApp(editorInfo.packageName);
@@ -1560,6 +1409,7 @@ public class LatinIME extends InputMethodService implements
 
     void onStartInputViewInternal(final EditorInfo editorInfo, final boolean restarting) {
         super.onStartInputView(editorInfo, restarting);
+        clearPendingTextFixState();
 
         if (BuildConfig.ENABLE_GESTURE_DATA_GATHERING
                 && GestureDataGatheringKt.isInActiveGatheringMode(editorInfo)) {
@@ -1616,13 +1466,11 @@ public class LatinIME extends InputMethodService implements
         final boolean inputTypeChanged = !currentSettingsValues.isSameInputType(editorInfo);
         final boolean isDifferentTextField = !restarting || inputTypeChanged;
 
-        // Only drop a pending Text Fix when the editor actually changed. This used to run
-        // unconditionally at the top of the method, which meant a rotation — or any same-field
-        // restart the host triggers — cancelled an in-flight request and threw away a proposal the
-        // user was still looking at. Keeping it is safe because commitTextFixReplacement re-checks
-        // that the selection still matches before replacing anything.
         if (isDifferentTextField) {
-            clearPendingTextFixState();
+            // A different field is starting: drop any keystrokes buffered for the previous field
+            // (the connection-not-ready buffer is per-session) so they can never replay into this
+            // one. Must run before the resetCaches success branch below calls onInputConnectionReady.
+            discardPendingEarlyInputs();
         }
 
         StatsUtils.onStartInputView(editorInfo.inputType,
@@ -1669,6 +1517,10 @@ public class LatinIME extends InputMethodService implements
                 mHandler.postResetCaches(isDifferentTextField, 5 /* remainingTries */);
                 // mLastSelection{Start,End} are reset later in this method, no need to do it here
                 needToCallLoadKeyboardLater = true;
+                // Caches couldn't be established (mIC may be non-null but inert here, so this is the
+                // signal — not isConnected()). Keystrokes that arrive now are buffered in onEvent()
+                // and replayed once retryResetCaches reconnects (or discarded if it gives up).
+                onInputConnectionNotReady();
             } else {
                 // When rotating, and when input is starting again in a field from where the focus
                 // didn't move (the keyboard having been closed with the back key),
@@ -1679,10 +1531,16 @@ public class LatinIME extends InputMethodService implements
                     mHandler.postResumeSuggestions(true /* shouldDelay */);
                 }
                 needToCallLoadKeyboardLater = false;
+                // Connection is ready immediately; flush anything buffered from a prior not-ready
+                // window (normally empty).
+                onInputConnectionReady();
             }
         } else {
             // If we have a hardware keyboard we don't need to call loadKeyboard later anyway.
             needToCallLoadKeyboardLater = false;
+            // No software-connection reset path here; treat the connection as ready so software
+            // events (if any) are not buffered, and flush anything left over.
+            onInputConnectionReady();
         }
 
         if (isDifferentTextField) {
@@ -1728,13 +1586,13 @@ public class LatinIME extends InputMethodService implements
     @Override
     public void onWindowShown() {
         super.onWindowShown();
-        // The only point at which the keyguard can have changed while the strip was alive, so it
-        // is where the cached lock state is refreshed instead of re-querying system_server on
-        // every suggestion update.
-        if (mSuggestionStripView != null) mSuggestionStripView.refreshLockedState();
         if (isInputViewShown()) {
             setNavigationBarColor();
             workaroundForHuaweiStatusBarIssue();
+            // The keyboard just became the focused IME, so it may now read the clipboard (Android
+            // 10+ blocks background reads). Catch up on any clip copied while it was hidden — the
+            // live OnPrimaryClipChanged callback can't read those. No-op unless history is enabled.
+            mClipboardHistoryManager.captureCurrentClipIfEnabled();
         }
     }
 
@@ -1744,7 +1602,6 @@ public class LatinIME extends InputMethodService implements
         Log.i(TAG, "onWindowHidden");
         cancelVoiceRecordingIfCapturing();
         clearPendingTextFixState();
-        clearPendingTranslateState();
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
         if (mainKeyboardView != null) {
             mainKeyboardView.closing();
@@ -1756,13 +1613,7 @@ public class LatinIME extends InputMethodService implements
         super.onFinishInput();
         Log.i(TAG, "onFinishInput");
 
-        // Defence in depth alongside onFinishInputViewInternal: input can finish without the view
-        // finishing (older Android versions, and the pending-IMS-callback coalescing window can
-        // swallow onFinishInputView entirely). Leaving a recording running past the end of input
-        // risks uploading audio for an editor that no longer exists.
-        cancelVoiceRecordingIfCapturing();
         clearPendingTextFixState();
-        clearPendingTranslateState();
         mDictionaryFacilitator.onFinishInput();
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
         if (mainKeyboardView != null) {
@@ -1781,9 +1632,18 @@ public class LatinIME extends InputMethodService implements
         // Remove pending messages related to update suggestions
         mHandler.cancelUpdateSuggestionStrip();
         clearPendingTextFixState();
+        // The input session is ending: drop any keystrokes buffered for it so they can't replay
+        // into a later, unrelated field, and re-open the gate. A not-ready flag left set here would
+        // outlive the session and silently swallow every keystroke of the next one, because the
+        // only thing that clears it is a full onStartInputViewInternal, which does not always run
+        // (early returns on a null EditorInfo / keyboard view, or the MSG_PENDING_IMS_CALLBACK skip
+        // in UIHandler.onStartInputView).
+        discardPendingEarlyInputs();
+        mInputConnectionReady = true;
         // Should do the following in onFinishInputInternal but until JB MR2 it's not called :(
         mInputLogic.finishInput();
         mKeyboardActionListener.resetMetaState();
+        mKeyboardSwitcher.clearShiftLock();
     }
 
     protected void deallocateMemory() {
@@ -1800,24 +1660,6 @@ public class LatinIME extends InputMethodService implements
             Log.i(TAG, "onUpdateSelection: oss=" + oldSelStart + ", ose=" + oldSelEnd
                     + ", nss=" + newSelStart + ", nse=" + newSelEnd
                     + ", cs=" + composingSpanStart + ", ce=" + composingSpanEnd);
-        }
-
-        // Guard the dictation destination against caret moves the IME did not cause — the user
-        // tapping elsewhere, or the host app repositioning the cursor.
-        //
-        // This deliberately does NOT fire for moves the IME itself made. Typing during the upload
-        // is allowed by design (VoiceInputManager.isCapturing() is false once a stop is requested),
-        // but the old test compared against the caret position captured at record time, so every
-        // character the user typed while waiting armed this flag and destroyed their own dictation.
-        //
-        // mInputLogic.onUpdateSelection() has not run yet at this point, so the expected selection
-        // still holds what the IME predicted before this report — which is exactly what makes
-        // "did we cause this?" answerable here. Sticky, so moving away and back is still caught.
-        if (mVoiceTargetEditorId != null && !mVoiceTargetSelectionChanged) {
-            final boolean imeExpectedThisMove =
-                    newSelStart == mInputLogic.mConnection.getExpectedSelectionStart()
-                            && newSelEnd == mInputLogic.mConnection.getExpectedSelectionEnd();
-            if (!imeExpectedThisMove) mVoiceTargetSelectionChanged = true;
         }
 
         // This call happens whether our view is displayed or not, but if it's not then we should
@@ -2158,50 +2000,95 @@ public class LatinIME extends InputMethodService implements
         mKeyboardActionListener.onCodeInput(codePoint, x, y, isKeyRepeat);
     }
 
+    /**
+     * The input connection's caches could not be (re)established yet — the resetCaches-failed window
+     * in onStartInputViewInternal. We must use this explicit flag, NOT mConnection.isConnected():
+     * in that window reloadTextCache() has already set mIC to a non-null but inert connection
+     * (RichInputConnection#reloadTextCache), so isConnected() is true even though commits silently
+     * no-op. Keystrokes arriving while this is false are buffered (see onEvent) and replayed once
+     * onInputConnectionReady() fires.
+     */
+    private void onInputConnectionNotReady() {
+        mInputConnectionReady = false;
+    }
+
+    /** The input connection is (re)established; flush any keystrokes buffered while it was not. */
+    private void onInputConnectionReady() {
+        mInputConnectionReady = true;
+        replayPendingInputs();
+    }
+
+    /** Buffer a keystroke that arrived before the connection was ready (cap policy in the buffer). */
+    private void enqueueEarlyEvent(@NonNull final Event event) {
+        mPendingEarlyEvents.add(event);
+    }
+
+    /**
+     * Replay keystrokes buffered while the input connection was not ready, in press order, now that
+     * it is. Re-dispatches through onEvent() — the same path a live tap takes — so composing and
+     * suggestions apply as if typed now; onEvent() re-checks mInputConnectionReady, so any event
+     * re-buffers itself if the connection drops again mid-replay. Ordering / drain semantics live in
+     * EarlyInputBuffer.drain() (unit-tested); the gate + replay wiring is covered by InputLogicTest.
+     */
+    private void replayPendingInputs() {
+        for (final Event event : mPendingEarlyEvents.drain()) {
+            onEvent(event);
+        }
+    }
+
+    /**
+     * Drop buffered keystrokes that can no longer be delivered. Called when the keyboard is hiding
+     * (reset gave up) and when a different text field starts — so input typed into field A while its
+     * connection was not ready can never replay into an unrelated field B.
+     */
+    private void discardPendingEarlyInputs() {
+        mPendingEarlyEvents.clear();
+    }
+
     // This method is public for testability of LatinIME, but also in the future it should
     // completely replace #onCodeInput.
     public void onEvent(@NonNull final Event event) {
+        // Buffer text-producing keystrokes that arrive before the input connection is ready (the
+        // resetCaches-failed window) and replay them on reconnect — committing now is a silent no-op
+        // that loses the character. Voice / text-fix are connection-independent toggles, so they are
+        // never buffered. The gate sits before clearUndo() so a deferred keystroke does not dismiss a
+        // pending undo offer until it is actually applied on replay.
+        final int keyCode = event.getKeyCode();
+        final boolean isConnectionIndependentAction = keyCode == KeyCode.VOICE_INPUT
+                || keyCode == KeyCode.VOICE_STT_INPUT || keyCode == KeyCode.TEXT_FIX
+                || keyCode == KeyCode.TEXT_FIX_2;
+        if (!isConnectionIndependentAction && !mInputConnectionReady) {
+            // Logged at warn so a stuck gate is visible in a plain logcat on a release build.
+            Log.w(TAG, "input connection not ready, buffering keystroke (pending="
+                    + mPendingEarlyEvents.getSize() + ")");
+            enqueueEarlyEvent(event);
+            return;
+        }
+        // Any real key event dismisses a pending "undo last insertion" offer.
+        clearUndo();
         if (KeyCode.VOICE_INPUT == event.getKeyCode() || KeyCode.VOICE_STT_INPUT == event.getKeyCode()) {
             if (mVoiceInputManager != null) {
-                switch (mVoiceInputManager.getState()) {
-                    case RECORDING -> mVoiceInputManager.stopRecording();
-                    // Tapping the mic again during upload reads as "never mind". This used to be a
-                    // dead key: startRecording() bailed out because the state wasn't IDLE, leaving
-                    // the overlay's Cancel button as the only way out — and that button isn't
-                    // reachable at all when the toolbar is hidden.
-                    case TRANSCRIBING -> mVoiceInputManager.cancelRecording();
-                    // Voice and Text Fix both take over the suggestion strip, so make them mutually
-                    // exclusive rather than letting the second one stomp the first one's overlay.
-                    case IDLE -> {
-                        clearPendingTextFixState();
-                        clearPendingTranslateState();
-                        mVoiceInputManager.startRecording(KeyCode.VOICE_STT_INPUT == event.getKeyCode());
-                    }
+                if (mVoiceInputManager.getState() == VoiceInputManager.State.RECORDING) {
+                    mVoiceInputManager.stopRecording();
+                } else {
+                    mVoiceInputManager.startRecording(KeyCode.VOICE_STT_INPUT == event.getKeyCode());
                 }
             }
             return;
         }
-        if (KeyCode.TEXT_FIX == event.getKeyCode() || KeyCode.TEXT_FIX_2 == event.getKeyCode()) {
-            if (mTextFixManager != null) {
-                final boolean wasWorking = mTextFixManager.getState() == TextFixManager.State.WORKING;
-                // Cancels an in-flight request and clears any proposal still on screen. The latter
-                // matters even when starting fresh: a previous proposal left in place would still be
-                // committed by Replace if this new request failed.
-                clearPendingTextFixState();
-                clearPendingTranslateState();
-                if (!wasWorking) {
-                    cancelVoiceRecordingIfCapturing();
-                    mTextFixManager.startTextFix(KeyCode.TEXT_FIX_2 == event.getKeyCode()
-                            ? TextFixManager.Variant.SECONDARY : TextFixManager.Variant.PRIMARY);
-                }
+        if (KeyCode.TEXT_FIX == event.getKeyCode()) {
+            Log.d(TAG, "onEvent: TEXT_FIX received, mTextFixManager=" + mTextFixManager + " state=" + (mTextFixManager != null ? mTextFixManager.getState() : "null"));
+            if (mTextFixManager != null && mTextFixManager.getState() == TextFixManager.State.IDLE) {
+                mTextFixManager.startTextFix(TextFixManager.Variant.PRIMARY);
             }
             return;
         }
-        if (KeyCode.TRANSLATE == event.getKeyCode()) {
-            onTranslateKeyPressed();
+        if (KeyCode.TEXT_FIX_2 == event.getKeyCode()) {
+            if (mTextFixManager != null && mTextFixManager.getState() == TextFixManager.State.IDLE) {
+                mTextFixManager.startTextFix(TextFixManager.Variant.SECONDARY);
+            }
             return;
         }
-        releaseAiOverlayIfEditingText(event);
         final InputTransaction completeInputTransaction =
                 mInputLogic.onCodeInput(mSettings.getCurrent(), event,
                         mKeyboardSwitcher.getKeyboardShiftMode(),
@@ -2210,54 +2097,9 @@ public class LatinIME extends InputMethodService implements
         mKeyboardSwitcher.onEvent(event, getCurrentAutoCapsState(), getCurrentRecapitalizeState());
     }
 
-    /**
-     * Hands the suggestion strip back to normal suggestions once the user starts editing text
-     * again.
-     *
-     * {@code SuggestionStripView.setSuggestions} refuses to draw while an AI overlay is installed,
-     * and nothing on the typing path used to take a Text Fix proposal or an open Translate menu
-     * down. So typing after either one left the strip stuck on the overlay — no suggestions, no
-     * auto-correct display — for the rest of the field.
-     *
-     * Restricted to events that actually change the text. Clearing on <em>any</em> event would
-     * throw away a proposal the user is still reading because they happened to press Shift, or
-     * scrolled, or switched layout to check something.
-     */
-    private void releaseAiOverlayIfEditingText(@NonNull final Event event) {
-        if (mPendingTextFixProposed == null && !mTranslateMenuOpen) return;
-        if (!changesEditorText(event)) return;
-        clearPendingTextFixState();
-        clearPendingTranslateState();
-    }
-
-    /**
-     * Retires a stale AI proposal when text is committed by some route other than a key event —
-     * an emoji, a clip, a suggestion, the start of a glide.
-     *
-     * Guarded rather than unconditional: {@code clearPending*State()} also calls
-     * {@code manager.cancel()}, so calling it blindly here aborted a Text Fix or Translate request
-     * the user had already paid for, reporting only {@code onFinished()} — no result, no error, no
-     * clipboard rescue. In the two guarded states both managers are IDLE, so the cancel inside is
-     * a no-op and only the on-screen proposal is taken down.
-     */
-    private void releaseAiOverlaysForCommittedText() {
-        if (mPendingTextFixProposed == null && !mTranslateMenuOpen) return;
-        clearPendingTextFixState();
-        clearPendingTranslateState();
-    }
-
-    private static boolean changesEditorText(@NonNull final Event event) {
-        if (!event.isFunctionalKeyEvent()) return true;
-        final int code = event.getKeyCode();
-        return code == KeyCode.DELETE
-                || code == KeyCode.CLIPBOARD_PASTE
-                || code == KeyCode.CLIPBOARD_CUT
-                || code == KeyCode.UNDO
-                || code == KeyCode.REDO;
-    }
-
     public void onTextInput(final String rawText) {
-        releaseAiOverlaysForCommittedText();
+        // Clears any pending undo offer before this insert; AI insertions re-arm it immediately after.
+        clearUndo();
         // TODO: have the keyboard pass the correct key code when we need it.
         final Event event = Event.createSoftwareTextEvent(rawText, KeyCode.MULTIPLE_CODE_POINTS, null);
         final InputTransaction completeInputTransaction =
@@ -2269,7 +2111,6 @@ public class LatinIME extends InputMethodService implements
     }
 
     public void onStartBatchInput() {
-        releaseAiOverlaysForCommittedText();
         mInputLogic.onStartBatchInput(mSettings.getCurrent(), mKeyboardSwitcher, mHandler);
         mGestureConsumer.onGestureStarted(mRichImm.getCurrentSubtypeLocale(), mKeyboardSwitcher.getKeyboard());
     }
@@ -2424,6 +2265,12 @@ public class LatinIME extends InputMethodService implements
     @Override
     public void removeSuggestion(final String word) {
         mDictionaryFacilitator.removeWord(word);
+    }
+
+    @Override
+    public void addToDictionary(final String word) {
+        if (word == null || word.isEmpty()) return;
+        mDictionaryFacilitator.addToUserDictionary(this, word);
     }
 
     @Override
@@ -2694,36 +2541,54 @@ public class LatinIME extends InputMethodService implements
             }
             // deallocateMemory always called on hiding, and should not be called when showing
         }
+        // Free the on-device models under real memory pressure (the text-fix LLM is ~1 GB of
+        // native memory, the speech recognizer ~660 MB) so the IME process is not killed for
+        // holding them; both reload lazily on the next request.
+        LocalLiteRtEngine.onTrimMemory(level);
+        LocalSherpaEngine.onTrimMemory(level);
+    }
+
+    public boolean isVoiceRecording() {
+        return mVoiceInputManager != null
+            && mVoiceInputManager.getState() == VoiceInputManager.State.RECORDING;
     }
 
     /**
-     * True while the microphone is open, so a key press should stop recording rather than type.
-     * Excludes the post-stop finalize window: the stop is already under way there, and reporting
-     * true would make {@link helium314.keyboard.keyboard.KeyboardActionListenerImpl} discard the
-     * key press without any recording left to stop.
+     * True when the focused field is a password / no-learning / incognito field. Text fix and voice
+     * input both refuse there, through the same predicate, so the two cannot drift apart.
+     * Returns true when the settings snapshot is missing: unknown means refuse.
      */
-    public boolean isVoiceRecording() {
-        return mVoiceInputManager != null && mVoiceInputManager.isCapturing();
+    public boolean isSensitiveField() {
+        final SettingsValues settingsValues = mSettings.getCurrent();
+        return settingsValues == null || settingsValues.mSensitiveField;
+    }
+
+    /**
+     * Identifies the editor the user is typing in, for
+     * {@link VoiceInputManager#transcriptionMayCommit}.
+     * The package name plus the view id plus the input type is what the framework gives us; the view
+     * id is View.NO_ID for web fields, so two web fields in one page in one app read as the same
+     * editor. That is a deliberate fail-open. The cases this is here to stop are a dictation landing
+     * in a different app or in a password box, and each of those changes at least one of the three
+     * parts; two ordinary fields that share all three are not distinguished.
+     */
+    @Nullable
+    public String getEditorSessionId() {
+        final EditorInfo ei = getCurrentInputEditorInfo();
+        if (ei == null) return null;
+        return ei.packageName + "/" + ei.fieldId + "/" + ei.inputType;
     }
 
     private void cancelVoiceRecordingIfCapturing() {
-        // Also abort an in-flight upload: when the user dismisses the keyboard mid-transcription
-        // (Back key, app switch, finishInputView), they expect the network request to stop, not
-        // to insert text into a stale field a few seconds later.
-        clearVoiceTarget();
+        // Abort an in-flight cloud upload: when the user dismisses the keyboard mid-transcription
+        // (Back key, app switch, finishInputView), they expect the network request to stop, not to
+        // insert text into a stale field a few seconds later. An on-device transcription is spared
+        // by cancelForLifecycle — it's fast and offline, so a transient window-hide must not silently
+        // drop the user's utterance. Explicit cancel (the X button) and onDestroy still abort it.
         if (mVoiceInputManager != null
                 && mVoiceInputManager.getState() != VoiceInputManager.State.IDLE) {
-            mVoiceInputManager.cancelRecording();
+            mVoiceInputManager.cancelForLifecycle();
         }
-    }
-
-    private void clearVoiceTarget() {
-        mVoiceTargetEditorId = null;
-        mVoiceTargetSessionGeneration = -1L;
-        mVoiceTargetInputConnection = null;
-        mVoiceTargetSelectionStart = Constants.NOT_A_CURSOR_POSITION;
-        mVoiceTargetSelectionEnd = Constants.NOT_A_CURSOR_POSITION;
-        mVoiceTargetSelectionChanged = false;
     }
 
     public void stopVoiceRecording() {

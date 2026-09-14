@@ -182,7 +182,7 @@ object Defaults {
     const val PREF_SAVE_SUBTYPE_PER_APP = false
     const val PREF_VOICE_INPUT_ENABLED = false
     const val PREF_VOICE_SPEECH_ENGINE = "cloud"
-    const val PREF_AI_PROVIDER = "openrouter"
+    const val PREF_AI_PROVIDER = "local"
     const val PREF_OPENROUTER_API_KEY = ""
     const val PREF_OPENROUTER_ZDR_ENABLED = true
 
@@ -229,8 +229,10 @@ object Defaults {
     const val PREF_VOICE_AUTO_STOP_SILENCE = false
     const val PREF_VOICE_AUTO_STOP_SILENCE_SECONDS = 2
     const val PREF_VOICE_MIC_SENSITIVITY = "normal"
+    const val PREF_VOICE_OFFLINE_RETRY = false
     const val PREF_VOICE_LANGUAGE_HINT = true
     const val PREF_VOICE_SPACE_HEURISTIC = true
+    const val PREF_VOICE_COPY_TO_CLIPBOARD = false
     const val PREF_VOICE_HAPTIC_FEEDBACK = true
     const val PREF_VOICE_AUTO_POLISH_ENABLED = false
     // Polish level values: "natural" (bypass), "light", "fixed", "rephrased", "corrected", "polished".
@@ -249,6 +251,7 @@ object Defaults {
     const val PREF_TEXT_FIX_ENABLED = false
     const val PREF_TEXT_FIX_MODEL = "~openai/gpt-mini-latest"
     const val PREF_TEXT_FIX_MODEL_CUSTOM = ""
+    const val PREF_LOCAL_TEXT_FIX_MODEL = "qwen2.5-1.5b-instruct-q8"
     const val PREF_TEXT_FIX_PROMPT = "You are a writing assistant. Improve the following text: fix typos, grammar, and punctuation while preserving the original meaning, tone, and language. Output only the improved text, with no preamble, quotes, or explanation."
     const val PREF_TEXT_FIX_2_ENABLED = false
     const val PREF_TEXT_FIX_2_PROMPT = "You are a writing assistant. Rewrite the following text to be clearer and more concise while preserving the original meaning, tone, and language. Output only the rewritten text, with no preamble, quotes, or explanation."

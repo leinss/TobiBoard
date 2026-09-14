@@ -1,0 +1,2 @@
+* Add your own words to the personal dictionary straight from the suggestion bar: long-press a word the keyboard doesn't know and tap + to save it for all languages
+* The suggestion long-press menu now shows + to add unknown words and the trash icon to remove dictionary words

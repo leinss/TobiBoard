@@ -66,6 +66,18 @@ class KeyboardState(private val switchActions: SwitchActions) {
     private var modeBeforeNumpad = Mode.ALPHABET
     private var isSymbolShifted = false
     private var prevMainKeyboardWasShiftLocked = false
+
+    /**
+     * Whether the symbols layout was on its shifted (second) layer when we left it *for the numpad*,
+     * so that returning to symbols from the numpad lands on the same layer.
+     *
+     * Deliberately NOT remembered across a return to the alphabet layout: users read the symbols key
+     * as "give me symbols", not "give me where I left off", so [setAlphabetKeyboard] clears this and
+     * the next switch to symbols always starts on the first layer. Previously
+     * [resetKeyboardStateToAlphabet] (fired by an app restarting input on the same field, e.g. a chat
+     * composer clearing itself on send) and the numpad's force-return-to-alpha path both left it set,
+     * so a later symbols key silently opened the second layer.
+     */
     private var prevSymbolsKeyboardWasShifted = false
     private var recapitalizeMode: RecapitalizeMode? = null
     private var oneShotManualShiftPending = false
@@ -186,6 +198,10 @@ class KeyboardState(private val switchActions: SwitchActions) {
         }
     }
 
+    fun clearShiftLock() {
+        setShiftLocked(false)
+    }
+
     private fun setShiftLocked(shiftLocked: Boolean) {
         if (DebugFlags.DEBUG_ENABLED) {
             Log.d(TAG, "setShiftLocked: shiftLocked=$shiftLocked $this")
@@ -209,7 +225,9 @@ class KeyboardState(private val switchActions: SwitchActions) {
             if (prevSymbolsKeyboardWasShifted) setSymbolsShiftedKeyboard() else setSymbolsKeyboard()
             prevSymbolsKeyboardWasShifted = false
         } else {
-            prevSymbolsKeyboardWasShifted = isSymbolShifted
+            // Returning to alphabet always forgets the symbols shift layer: setAlphabetKeyboard
+            // clears prevSymbolsKeyboardWasShifted, so the next switch to symbols starts on the
+            // first layer.
             setAlphabetKeyboard(autoCapsFlags, recapitalizeMode)
             if (prevMainKeyboardWasShiftLocked) setShiftLocked(true)
             prevMainKeyboardWasShiftLocked = false
@@ -224,7 +242,6 @@ class KeyboardState(private val switchActions: SwitchActions) {
         }
         if (mode == Mode.ALPHABET) return
 
-        prevSymbolsKeyboardWasShifted = isSymbolShifted
         setAlphabetKeyboard(autoCapsFlags, recapitalizeMode)
         if (prevMainKeyboardWasShiftLocked) {
             setShiftLocked(true)
@@ -248,6 +265,11 @@ class KeyboardState(private val switchActions: SwitchActions) {
         switchActions.setAlphabetKeyboard()
         mode = Mode.ALPHABET
         isSymbolShifted = false
+        // Single owner of the "remembered symbols shift layer" reset: landing on alphabet by any
+        // route (tap, chord/slide release, restartInput, numpad + space) forgets it, so the next
+        // switch to symbols starts on the first layer. The numpad round-trip in toggleNumpad does
+        // not pass through here, so its genuine same-mode restore still works.
+        prevSymbolsKeyboardWasShifted = false
         this.recapitalizeMode = null
         oneShotManualShiftPending = false
         switchState = SwitchState.ALPHA
@@ -443,12 +465,9 @@ class KeyboardState(private val switchActions: SwitchActions) {
             // Switch back to the previous keyboard mode if the user chords the mode change key and
             // another key, then releases the mode change key.
             toggleAlphabetAndSymbols(autoCapsFlags, recapitalizeMode)
-        } else if (!withSliding) {
-            // If the mode change key is being released without sliding, we should forget the
-            // previous symbols keyboard shift state and simply switch back to symbols layout
-            // (never symbols shifted) next time the mode gets changed to symbols layout.
-            prevSymbolsKeyboardWasShifted = false
         }
+        // No prevSymbolsKeyboardWasShifted reset needed here: setAlphabetKeyboard owns it, so both
+        // the tap and the chord/slide release already forgot the symbols shift layer.
         symbolKeyState.onRelease()
     }
 
@@ -525,31 +544,28 @@ class KeyboardState(private val switchActions: SwitchActions) {
             shiftKeyState.onPress()
             return
         }
+        // Shift while caps lock is active always exits caps lock, regardless of double-tap timing.
+        if (alphabetShiftState.isShiftLocked) {
+            setShiftLocked(false)
+            switchActions.cancelDoubleTapShiftKeyTimer()
+            // Mark the key as pressing so a reentrant onUpdateShiftState (fired by InputLogic
+            // between onEvent and onReleaseKey) doesn't mistake this for an idle key and apply
+            // auto-caps on top of the just-cleared lock; onReleaseShift needs this to land back
+            // on plain ALPHABET instead of AUTOMATIC_SHIFTED.
+            shiftKeyState.onPress()
+            return
+        }
         isInDoubleTapShiftKey = switchActions.isInDoubleTapShiftKeyTimeout
         if (isInDoubleTapShiftKey) {
-            if (alphabetShiftState.isShiftLocked) {
-                // Caps lock is already on (e.g. just enabled via long-press). A quick tap should turn
-                // it back off rather than being swallowed by double-tap detection.
-                setShiftLocked(false)
-            } else if (alphabetShiftState.isManualShifted || isInAlphabetUnshiftedFromShifted) {
+            if (alphabetShiftState.isManualShifted || isInAlphabetUnshiftedFromShifted) {
                 // Shift key has been double tapped while in manual shifted or automatic shifted state.
                 setShiftLocked(true)
             }
-            // Else shift key has been double tapped while in normal state.
-            // This is the second tap to disable shift locked state, so just ignore this.
+            // Else shift key has been double tapped while in normal state — just ignore.
         } else {
             // This is first tap.
             switchActions.startDoubleTapShiftKeyTimer()
-            if (alphabetShiftState.isShiftLocked) {
-                // A single tap while Caps Lock is on turns it off. This must happen on press, not
-                // on release: moving to shift-lock-shifted changes the keyboard layout, which
-                // cancels the pointer tracker and drops the Shift release event (reliably so right
-                // after enabling Caps Lock via long-press, where the Shift key is still left
-                // pressing). A release-based turn-off therefore never fires and Caps Lock stays
-                // stuck on. Acting on press makes a single tap disable Caps Lock at any tap speed.
-                setShiftLocked(false)
-                shiftKeyState.onPress()
-            } else if (alphabetShiftState.isAutomaticShifted) {
+            if (alphabetShiftState.isAutomaticShifted) {
                 // Shift key is pressed while automatic shifted, we have to move to manual shifted.
                 setShifted(ShiftMode.MANUAL)
                 oneShotManualShiftPending = true
@@ -580,11 +596,16 @@ class KeyboardState(private val switchActions: SwitchActions) {
             val isShiftLocked = alphabetShiftState.isShiftLocked
             isInAlphabetUnshiftedFromShifted = false
             when {
-                // Double tap shift key has been handled in {@link #onPressShift}, so that just ignore this release shift key here.
+                // Double tap shift key was handled in onPressShift — just clear the flag.
                 isInDoubleTapShiftKey -> isInDoubleTapShiftKey = false
                 // After chording input
                 shiftKeyState.isChording -> {
-                    if (alphabetShiftState.isShiftLockShifted) setShiftLocked(true) else setShifted(ShiftMode.UNSHIFT)
+                    // On touchscreens, an accidental graze of a nearby key while tapping Shift to
+                    // exit caps lock registers as a chord and would previously re-lock caps lock
+                    // (SHIFT_LOCK_SHIFTED → SHIFT_LOCKED). This feels completely broken to users.
+                    // Simply unshift in all chord cases — intentional caps-lock chording (a desktop
+                    // concept) is not a meaningful interaction on a touchscreen.
+                    setShifted(ShiftMode.UNSHIFT)
                     // Automatic shift state may have been changed depending on what characters were input.
                     shiftKeyState.onRelease()
                     switchActions.requestUpdatingShiftState(autoCapsFlags, recapitalizeMode)

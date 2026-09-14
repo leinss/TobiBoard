@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    compileSdk = 35
+    compileSdk = 36
 
     val configuredKeystore = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let {
         val candidate = File(it)
@@ -23,8 +23,14 @@ android {
             && configuredKeyAlias != null
             && configuredKeyPassword != null
     val requestedReleaseBuild = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
-    if (requestedReleaseBuild && !releaseSigningConfigured) {
-        throw GradleException("Release signing must be provided via KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD.")
+    // Only the maintainer's own release path (`make build-release` / `make release`) sets
+    // REQUIRE_SIGNED_RELEASE=1 to guard against accidentally publishing an unsigned APK.
+    // F-Droid's buildserver builds an UNSIGNED release and signs it with its own key, so a
+    // plain `gradlew assembleRelease` (no keystore, no REQUIRE_SIGNED_RELEASE) must succeed
+    // and simply produce an unsigned APK rather than failing the build.
+    val requireSignedRelease = !System.getenv("REQUIRE_SIGNED_RELEASE").isNullOrBlank()
+    if (requestedReleaseBuild && requireSignedRelease && !releaseSigningConfigured) {
+        throw GradleException("REQUIRE_SIGNED_RELEASE is set but release signing is incomplete; provide KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD.")
     }
 
     signingConfigs {
@@ -39,11 +45,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "helium314.keyboard.wisprboard"
+        applicationId = "xyz.leinss.TobiBoard"
         minSdk = 21
-        targetSdk = 35
-        versionCode = 8010
-        versionName = "7.11.0"
+        targetSdk = 36
+        versionCode = 6816
+        versionName = "6.8.16"
         buildConfigField("boolean", "ALLOW_USER_SUPPLIED_JNI", "false")
         buildConfigField("boolean", "ENABLE_GESTURE_DATA_GATHERING", "false")
         manifestPlaceholders["gestureDataProviderEnabled"] = "false"
@@ -52,7 +58,13 @@ android {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    // Run instrumentation tests against the unminified variant — the minified debug build
+    // strips androidx.test transitive deps the R8 link expects, and instrumentation has no
+    // production size constraint.
+    @Suppress("UnstableApiUsage") testBuildType = "debugNoMinify"
 
     buildTypes {
         release {
@@ -90,7 +102,7 @@ android {
             buildConfigField("boolean", "ENABLE_GESTURE_DATA_GATHERING", "true")
             manifestPlaceholders["gestureDataProviderEnabled"] = "true"
         }
-        base.archivesBaseName = "WisprBoard_" + defaultConfig.versionName
+        base.archivesBaseName = "TobiBoard_" + defaultConfig.versionName
         // got a little too big for GitHub after some dependency upgrades, so we remove the largest dictionary
         androidComponents.onVariants { variant: ApplicationVariant ->
             if (variant.buildType == "debug") {
@@ -126,6 +138,16 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+        managedDevices {
+            localDevices {
+                create("pixel6Api34") {
+                    device = "Pixel 6"
+                    apiLevel = 34
+                    systemImageSource = "google_apis"
+                }
+            }
         }
     }
 
@@ -159,6 +181,22 @@ dependencies {
     implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("androidx.security:security-crypto:1.0.0") // encrypted prefs for the API key
 
+    // on-device STT — sherpa-onnx AAR is fetched by `make fetch-native-libs`,
+    // gitignored (~54 MB). See docs/EMULATOR.md.
+    val sherpaOnnxAar = project.file("libs/sherpa-onnx-1.13.2.aar")
+    if (!sherpaOnnxAar.exists()) {
+        logger.warn(
+            "\n[TobiBoard] Native library missing: ${sherpaOnnxAar.relativeTo(rootProject.projectDir)}\n" +
+            "            This AAR is not vendored in the repo. Fetch it before building:\n" +
+            "                make fetch-native-libs\n" +
+            "            (or run `make build-fast`, which fetches it automatically).\n"
+        )
+    }
+    implementation(files(sherpaOnnxAar))
+
+    // on-device text-fix — MediaPipe LLM Inference loads Gemma .task bundles
+    implementation("com.google.mediapipe:tasks-genai:0.10.35")
+
     // kotlin
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
@@ -178,7 +216,26 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.17.0")
-    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("androidx.test:runner:1.6.2")
     testImplementation("androidx.test:core:1.6.1")
+
+    // androidTest (instrumentation) — runs on emulator / connected device
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.11.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    // Drives the IME itself: keys are drawn by a custom view, so the keyboard can only be
+    // touched through injected input events rather than through view/compose matchers.
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+
+    // ui-test-manifest declares the empty ComponentActivity that createComposeRule() hosts.
+    // It has to be on the variant the instrumentation tests are built against, and that is
+    // debugNoMinify (see `testBuildType` above), not debug — `debugImplementation` alone would
+    // put it on a variant the test APK never links against.
+    // Only on debugNoMinify, which is testBuildType. Adding it to `debug` too would put an
+    // exported ComponentActivity into the sideloadable APK that users actually install.
+    add("debugNoMinifyImplementation", "androidx.compose.ui:ui-test-manifest")
 }

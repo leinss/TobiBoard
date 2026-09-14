@@ -1,0 +1,25 @@
+<!--
+    SPDX-License-Identifier: GPL-3.0-only
+    "Add to dictionary" icon: an open book (dictionary) with a plus badge in the
+    top-right corner. Replaces a bare "+", which did not communicate that the key
+    adds the selected word/phrase to the personal dictionary. Monochrome; tinted at
+    runtime by the toolbar / popup-key text color, so the fill color is a fallback.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- left page -->
+    <path
+        android:fillColor="@color/foreground_weak"
+        android:pathData="M2,9L9.5,11L9.5,19.5L2,17.5Z" />
+    <!-- right page -->
+    <path
+        android:fillColor="@color/foreground_weak"
+        android:pathData="M17,9L9.5,11L9.5,19.5L17,17.5Z" />
+    <!-- plus badge (top-right) -->
+    <path
+        android:fillColor="@color/foreground_weak"
+        android:pathData="M18.5,2.5H20.5V4.5H22.5V6.5H20.5V8.5H18.5V6.5H16.5V4.5H18.5Z" />
+</vector>

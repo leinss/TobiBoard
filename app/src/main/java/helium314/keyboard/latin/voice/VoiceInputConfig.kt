@@ -5,15 +5,12 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
-import android.os.SystemClock
-import android.widget.Toast
 import androidx.annotation.StringRes
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.settings.Defaults
+import helium314.keyboard.latin.voice.local.LocalModelLoadException
 import java.text.BreakIterator
-import java.util.Collections
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 
 private val SANITIZE_OUTPUT_REGEX =
     Regex("[[\\p{Cc}&&[^\\n\\r\\t]]\\u200B\\u200C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]")
@@ -31,9 +28,7 @@ internal fun sanitizeModelOutput(raw: String, maxLength: Int): String {
     // sequence, or a base+combining-mark cluster - any of which would render as broken glyphs.
     // BreakIterator handles surrogate/combining boundaries, but Java/Android implementations can
     // still stop between emoji that are joined by U+200D, so we repair that boundary explicitly.
-    // Locale.ROOT so grapheme boundaries (and thus truncation points) do not depend on the
-    // device locale.
-    val breaker = BreakIterator.getCharacterInstance(Locale.ROOT)
+    val breaker = BreakIterator.getCharacterInstance()
     breaker.setText(cleaned)
     val boundary = breaker.preceding(maxLength + 1)
     val end = avoidPartialZwjSequence(cleaned, if (boundary == BreakIterator.DONE) 0 else boundary)
@@ -76,40 +71,21 @@ internal fun applySpacing(text: String, ctx: VoiceInputManager.SpacingContext?):
     return prefix + text + suffix
 }
 
-/**
- * Turns the handful of provider statuses that mean something specific into an instruction the user
- * can act on. Without this they reach the strip as the raw, untranslated literal "API error: 402",
- * which tells a non-developer nothing at all.
- *
- * Deliberately narrow. 403 is **not** mapped: on OpenRouter it means the request was refused by
- * moderation, not that the credentials are bad, and confidently sending the user to check their
- * API key would be worse than an opaque number. 429/503 are handled by the caller as rate limits.
- */
-@StringRes
-internal fun actionableErrorResId(statusCode: Int): Int? = when (statusCode) {
-    401 -> R.string.ai_error_bad_key
-    402 -> R.string.ai_error_out_of_credit
-    404 -> R.string.ai_error_model_not_found
-    else -> null
-}
-
 private val SENSITIVE_USER_FACING_PATTERNS: List<Pair<Regex, String>> = listOf(
     Regex("(?i)Bearer\\s+\\S+") to "Bearer ***",
     Regex("(?i)(\"?api[_-]?key\"?\\s*[:=]\\s*\"?)[^\"\\s,}]+") to "$1***",
 )
 
 /**
- * Resolves a user-facing error message from a transcription/text-fix exception. If the throwable
- * is one of our own [OpenRouterException]s we surface its message after scrubbing tokens; for
- * everything else we fall back to [fallbackResId] so unrelated stack traces never leak.
+ * Resolves a user-facing error message from a transcription/text-fix exception. A
+ * [LocalModelLoadException] maps to the re-download hint; an [OpenRouterException] surfaces its
+ * message after scrubbing tokens; everything else falls back to [fallbackResId] so unrelated
+ * stack traces never leak.
  */
 internal fun safeUserFacingError(context: Context, e: Throwable, @StringRes fallbackResId: Int): String {
+    if (e is LocalModelLoadException) return context.getString(R.string.text_fix_error_local_load_failed)
     if (e is OpenRouterException) {
         if (e.statusCode == 429 || e.statusCode == 503) return context.getString(R.string.voice_error_rate_limited)
-        // An empty transcript describes the recording, not the service. Saying so keeps the user
-        // from re-recording to work around what reads like a provider outage.
-        if (e.statusCode == OpenRouterClient.STATUS_NO_SPEECH) return context.getString(R.string.voice_error_silent)
-        actionableErrorResId(e.statusCode)?.let { return context.getString(it) }
         val raw = e.message?.takeIf { it.isNotBlank() }
         if (raw != null) {
             return SENSITIVE_USER_FACING_PATTERNS.fold(raw) { acc, (regex, replacement) ->
@@ -119,61 +95,6 @@ internal fun safeUserFacingError(context: Context, e: Throwable, @StringRes fall
     }
     return context.getString(fallbackResId)
 }
-
-/** Models already disclosed as having fallen back from ZDR, once per process. */
-private val zdrWarnedModels: MutableSet<String> =
-    Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
-
-internal fun warnAfterZdrFallback(context: Context, model: String) {
-    if (!zdrWarnedModels.add(model)) return
-    Toast.makeText(
-        context,
-        context.getString(R.string.voice_warning_zdr_unenforceable, model),
-        Toast.LENGTH_LONG,
-    ).show()
-}
-
-/**
- * Routing facts learned the expensive way, remembered briefly so the next request does not repeat
- * a doomed attempt. Both are deliberately short-lived rather than process-lifetime: an IME process
- * lives for days, and both conditions are recoverable — a ZDR route that was momentarily down
- * comes back, and a floating `~author/model-latest` alias can resolve to a different endpoint
- * tomorrow. Caching either verdict forever would silently and permanently downgrade the request.
- */
-/**
- * Wall-clock ceiling for a text-only AI request, retries and backoff included. Text Fix, Translate
- * and auto-polish previously inherited the audio read timeout, so a stalled provider could hold
- * the user for 4.5 minutes across three attempts. 90 s is generous for a copy-edit and still
- * leaves a slow model room to finish its first attempt untouched.
- */
-internal const val AI_TEXT_REQUEST_BUDGET_MS = 90_000L
-
-private const val ROUTE_FACT_TTL_MS = 30 * 60 * 1000L
-private val zdrUnavailableSince = ConcurrentHashMap<String, Long>()
-private val reasoningControlRejectedSince = ConcurrentHashMap<String, Long>()
-
-private fun isRouteFactFresh(map: ConcurrentHashMap<String, Long>, model: String): Boolean {
-    val since = map[model] ?: return false
-    if (SystemClock.elapsedRealtime() - since < ROUTE_FACT_TTL_MS) return true
-    map.remove(model)
-    return false
-}
-
-internal fun markZdrRouteUnavailable(model: String) {
-    zdrUnavailableSince[model] = SystemClock.elapsedRealtime()
-}
-
-/** True while this model is known to have no ZDR route, so asking again would waste an upload. */
-internal fun isZdrRouteKnownUnavailable(model: String): Boolean =
-    isRouteFactFresh(zdrUnavailableSince, model)
-
-internal fun markReasoningControlRejected(model: String) {
-    reasoningControlRejectedSince[model] = SystemClock.elapsedRealtime()
-}
-
-/** True while this model is known to reject `reasoning: {enabled: false}` with a hard error. */
-internal fun isReasoningControlKnownRejected(model: String): Boolean =
-    isRouteFactFresh(reasoningControlRejectedSince, model)
 
 internal fun isNetworkAvailable(context: Context): Boolean {
     val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
@@ -195,31 +116,7 @@ internal data class ResolvedVoicePrompt(
 
 enum class VoiceTranscriptionMode {
     CHAT_AUDIO,
-
-    /**
-     * The provider's dedicated speech-to-text endpoint rather than chat completions. Both providers
-     * expose one, and both are markedly faster than routing audio through a chat model: measured
-     * against PayPerQ, a 30-second clip comes back in about 1.7 s this way versus 10–15 s through
-     * a chat model.
-     */
-    DEDICATED_STT,
-}
-
-/**
- * Which engine turns speech into text. [CLOUD] uploads a WAV to the configured AI provider;
- * [ON_DEVICE] hands the microphone to Android's on-device recognizer and never touches the network.
- *
- * The engine covers speech recognition only. Text Fix and auto-polish are LLM features with no
- * on-device equivalent here, so they stay on the cloud provider regardless of this setting.
- */
-enum class SpeechEngine(val prefValue: String) {
-    CLOUD("cloud"),
-    ON_DEVICE("on_device");
-
-    companion object {
-        fun fromPref(value: String?): SpeechEngine =
-            entries.firstOrNull { it.prefValue == value } ?: CLOUD
-    }
+    OPENROUTER_STT,
 }
 
 /**

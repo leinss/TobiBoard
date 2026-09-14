@@ -254,4 +254,4 @@ private var gestureIdsBeingExported: List<Long>? = null
 
 private var zippedDataPath = "" // set after writing the file
 
-private const val MAIL_SUBJECT = "HeliBoard ${BuildConfig.VERSION_NAME} gesture data"
+private const val MAIL_SUBJECT = "TobiBoard ${BuildConfig.VERSION_NAME} gesture data"

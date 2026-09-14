@@ -399,6 +399,22 @@ public final class RichInputConnection implements PrivateCommandPerformer {
         return isConnected() ?  mIC.getSelectedText(flags) : null;
     }
 
+    /**
+     * Returns the entire field content via {@link InputConnection#getExtractedText}, or null when the
+     * connection is gone or the editor returns nothing. Used by Text Fix to rewrite the whole field
+     * when no text is selected. Mirrors the proven request shape in {@link #copyText(boolean)}.
+     * Caveat: some editors cap the extracted length, so a very large field may come back truncated.
+     */
+    @Nullable
+    public CharSequence getWholeFieldText(final int flags) {
+        if (!isConnected()) return null;
+        final ExtractedTextRequest etr = new ExtractedTextRequest();
+        etr.flags = flags;
+        etr.hintMaxChars = Integer.MAX_VALUE;
+        final ExtractedText et = mIC.getExtractedText(etr, 0);
+        return et != null ? et.text : null;
+    }
+
     public boolean canDeleteCharacters() {
         return mExpectedSelStart > 0;
     }
@@ -980,6 +996,33 @@ public final class RichInputConnection implements PrivateCommandPerformer {
             return null;
         }
         return StringUtilsKt.getTouchedWordRange(before, after, script, spacingAndPunctuations);
+    }
+
+    /**
+     * Returns the whitespace-delimited token at the cursor (email/URL-aware), or "" if the cursor
+     * is not adjacent to any text. Unlike {@link #getWordRangeAtCursor}, interior separators like
+     * "@" and "." are preserved, so a full email address or URL is captured for the explicit
+     * add-to-dictionary action even when URL detection is off (the default).
+     */
+    @NonNull public String getWhitespaceDelimitedTokenAtCursor(final SpacingAndPunctuations spacingAndPunctuations) {
+        mIC = mParent.getCurrentInputConnection();
+        if (!isConnected()) {
+            return "";
+        }
+        final CharSequence before = getTextBeforeCursorAndDetectLaggyConnection(
+                OPERATION_GET_WORD_RANGE_AT_CURSOR,
+                SLOW_INPUT_CONNECTION_ON_PARTIAL_RELOAD_MS,
+                NUM_CHARS_TO_GET_BEFORE_CURSOR,
+                InputConnection.GET_TEXT_WITH_STYLES);
+        final CharSequence after = getTextAfterCursorAndDetectLaggyConnection(
+                OPERATION_GET_WORD_RANGE_AT_CURSOR,
+                SLOW_INPUT_CONNECTION_ON_PARTIAL_RELOAD_MS,
+                NUM_CHARS_TO_GET_AFTER_CURSOR,
+                InputConnection.GET_TEXT_WITH_STYLES);
+        if (before == null || after == null) {
+            return "";
+        }
+        return StringUtilsKt.getWhitespaceDelimitedTokenAtCursor(before, after, spacingAndPunctuations);
     }
 
     public boolean isCursorTouchingWord(final SpacingAndPunctuations spacingAndPunctuations,

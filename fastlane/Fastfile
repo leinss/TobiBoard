@@ -1,0 +1,51 @@
+# Google Play publishing for TobiBoard via fastlane supply.
+# Setup + first run: see docs/PLAY_PUBLISHING.md
+# Reads the listing/screenshots/changelogs from fastlane/metadata/android/.
+default_platform(:android)
+
+platform :android do
+  desc "Upload the signed release AAB + store listing to Google Play (TRACK defaults to internal, STATUS to live for tester tracks / draft for production)"
+  lane :play do |options|
+    gradle_path = File.expand_path("../app/build.gradle.kts", __dir__)
+    version_code = File.read(gradle_path)[/versionCode\s*=\s*(\d+)/, 1].to_i
+    aab = Dir.glob(File.expand_path("../app/build/outputs/bundle/release/*.aab", __dir__))
+             .max_by { |f| File.mtime(f) }
+    UI.user_error!("No release AAB found — run `make bundle-release` first.") if aab.nil?
+
+    track = options[:track] || "internal"
+    # release_status precedence: explicit STATUS wins; otherwise go live ("completed") on tester
+    # tracks (internal/alpha/beta) but stay "draft" on production so a full public rollout is always
+    # a deliberate choice. "auto"/empty (the Makefile's unset sentinel) means "use this default".
+    status = options[:status]
+    status = nil if status.nil? || status.to_s.strip.empty? || status == "auto"
+    status ||= (track == "production" ? "draft" : "completed")
+
+    upload_to_play_store(
+      package_name: "xyz.leinss.TobiBoard",
+      json_key: ENV["PLAY_SERVICE_ACCOUNT_JSON"],
+      track: track,
+      release_status: status,        # "completed" = live to that track; "draft" = stage for Play Console
+      aab: aab,
+      version_code: version_code,
+      skip_upload_apk: true,
+      skip_upload_screenshots: true  # no screenshots set up yet
+    )
+  end
+
+  desc "Upload the Main store listing only (title, descriptions, icon, feature graphic, screenshots) — no binary."
+  desc "Decoupled from the AAB; pass validate:true for a dry run. Reads from fastlane/metadata/android/."
+  lane :listing do |options|
+    # Shared account-level Play publisher key (covers TobiReader + TobiBoard).
+    key = ENV["PLAY_SERVICE_ACCOUNT_JSON"]
+    key = File.expand_path("~/.keys/leinss-play.json") if key.nil? || key.empty?
+    upload_to_play_store(
+      package_name: "xyz.leinss.TobiBoard",
+      json_key: key,
+      track: "internal",
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      skip_upload_changelogs: true,
+      validate_only: options[:validate] ? true : false,
+    )
+  end
+end

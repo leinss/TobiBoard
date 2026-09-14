@@ -18,6 +18,8 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Paint.Align;
 import android.graphics.Typeface;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.AttributeSet;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -360,6 +362,13 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
             Log.w(TAG, "Cannot find android.R.id.content view to add DrawingPreviewPlacerView");
             return;
         }
+        // The removal in onDetachedFromWindow is posted, so the placer view can still be sitting in
+        // its old parent when a new keyboard view attaches. Adding a view that already has a parent
+        // throws, so take it out here first.
+        final ViewParent oldParent = mDrawingPreviewPlacerView.getParent();
+        if (oldParent instanceof ViewGroup) {
+            ((ViewGroup) oldParent).removeView(mDrawingPreviewPlacerView);
+        }
         windowContentView.addView(mDrawingPreviewPlacerView);
     }
 
@@ -496,11 +505,19 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        mDrawingPreviewPlacerView.removeAllViews();
         final ViewParent parent = mDrawingPreviewPlacerView.getParent();
         if (parent instanceof ViewGroup) {
-            ((ViewGroup) parent).removeView(mDrawingPreviewPlacerView);
-        } else {
-            mDrawingPreviewPlacerView.removeAllViews();
+            // The placer view is a sibling of the input view, both children of the window content
+            // view. When the whole window goes away, this runs inside that content view's own
+            // dispatchDetachedFromWindow, which walks its child array by index: removing a sibling
+            // mid-walk leaves a null slot and the next child throws NPE, killing the process.
+            // Switching to another IME destroys the window this way, so post the removal instead.
+            // Post on the main looper rather than on the view: View.post before the next attach
+            // only queues into HandlerActionQueue, and a window that is being torn down for good
+            // never attaches again, so the removal would never run and the view would leak.
+            final ViewGroup parentGroup = (ViewGroup) parent;
+            new Handler(Looper.getMainLooper()).post(() -> parentGroup.removeView(mDrawingPreviewPlacerView));
         }
     }
 

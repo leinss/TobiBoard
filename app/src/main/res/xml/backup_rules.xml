@@ -4,7 +4,7 @@
   these exclusions explicit prevents tooling drift and mirrors data_extraction_rules.xml.
 -->
 <full-backup-content>
-    <exclude domain="sharedpref" path="wisprboard_secrets.xml" />
+    <exclude domain="sharedpref" path="tobiboard_secrets.xml" />
     <exclude domain="database" path="heliboard.db" />
     <exclude domain="file" path="dicts/" />
 </full-backup-content>

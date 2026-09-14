@@ -20,6 +20,7 @@ import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.inputmethod.CorrectionInfo;
 import android.view.inputmethod.EditorInfo;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -42,6 +43,7 @@ import helium314.keyboard.latin.Suggest;
 import helium314.keyboard.latin.Suggest.OnGetSuggestedWordsCallback;
 import helium314.keyboard.latin.SuggestedWords;
 import helium314.keyboard.latin.SuggestedWords.SuggestedWordInfo;
+import helium314.keyboard.latin.R;
 import helium314.keyboard.latin.WordComposer;
 import helium314.keyboard.latin.common.Constants;
 import helium314.keyboard.latin.common.InputPointers;
@@ -693,7 +695,42 @@ public final class InputLogic {
         final String clipboardContent = mLatinIME.getClipboardHistoryManager().retrieveClipboardContent().toString();
         if (!clipboardContent.isEmpty()) {
             mLatinIME.onTextInput(clipboardContent);
+            return;
         }
+        // With clipboard history off, the key pastes the system clipboard. An empty clipboard used
+        // to make it a silent no-op, which reads as a broken key rather than as an empty clipboard.
+        Toast.makeText(mLatinIME, R.string.clipboard_nothing_to_paste, Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Adds the currently selected text (if any) or else the whole whitespace-delimited token at the
+     * cursor to the personal dictionary. A full email or URL can be added directly: its "." and "@"
+     * are word separators, so it never appears as a single word/suggestion — which is exactly why
+     * the suggestion-strip long-press "+" can't reach it. The token capture keeps those interior
+     * separators (see {@link RichInputConnection#getWhitespaceDelimitedTokenAtCursor}) so the user
+     * need not select the token first. Reuses the same {@link LatinIME#addToDictionary} path as that
+     * "+", and gives explicit toast feedback because, unlike the "+", this key does not visibly
+     * consume a suggestion chip.
+     */
+    private void addCurrentWordOrSelectionToDictionary(final SettingsValues settingsValues) {
+        CharSequence word = mConnection.getSelectedText(0 /* no styles */);
+        if (TextUtils.isEmpty(word)) {
+            // No selection: capture the whole whitespace-delimited token at the cursor, so a full
+            // email/URL ("newsletter@leinss.xyz") is added rather than only the trailing fragment
+            // that the "." and "@" word separators would otherwise leave (getWordRangeAtCursor
+            // splits on them unless URL detection is on, which is off by default). This mirrors what
+            // the selection path already does, without requiring the user to select the token first.
+            word = mConnection.getWhitespaceDelimitedTokenAtCursor(settingsValues.mSpacingAndPunctuations);
+        }
+        final String trimmed = (word == null) ? "" : word.toString().trim();
+        if (trimmed.isEmpty()) {
+            KeyboardSwitcher.getInstance().showToast(
+                    mLatinIME.getString(R.string.add_to_dictionary_nothing_selected), false);
+            return;
+        }
+        mLatinIME.addToDictionary(trimmed);
+        KeyboardSwitcher.getInstance().showToast(
+                mLatinIME.getString(R.string.added_word_to_dictionary, trimmed), false);
     }
 
     /**
@@ -769,6 +806,9 @@ public final class InputLogic {
                 break;
             case KeyCode.CLIPBOARD_SELECT_WORD:
                 mConnection.selectWord(inputTransaction.getSettingsValues().mSpacingAndPunctuations, currentKeyboardScript);
+                break;
+            case KeyCode.ADD_TO_DICTIONARY:
+                addCurrentWordOrSelectionToDictionary(inputTransaction.getSettingsValues());
                 break;
             case KeyCode.CLIPBOARD_COPY:
                 mConnection.copyText(true);
@@ -2593,10 +2633,10 @@ public final class InputLogic {
                 shouldFinishComposition)) {
             if (0 < remainingTries) {
                 handler.postResetCaches(tryResumeSuggestions, remainingTries - 1);
-                return false;
             }
-            // If remainingTries is 0, we should stop waiting for new tries, however we'll still
-            // return true as we need to perform other tasks (for example, loading the keyboard).
+            // Return false in all failure cases so the caller can decide what to do
+            // (schedule another retry or force-hide the keyboard on last attempt).
+            return false;
         }
         mConnection.tryFixIncorrectCursorPosition();
         if (tryResumeSuggestions) {

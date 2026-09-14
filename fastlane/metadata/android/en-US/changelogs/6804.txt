@@ -1,0 +1,2 @@
+• Improved compatibility on older Android versions (5.0–7.x) for on-device model downloads and notifications
+• Reliability hardening for the AI text-fix and voice-undo safeguards
