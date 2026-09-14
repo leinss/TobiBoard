@@ -99,12 +99,12 @@
     <string name="settings_category_miscellaneous">Рознае</string>
     <string name="settings_no_limit">Без абмежаванняў</string>
     <string name="abbreviation_unit_minutes">%s хв.</string>
-    <string name="android_spell_checker_settings">Налады праверкі правапісу HeliBoard</string>
+    <string name="android_spell_checker_settings">Налады праверкі правапісу TobiBoard</string>
     <string name="show_emoji_key">Клавіша эмодзі</string>
-    <string name="ime_settings">Налады HeliBoard</string>
+    <string name="ime_settings">Налады TobiBoard</string>
     <string name="settings_category_input">Ўвод</string>
     <string name="settings_category_additional_keys">Дадатковыя клавішы</string>
-    <string name="spell_checker_service_name">Праверка правапісу HeliBoard</string>
+    <string name="spell_checker_service_name">Праверка правапісу TobiBoard</string>
     <string name="enable_clipboard_history">Ўключыць гісторыю буфера абмену</string>
     <string name="enable_clipboard_history_summary">Калі выключана, клавіша буфера абмену будзе ўстаўляць змесціва буфера абмену, калі яно ёсць</string>
     <string name="clipboard_history_retention_time">Час захоўвання гісторыі буфера абмену</string>
@@ -297,6 +297,7 @@
     <string name="language_switch_key_behavior">Паводзіны клавішы змены мовы</string>
     <string name="center_suggestion_text_to_enter">Заўсёды выкарыстоўваць сярэднюю прапанову</string>
     <string name="gesture_fast_typing_cooldown">Час аднаўлення хуткага друку</string>
+    <string name="clipboard_toolbar_keys">Выбраць клавішы панэлі інструментаў буфера абмену</string>
     <string name="all_colors_warning">Гэтая настройка паказвае ўсе колеры, якія выкарыстоўваюцца ўнутры праграмы. Спіс колераў можа мяняцца. Колер па змаўчанні з\'яўляецца выпадковым, і імёны не будуць перакладзены.</string>
     <string name="auto_show_toolbar_summary">Паказваць панэль інструментаў пры ўводзе ці пры выбары тэксту</string>
     <string name="auto_hide_toolbar">Хаваць панэль інструментаў аўтаматычна</string>
@@ -349,6 +350,7 @@
     <string name="locales_with_dict">Мовы са слоўнікамі</string>
     <string name="custom_subtype">Карыстацкі падтып</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Радок эмодзі ўнізе</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Радок буфера абмену ўнізе</string>
     <string name="layout_in_use">Папярэджанне: раскладка ў дадзены момант выкарыстоўваецца</string>
     <string name="customize_icons">Наладзіць значкі</string>
     <string name="customize_icons_reset_message">Сапраўды скінуць усе настроеныя значкі?</string>

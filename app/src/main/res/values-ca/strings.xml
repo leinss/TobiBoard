@@ -98,14 +98,14 @@
     <string name="delete_swipe_summary">Llisqueu damunt de la tecla d\'esborrar per seleccionar i treure grans parts de text d\'un sol cop</string>
     <string name="incognito">Força el mode d\'incògnit</string>
     <string name="abbreviation_unit_minutes">%s min</string>
-    <string name="spell_checker_service_name">Corrector ortogràfic de l\'HeliBoard</string>
-    <string name="android_spell_checker_settings">Configuració del corrector ortogràfic de l\'HeliBoard</string>
+    <string name="spell_checker_service_name">Corrector ortogràfic de l\'TobiBoard</string>
+    <string name="android_spell_checker_settings">Configuració del corrector ortogràfic de l\'TobiBoard</string>
     <string name="delete_swipe">Esborra amb lliscament</string>
     <string name="show_emoji_key">Tecla d\'accés a emojis</string>
     <string name="prefs_force_incognito_mode_summary">Desactiva l\'aprenentatge de paraules noves</string>
     <string name="number_row">Fila de nombres</string>
     <string name="number_row_summary">Mostra sempre la fila de nombres</string>
-    <string name="ime_settings">Configuració de l\'HeliBoard</string>
+    <string name="ime_settings">Configuració de l\'TobiBoard</string>
     <string name="settings_category_input">Entrada</string>
     <string name="settings_category_miscellaneous">Miscel·lània</string>
     <string name="key_borders">Vores del teclat</string>
@@ -180,6 +180,7 @@
     <string name="popup_keys_layout" tools:keep="@string/popup_keys_layout">Disposició</string>
     <string name="popup_order">Selecciona l\'ordre de les tecles ampliades</string>
     <string name="select_word" tools:keep="@string/select_word">Selecciona la paraula</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Fila inferior del porta-retalls</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Fila inferior d\'emojis</string>
     <string name="setup_step3_action">Configura el teclat</string>
     <string name="internal_dictionary_summary">Diccionari principal intern</string>
@@ -188,6 +189,7 @@
     <string name="replace_dictionary_message">Realment substituir el diccionari afegit per l\'usuari «%1$s»?\n\nDiccionari actual:\n%2$s\n\nNou diccionari:\n%3$s</string>
     <string name="replace_dictionary">Substitueix diccionari</string>
     <string name="remove_dictionary_message">Eliminar realment el diccionari afegit per l\'usuari «%s»?</string>
+    <string name="clipboard_toolbar_keys">Selecciona les tecles de la barra d\'eines del porta-retalls</string>
     <string name="close_history" tools:keep="@string/close_history">Tanca l\'historial del porta-retalls</string>
     <string name="layout_symbols_arabic" tools:keep="@string/layout_symbols_arabic">Símbols (Àrab)</string>
     <string name="layout_symbols" tools:keep="@string/layout_symbols">Símbols</string>
@@ -431,11 +433,13 @@
     <string name="about_wiki_link_description">Qualsevol compte de GitHub pot millorar el Wiki!</string>
     <string name="save_subtype_per_app">Recordar idioma per app</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
+    <string name="clipboard_history_pinned_first">Mostrar els elements fixats a dalt</string>
     <string name="inline_emoji_search">Cerca d\'emojis en línia</string>
     <string name="inline_emoji_search_summary">Suggerir emojis només quan una paraula va precedida de dos punts</string>
     <string name="emoji_dictionary_required">Cal un diccionari d\'emojis per a aquesta funció. Els diccionaris en format .dict es poden descarregar %s.</string>
     <string name="subtype_mhr">Mari (Oriental)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Fila inferior d\'emojis amb tecla d\'acció</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Fila inferior del porta-retalls amb tecla d\'acció</string>
     <string name="number_row_in_symbols">Mostra una línia de nombres a la vista de símbols</string>
     <string name="custom_emoji_font">Aplica una font d\'emoticones personalitzada des d\'un fitxer</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Tecles funcionals (Khipro)</string>

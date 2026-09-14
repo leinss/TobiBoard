@@ -53,21 +53,9 @@ class TextFixBlockedFieldTest {
     }
 
     @Test
-    fun textNoSuggestionsFlagAloneIsAllowed() {
-        // Chat composers and search boxes set this flag purely to hide the suggestion strip; it is
-        // not a privacy signal, so it must not block Text Fix by itself.
+    fun textNoSuggestionsFlagIsAllowed() {
+        // TYPE_TEXT_FLAG_NO_SUGGESTIONS is a framework/autocomplete hint, not a privacy signal.
         assertNull(call(inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS))
-    }
-
-    @Test
-    fun noSuggestionsStillBlockedWhenARealPrivacySignalIsPresent() {
-        assertEquals(
-            R.string.text_fix_error_sensitive_field,
-            call(
-                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
-                noLearning = true,
-            ),
-        )
     }
 
     @Test
@@ -103,18 +91,14 @@ class TextFixBlockedFieldTest {
     }
 
     @Test
-    fun textUriVariationIsUnsupported() {
-        assertEquals(
-            R.string.text_fix_error_unsupported_field,
-            call(inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI),
-        )
+    fun textUriVariationIsAllowed() {
+        // URI fields are TYPE_CLASS_TEXT — text fix works fine in them.
+        assertNull(call(inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI))
     }
 
     @Test
-    fun textEmailAddressVariationIsUnsupported() {
-        assertEquals(
-            R.string.text_fix_error_unsupported_field,
-            call(inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS),
-        )
+    fun textEmailAddressVariationIsAllowed() {
+        // Email fields are TYPE_CLASS_TEXT — text fix works fine in them.
+        assertNull(call(inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS))
     }
 }

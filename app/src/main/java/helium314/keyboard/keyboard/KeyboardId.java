@@ -66,6 +66,7 @@ public final class KeyboardId {
     public static final int ELEMENT_CLIPBOARD = 27;
     public static final int ELEMENT_NUMPAD = 28;
     public static final int ELEMENT_EMOJI_BOTTOM_ROW = 29;
+    public static final int ELEMENT_CLIPBOARD_BOTTOM_ROW = 30;
 
     public final RichInputMethodSubtype mSubtype;
     public final int mWidth;
@@ -74,6 +75,8 @@ public final class KeyboardId {
     public final int mElementId;
     public final EditorInfo mEditorInfo;
     public final boolean mDeviceLocked;
+    /** See {@link helium314.keyboard.latin.settings.SettingsValues#mSensitiveField}. */
+    public final boolean mSensitiveField;
     public final boolean mNumberRowEnabled;
     public final boolean mNumberRowInSymbols;
     public final boolean mLanguageSwitchKeyEnabled;
@@ -102,6 +105,7 @@ public final class KeyboardId {
         mCustomActionLabel = (mEditorInfo.actionLabel != null)
                 ? mEditorInfo.actionLabel.toString() : null;
         mHasShortcutKey = params.mVoiceInputKeyEnabled;
+        mSensitiveField = params.mSensitiveField;
         mIsSplitLayout = params.mIsSplitLayoutEnabled;
         mOneHandedModeEnabled = params.mOneHandedModeEnabled;
         mInternalAction = params.mInternalAction;
@@ -119,6 +123,7 @@ public final class KeyboardId {
                 id.passwordInput(),
                 id.mDeviceLocked,
                 id.mHasShortcutKey,
+                id.mSensitiveField,
                 id.mNumberRowEnabled,
                 id.mNumberRowInSymbols,
                 id.mLanguageSwitchKeyEnabled,
@@ -146,6 +151,7 @@ public final class KeyboardId {
                 && other.passwordInput() == passwordInput()
                 && other.mDeviceLocked == mDeviceLocked
                 && other.mHasShortcutKey == mHasShortcutKey
+                && other.mSensitiveField == mSensitiveField
                 && other.mNumberRowEnabled == mNumberRowEnabled
                 && other.mLanguageSwitchKeyEnabled == mLanguageSwitchKeyEnabled
                 && other.mEmojiKeyEnabled == mEmojiKeyEnabled
@@ -211,8 +217,8 @@ public final class KeyboardId {
         return mElementId >= ELEMENT_EMOJI_RECENTS && mElementId <= ELEMENT_EMOJI_CATEGORY16;
     }
 
-    public boolean isEmojiBottomRow() {
-        return mElementId == ELEMENT_EMOJI_BOTTOM_ROW;
+    public boolean isEmojiClipBottomRow() {
+        return mElementId == ELEMENT_CLIPBOARD_BOTTOM_ROW || mElementId == ELEMENT_EMOJI_BOTTOM_ROW;
     }
 
     public int imeAction() {

@@ -21,6 +21,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -127,7 +128,8 @@ open class SettingsActivity : ComponentActivity(), SharedPreferences.OnSharedPre
                     else if (showWelcomeWizard) {
                         WelcomeWizard(close = { showWelcomeWizard = false }, finish = this::finish)
                     } else {
-                        SettingsNavHost(onClickBack = { this.finish() })
+                        val startDestination = remember { intent?.getStringExtra("start_destination") }
+                        SettingsNavHost(onClickBack = { this.finish() }, startDestination = startDestination)
                         if (crashReports.isNotEmpty()) {
                             ConfirmationDialog(
                                 cancelButtonText = stringResource(R.string.crash_report_ignore),
@@ -149,8 +151,6 @@ open class SettingsActivity : ComponentActivity(), SharedPreferences.OnSharedPre
                             && System.currentTimeMillis() < END_DATE_EPOCH_MILLIS + TWO_WEEKS_IN_MILLIS
                         ) {
                             GestureDataPromotionReminderDialog()
-                        } else {
-                            DonatePrompt(this@SettingsActivity)
                         }
                     }
                     if (dictUri != null) {
@@ -189,6 +189,11 @@ open class SettingsActivity : ComponentActivity(), SharedPreferences.OnSharedPre
         }
 
         enableEdgeToEdge()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.getStringExtra("start_destination")?.let { SettingsDestination.navigateTo(it) }
     }
 
     override fun onStart() {

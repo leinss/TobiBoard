@@ -100,8 +100,8 @@
     <string name="more_keys_strip_description">Więcej klawiszy</string>
     <string name="number_row">Rząd numeryczny</string>
     <string name="show_emoji_key">Klawisz emotikonów</string>
-    <string name="spell_checker_service_name">Sprawdzanie pisowni HeliBoard</string>
-    <string name="android_spell_checker_settings">Ustawienia sprawdzania pisowni HeliBoard</string>
+    <string name="spell_checker_service_name">Sprawdzanie pisowni TobiBoard</string>
+    <string name="android_spell_checker_settings">Ustawienia sprawdzania pisowni TobiBoard</string>
     <string name="settings_category_clipboard_history">Historia schowka</string>
     <string name="enable_clipboard_history">Włącz historię schowka</string>
     <string name="incognito">Wymuś tryb incognito</string>
@@ -116,7 +116,7 @@
     <string name="show_hints">Pokazuj wskazówki klawiszy</string>
     <string name="prefs_keyboard_height_scale">Skala wysokości klawiatury</string>
     <string name="subtype_akkhor_bn_BD">%s (Akkhor)</string>
-    <string name="ime_settings">Ustawienia HeliBoard</string>
+    <string name="ime_settings">Ustawienia TobiBoard</string>
     <string name="settings_category_additional_keys">Dodatkowe klawisze</string>
     <string name="settings_category_input">Wprowadzanie</string>
     <string name="settings_category_suggestions">Sugestie</string>
@@ -337,6 +337,7 @@
     <string name="center_suggestion_text_to_enter">Zawsze używaj środkowej sugestii</string>
     <string name="center_suggestion_text_to_enter_summary">Po naciśnięciu spacji lub znaku interpunkcyjnego zostanie wpisana środkowa sugestia</string>
     <string name="close_history" tools:keep="@string/close_history">Zamknij schowek</string>
+    <string name="clipboard_toolbar_keys">Wybierz klawisze paska narzędzi w schowku</string>
     <string name="subtype_generic_extended">%s (rozszerzony)</string>
     <string name="subtype_mns">mansyjski</string>
     <string name="more_colors">Pokaż więcej kolorów</string>
@@ -386,6 +387,7 @@
     <string name="layout_number_row" tools:keep="@string/layout_number_row">Rząd numeryczny</string>
     <string name="prefs_space_bar_text">Własny tekst na klawiszu spacji</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Dolny rząd w widoku emotikonów</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Dolny rząd w widoku schowka</string>
     <string name="label_enter_key" tools:keep="@string/label_enter_key">Enter</string>
     <string name="label_tab_key" tools:keep="@string/label_tab_key">Tabulator</string>
     <string name="label_shift_key" tools:keep="@string/label_shift_key">Shift</string>
@@ -473,6 +475,7 @@
     <string name="space_swipe_hide_keyboard_entry">Ukryj klawiaturę</string>
     <string name="about_wiki_link">Przejdź do Wiki</string>
     <string name="about_wiki_link_description">Każdy użytkownik GitHuba może ulepszać Wiki!</string>
+    <string name="clipboard_history_pinned_first">Pokaż przypięte elementy na górze</string>
     <string name="save_subtype_per_app">Zapamiętaj język dla każdej aplikacji</string>
     <string name="subtype_mhr">Mari (wschodni)</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
@@ -483,6 +486,7 @@
     <string name="custom_emoji_font">Dodaj niestandardową czcionkę emotikonów z pliku</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Klawisze funkcyjne (Khipro)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Dolny rząd z klawiszem enter w widoku emotikonów</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Dolny rząd z klawiszem enter w widoku schowka</string>
     <string name="emoji_search_title">Znajdź emotikon</string>
     <string name="search_field_placeholder">Szukaj</string>
     <string name="gesture_data_screen">Gromadzenie danych o gestach</string>

@@ -101,13 +101,13 @@
     <string name="show_hints">Tampilkan petunjuk tombol</string>
     <string name="number_row_summary">Selalu tampilkan baris angka</string>
     <string name="abbreviation_unit_minutes">%s mnt</string>
-    <string name="spell_checker_service_name">Pemeriksa Ejaan HeliBoard</string>
-    <string name="android_spell_checker_settings">Pengaturan Pemeriksa Ejaan HeliBoard</string>
+    <string name="spell_checker_service_name">Pemeriksa Ejaan TobiBoard</string>
+    <string name="android_spell_checker_settings">Pengaturan Pemeriksa Ejaan TobiBoard</string>
     <string name="number_row">Baris angka</string>
     <string name="prefs_long_press_keyboard_to_change_lang">Ubah metode masukan dengan tombol spasi</string>
     <string name="incognito">Paksa mode privat</string>
     <string name="show_emoji_key">Tombol emoji</string>
-    <string name="ime_settings">Pengaturan HeliBoard</string>
+    <string name="ime_settings">Pengaturan TobiBoard</string>
     <string name="settings_category_input">Masukan</string>
     <string name="settings_category_additional_keys">Tombol tambahan</string>
     <string name="settings_category_suggestions">Saran</string>
@@ -313,6 +313,7 @@
     <string name="center_suggestion_text_to_enter">Selalu gunakan saran pertengahan</string>
     <string name="center_suggestion_text_to_enter_summary">Saat menekan spasi atau tanda baca, saran tengah akan dimasukkan</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Emoji baris bawah</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Baris bawah papan klip</string>
     <string name="customize_currencies_detail">Tetapkan simbol mata uang utama dan hingga 6 simbol mata uang sekunder, dipisahkan dengan spasi</string>
     <string name="var_toolbar_direction">Arah bilah alat variabel</string>
     <string name="subtype_generic_extended">%s (Diperluas)</string>
@@ -323,6 +324,7 @@
     <string name="vibrate_in_dnd_mode">Bergetar dalam mode jangan ganggu</string>
     <string name="page_end" tools:keep="@string/page_end">Akhir halaman</string>
     <string name="word_left" tools:keep="@string/word_left">Kata tersisa</string>
+    <string name="clipboard_toolbar_keys">Pilih tombol bilah alat papan klip</string>
     <string name="quick_pin_toolbar_keys">Sematkan tombol bilah alat saat ditekan lama</string>
     <string name="quick_pin_toolbar_keys_summary">Ini akan menonaktifkan tindakan tekan lama lainnya untuk tombol bilah alat yang tidak disematkan</string>
     <string name="prefs_long_press_symbol_for_numpad">Tekan lama tombol simbol untuk papan nomor</string>

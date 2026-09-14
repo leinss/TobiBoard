@@ -1,0 +1,5 @@
+* Clipboard history: tracks how often each entry is used and shows copy timestamp
+* Long-press a clipboard entry to pin or delete it directly from the keyboard
+* New Clipboard Management screen in Settings: search, annotate (label) entries, bulk remove
+* Fix: caps lock no longer stays stuck after switching text fields or a gesture interruption
+* Fix: keyboard no longer stops sending characters after an input connection error

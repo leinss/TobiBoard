@@ -106,4 +106,5 @@
     <dimen name="config_accessibility_edge_slop">8dp</dimen>
 
     <integer name="config_user_dictionary_max_word_length">48</integer>
+    <dimen name="config_clipboard_pinned_icon_size">18dp</dimen>
 </resources>

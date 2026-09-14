@@ -104,7 +104,7 @@
     <string name="label_search_key">Caută</string>
     <string name="label_pause_key">"Pauză"</string>
     <string name="label_wait_key">Așteaptă</string>
-    <string name="ime_settings">Setări HeliBoard</string>
+    <string name="ime_settings">Setări TobiBoard</string>
     <string name="settings_category_additional_keys">Chei suplimentare</string>
     <string name="settings_category_correction">Corectări</string>
     <string name="settings_category_suggestions">Sugestii</string>
@@ -122,8 +122,8 @@
     <string name="auto_correction_confidence">Încrederea în corecție automată</string>
     <string name="clipboard_history_retention_time">Timpul de păstrare a istoricului</string>
     <string name="settings_category_input">Introducere</string>
-    <string name="spell_checker_service_name">Verificator ortografic HeliBoard</string>
-    <string name="android_spell_checker_settings">Setări pentru verificarea ortografică HeliBoard</string>
+    <string name="spell_checker_service_name">Verificator ortografic TobiBoard</string>
+    <string name="android_spell_checker_settings">Setări pentru verificarea ortografică TobiBoard</string>
     <string name="settings_category_clipboard_history">Istoric clipboard</string>
     <string name="enable_clipboard_history">Activează istoricul clipboardului</string>
     <string name="disable_personalized_dicts_message">Avertisment: dezactivarea acestei setări va șterge datele învățate</string>
@@ -301,6 +301,7 @@
     <string name="center_suggestion_text_to_enter">Folosește întotdeauna sugestia de mijloc</string>
     <string name="center_suggestion_text_to_enter_summary">La apăsarea pe spațiu sau pe semnul de punctuație, va fi introdusă sugestia din mijloc</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Rândul Emoji de jos</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Rândul de jos al clipboardului</string>
     <string name="auto_hide_toolbar">Ascundere automată a barei de instrumente</string>
     <string name="auto_hide_toolbar_summary">Ascunde bara de instrumente când sugestiile devin disponibile</string>
     <string name="subtype_generic_extended">%s (Extins)</string>
@@ -336,6 +337,7 @@
     <string name="page_down" tools:keep="@string/page_down">Pagină jos</string>
     <string name="quick_pin_toolbar_keys">Fixează tasta din bara de instrumente la apăsarea lungă</string>
     <string name="close_history" tools:keep="@string/close_history">Închide istoricul clipboardului</string>
+    <string name="clipboard_toolbar_keys">Selectează tastele barei de instrumente clipboard</string>
     <string name="switch_keyboard_after">Comutare la tastatura principală după…</string>
     <string name="after_emoji">Se selectează emoji în vizualizarea emoji</string>
     <string name="after_clip">Selectarea unei intrări din istoricul clipboardului</string>

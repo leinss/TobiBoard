@@ -1,4 +1,4 @@
-* New material-style WisprBoard launcher icon
+* New material-style TobiBoard launcher icon
 * Reject too-short or silent voice recordings before upload
 * Added explicit legacy backup exclusions for sensitive app data
 * Release-readiness fixes and cleanup

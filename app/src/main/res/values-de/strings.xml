@@ -95,12 +95,12 @@
     <string name="settings_category_clipboard_history">Zwischenablage-Verlauf</string>
     <string name="settings_category_correction">Korrekturen</string>
     <string name="settings_category_suggestions">Vorschläge</string>
-    <string name="android_spell_checker_settings">HeliBoard-Rechtschreibprüfungs-Einstellungen</string>
-    <string name="ime_settings">HeliBoard-Einstellungen</string>
+    <string name="android_spell_checker_settings">TobiBoard-Rechtschreibprüfungs-Einstellungen</string>
+    <string name="ime_settings">TobiBoard-Einstellungen</string>
     <string name="settings_category_experimental">Experimentell</string>
     <string name="settings_no_limit">Keine Begrenzung</string>
     <string name="abbreviation_unit_minutes">%s Min.</string>
-    <string name="spell_checker_service_name">HeliBoard-Rechtschreibprüfung</string>
+    <string name="spell_checker_service_name">TobiBoard-Rechtschreibprüfung</string>
     <string name="show_emoji_key">Emoji-Taste</string>
     <string name="settings_category_input">Eingabe</string>
     <string name="settings_category_additional_keys">Zusätzliche Tasten</string>
@@ -293,6 +293,7 @@
     <string name="center_suggestion_text_to_enter_summary">Bei Eingabe eines Leerzeichens oder eines Punktes wird der mittlere Vorschlag gewählt</string>
     <string name="close_history" tools:keep="@string/close_history">Zwischenablage-Verlauf schließen</string>
     <string name="center_suggestion_text_to_enter">Immer mittleren Vorschlag verwenden</string>
+    <string name="clipboard_toolbar_keys">Tasten der Symbolleiste für die Zwischenablage auswählen</string>
     <string name="subtype_generic_extended">%s (Erweitert)</string>
     <string name="pinned_toolbar_keys">Angeheftete Tasten der Symbolleiste auswählen</string>
     <string name="quick_pin_toolbar_keys_summary">Dadurch werden andere Langdruck-Aktionen für Tasten der Symbolleiste, die nicht angeheftet sind, deaktiviert</string>
@@ -341,6 +342,7 @@
     <string name="prefs_space_bar_text">Benutzerdefinierter Text auf der Leertaste</string>
     <string name="layout_number_row" tools:keep="@string/layout_number_row">Zahlenzeile</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Emoji untere Zeile</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Zwischenablage untere Zeile</string>
     <string name="icon_style">Symbolstil</string>
     <string name="label_enter_key" tools:keep="@string/label_enter_key">Eingabe</string>
     <string name="label_tab_key" tools:keep="@string/label_tab_key">Tabulator</string>
@@ -434,8 +436,10 @@
     <string name="emoji_dictionary_required">Ein Emoji-Wörterbuch wird für diese Funktion benötigt. Wörterbücher im .dict-Format können %s heruntergeladen werden.</string>
     <string name="save_subtype_per_app">Sprache pro App merken</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Emoji untere Zeile mit Aktions-Taste</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Zwischenablage untere Zeile mit Aktions-Taste</string>
     <string name="custom_emoji_font">Benutzerdefinierte Emoji-Schriftart aus Datei festlegen</string>
     <string name="number_row_in_symbols">Zeilenzeile in Symbol-Ansicht anzeigen</string>
+    <string name="clipboard_history_pinned_first">Angeheftete Elemente zuerst anzeigen</string>
     <string name="subtype_mhr">Ostmari</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Funktionale Tasten (Khipro)</string>

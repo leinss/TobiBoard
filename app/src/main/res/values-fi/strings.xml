@@ -157,11 +157,12 @@
     <string name="license">Avoimen lähdekoodin lisenssi</string>
     <string name="prefs_keyboard_height_scale">Näppäimistön korkeusskaalaus</string>
     <string name="prefs_narrow_key_gaps">Kapeat näppäinvälit</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Leikepöydän alarivi</string>
     <string name="user_dict_add_word_button">Lisää sana</string>
     <string name="theme_name_light" tools:keep="@string/theme_name_light">Vaalea</string>
     <string name="auto_show_toolbar_summary">Näytä työkalupalkki jos syöte aloitetaan tai tekstiä valitaan</string>
     <string name="space_swipe_toggle_numpad_entry">Numeronäppäimistö päällä/pois</string>
-    <string name="android_spell_checker_settings">HeliBoard-oikoluvun asetukset</string>
+    <string name="android_spell_checker_settings">TobiBoard-oikoluvun asetukset</string>
     <string name="settings_screen_about">Tietoja</string>
     <string name="about_github_link">Näytä GitHubissa</string>
     <string name="version">Versio</string>
@@ -180,6 +181,7 @@
     <string name="day_night_mode_summary">Ulkoasu seuraa järjestelmän asetuksia</string>
     <string name="select_color_background">Näppäimistön tausta</string>
     <string name="emoji" tools:keep="@string/emoji">Emoji</string>
+    <string name="clipboard_toolbar_keys">Valitse leikepöydän työkalupalkin näppäimet</string>
     <string name="setup_step3_action">Muokkaa näppäimistöä</string>
     <string name="text_tap_languages">Napauta kieltä avataksesi sen asetukset</string>
     <string name="save_log">Tallenna loki</string>
@@ -232,10 +234,10 @@
     <string name="select_color_spacebar_background">Välilyönnin tausta</string>
     <string name="hidden_features_summary">Näytä mahdollisesti huomaamatta jäävät ominaisuudet</string>
     <string name="settings_screen_toolbar">Työkalupalkki</string>
-    <string name="spell_checker_service_name">HeliBoard-oikoluku</string>
+    <string name="spell_checker_service_name">TobiBoard-oikoluku</string>
     <string name="hidden_features_title">Kuvaus piilotetuista ominaisuuksista</string>
     <string name="toolbar_keys">Valitse työkalupalkin näppäimet</string>
-    <string name="ime_settings">HeliBoard-asetukset</string>
+    <string name="ime_settings">TobiBoard-asetukset</string>
     <string name="theme_name_dynamic" tools:keep="@string/theme_name_dynamic">Dynaamiset värit</string>
     <string name="settings_no_limit">Ei rajoitusta</string>
     <string name="pinned_toolbar_keys">Valitse kiinnitetyt työkalupalkin näppäimet</string>

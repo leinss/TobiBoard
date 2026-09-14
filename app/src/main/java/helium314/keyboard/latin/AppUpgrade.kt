@@ -337,8 +337,13 @@ private object AppUpgrade {
                         file.renameTo(File(dir, name))
                         prefs.edit { putString(Settings.PREF_LAYOUT_PREFIX + LayoutType.EMOJI_BOTTOM.name, name) }
                     }
-                    // the clipboard bottom row layout type is gone (D-5): do not move it to the main layouts
-                    "custom.clip_bottom_row." -> {}
+                    "custom.clip_bottom_row." -> {
+                        val dir = File(folder, LayoutType.CLIPBOARD_BOTTOM.folder)
+                        dir.mkdirs()
+                        val name = "custom.${encodeBase36("clip_bottom_row")}."
+                        file.renameTo(File(dir, name))
+                        prefs.edit { putString(Settings.PREF_LAYOUT_PREFIX + LayoutType.CLIPBOARD_BOTTOM.name, name) }
+                    }
                     "custom.functional_keys." -> {
                         val dir = File(folder, LayoutType.FUNCTIONAL.folder)
                         dir.mkdirs()
@@ -398,7 +403,7 @@ private object AppUpgrade {
         }
         if (oldVersion <= 2305) {
             (prefs.all.keys.filter { it.startsWith(Settings.PREF_POPUP_KEYS_ORDER) || it.startsWith(Settings.PREF_POPUP_KEYS_LABELS_ORDER) } +
-                listOf(Settings.PREF_TOOLBAR_KEYS, Settings.PREF_PINNED_TOOLBAR_KEYS)).forEach {
+                listOf(Settings.PREF_TOOLBAR_KEYS, Settings.PREF_PINNED_TOOLBAR_KEYS, Settings.PREF_CLIPBOARD_TOOLBAR_KEYS)).forEach {
                 if (!prefs.contains(it)) return@forEach
                 val newValue = prefs.getString(it, "")!!.replace(",", Separators.KV).replace(";", Separators.ENTRY)
                 prefs.edit { putString(it, newValue) }

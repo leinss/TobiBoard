@@ -11,7 +11,10 @@ import helium314.keyboard.latin.utils.LayoutUtilsCustom
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.utils.prefs
+import helium314.keyboard.latin.voice.AiProvider
 import helium314.keyboard.latin.voice.SecretStore
+import helium314.keyboard.latin.voice.local.LocalSherpaEngine
+import helium314.keyboard.latin.voice.local.ModelDownloadRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -27,15 +30,23 @@ class App : Application() {
         scope.launch { // do some uncritical work in background for faster startup
             SupportedEmojis.load(this@App)
             LayoutUtilsCustom.removeMissingLayouts(this@App)
-            SecretStore.removeLegacyFile(this@App)
-            // Load the vault key so the first voice/text-fix request doesn't pay this cost on the
-            // IME main thread. Only when an AI feature is on: AI is off by default.
-            val prefs = prefs()
+            // Warm up EncryptedSharedPreferences + AndroidKeyStore master key so the first
+            // voice/text-fix request doesn't pay the cold-decrypt cost on the IME main thread.
+            // Gated on the features that actually read the API key: when neither voice input nor
+            // text-fix is enabled we never touch the keystore at startup.
+            val prefs = this@App.prefs()
             if (prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)
                 || prefs.getBoolean(Settings.PREF_TEXT_FIX_ENABLED, Defaults.PREF_TEXT_FIX_ENABLED)
-                || prefs.getBoolean(Settings.PREF_TEXT_FIX_2_ENABLED, Defaults.PREF_TEXT_FIX_2_ENABLED)
-                || prefs.getBoolean(Settings.PREF_TRANSLATE_ENABLED, Defaults.PREF_TRANSLATE_ENABLED)
-            ) SecretStore.warmUp(this@App)
+            ) {
+                SecretStore.warmUp(this@App)
+            }
+            ModelDownloadRepository.rehydrate(this@App)
+            // Cold-init of the sherpa-onnx recognizer is ~2.7 s; doing it on first user
+            // utterance is felt as a hang. Building it here is a no-op if Parakeet is not
+            // on disk, but only the on-device provider ever asks for it: on a cloud provider
+            // this used to load ~660 MB at every app start that nothing would ever read.
+            val provider = AiProvider.fromPref(prefs.getString(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER))
+            if (provider == AiProvider.LOCAL) LocalSherpaEngine.warmUp(this@App)
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
             @Suppress("DEPRECATION")
             Log.i(

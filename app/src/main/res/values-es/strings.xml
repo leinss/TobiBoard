@@ -96,8 +96,8 @@
     <string name="settings_category_additional_keys">Teclas adicionales</string>
     <string name="prefs_long_press_keyboard_to_change_lang">Cambiar método de entrada con la barra espaciadora</string>
     <string name="prefs_long_press_keyboard_to_change_lang_summary">Al presionar por mucho tiempo la barra espaciadora, aparecerá el menú de selección del método de entrada</string>
-    <string name="spell_checker_service_name">Corrector ortográfico de HeliBoard</string>
-    <string name="android_spell_checker_settings">Ajustes del corrector ortográfico de HeliBoard</string>
+    <string name="spell_checker_service_name">Corrector ortográfico de TobiBoard</string>
+    <string name="android_spell_checker_settings">Ajustes del corrector ortográfico de TobiBoard</string>
     <string name="prefs_keyboard_height_scale">Escala de altura del teclado</string>
     <string name="delete_swipe">Borrar deslizando</string>
     <string name="delete_swipe_summary">Deslice el dedo por la tecla Borrar para seleccionar y eliminar porciones más grandes de texto de una vez</string>
@@ -108,7 +108,7 @@
     <string name="settings_category_correction">Correcciones</string>
     <string name="settings_category_experimental">Experimental</string>
     <string name="settings_category_input">Entrada</string>
-    <string name="ime_settings">Ajustes de HeliBoard</string>
+    <string name="ime_settings">Ajustes de TobiBoard</string>
     <string name="settings_category_suggestions">Sugerencias</string>
     <string name="settings_category_miscellaneous">Otros</string>
     <string name="number_row">Fila de números</string>
@@ -266,6 +266,7 @@
     <string name="var_toolbar_direction">Dirección variable de la barra de herramientas</string>
     <string name="subtype_xdq">Kaitag</string>
     <string name="close_history" tools:keep="@string/close_history">Cerrar historial del portapapeles</string>
+    <string name="clipboard_toolbar_keys">Seleccionar teclas de la barra de herramientas del portapapeles</string>
     <string name="show_popup_hints">Mostrar símbolos funcionales</string>
     <string name="show_popup_hints_summary">Muestra símbolos si al mantener pulsada una tecla se activan funciones adicionales</string>
     <string name="var_toolbar_direction_summary">Invertir dirección cuando un subtipo de teclado Derecha-a-Izquierda está seleccionado</string>
@@ -323,6 +324,7 @@
     <string name="prefs_space_bar_text">Texto personalizado en la barra de espacio</string>
     <string name="customize_currencies">Personalizar divisas</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Fila inferior de Emoji</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Fila inferior del portapapeles</string>
     <string name="button_save_file">Guardar en un archivo</string>
     <string name="copy_to_clipboard">Copiar al portapapeles</string>
     <string name="load">Cargar</string>
@@ -413,11 +415,13 @@
     <string name="use_apps_dict_summary">Utiliza los nombres de las aplicaciones instaladas para sugerencias y correcciones</string>
     <string name="suggest_punctuation">Sugerencias de puntuación</string>
     <string name="suggest_punctuation_summary">Muestra signos de puntuación cuando no haya otras sugerencias disponibles</string>
+    <string name="clipboard_history_pinned_first">Mostrar los elementos fijados arriba</string>
     <string name="backup_restored">Copia de seguridad restaurada</string>
     <string name="save_subtype_per_app">Recordar el idioma por aplicación</string>
     <string name="subtype_with_layout_generic">%1$s (%2$s)</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Sección inferior de emoticonos con tecla de acción</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Sección inferior de portapapeles con tecla de acción</string>
     <string name="about_wiki_link">Ir a la Wiki</string>
     <string name="about_wiki_link_description">¡La Wiki puede ser mejorada por cualquier usuario de GitHub!</string>
     <string name="space_swipe_hide_keyboard_entry">Ocultar el teclado</string>

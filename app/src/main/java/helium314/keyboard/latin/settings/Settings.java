@@ -89,8 +89,10 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_VOICE_AUTO_STOP_SILENCE = "voice_auto_stop_silence";
     public static final String PREF_VOICE_AUTO_STOP_SILENCE_SECONDS = "voice_auto_stop_silence_seconds";
     public static final String PREF_VOICE_MIC_SENSITIVITY = "voice_mic_sensitivity";
+    public static final String PREF_VOICE_OFFLINE_RETRY = "voice_offline_retry";
     public static final String PREF_VOICE_LANGUAGE_HINT = "voice_language_hint";
     public static final String PREF_VOICE_SPACE_HEURISTIC = "voice_space_heuristic";
+    public static final String PREF_VOICE_COPY_TO_CLIPBOARD = "voice_copy_to_clipboard";
     public static final String PREF_VOICE_HAPTIC_FEEDBACK = "voice_haptic_feedback";
     public static final String PREF_VOICE_AUTO_POLISH_ENABLED = "voice_auto_polish_enabled";
     public static final String PREF_VOICE_POLISH_LEVEL = "voice_polish_level";
@@ -99,10 +101,13 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     // Virtual (non-stored) keys for action rows in settings UI.
     public static final String PREF_VOICE_ACTION_TEST_KEY = "voice_action_test_key";
     public static final String PREF_VOICE_ACTION_PROMPT_PRESET = "voice_action_prompt_preset";
+    public static final String PREF_VOICE_ACTION_USAGE = "voice_action_usage";
+    public static final String PREF_VOICE_ACTION_LOCAL_MODEL = "voice_action_local_model";
 
     public static final String PREF_TEXT_FIX_ENABLED = "text_fix_enabled";
     public static final String PREF_TEXT_FIX_MODEL = "text_fix_model";
     public static final String PREF_TEXT_FIX_MODEL_CUSTOM = "text_fix_model_custom";
+    public static final String PREF_LOCAL_TEXT_FIX_MODEL = "local_text_fix_model";
     public static final String PREF_TEXT_FIX_PROMPT = "text_fix_prompt";
     public static final String PREF_TEXT_FIX_2_ENABLED = "text_fix_2_enabled";
     public static final String PREF_TEXT_FIX_2_PROMPT = "text_fix_2_prompt";
@@ -217,6 +222,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static boolean isClipboardRetentionUnlimited(final long retentionMinutes) {
         return retentionMinutes <= 0 || retentionMinutes == CLIPBOARD_RETENTION_NO_LIMIT_MINUTES;
     }
+    public static final String PREF_CLIPBOARD_HISTORY_PINNED_FIRST = "clipboard_history_pinned_first";
 
     public static final String PREF_ADD_TO_PERSONAL_DICTIONARY = "add_to_personal_dictionary";
     public static final String PREF_NAVBAR_COLOR = "navbar_color";
@@ -230,6 +236,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_TOOLBAR_KEYS = "toolbar_keys";
     public static final String PREF_AUTO_SHOW_TOOLBAR = "auto_show_toolbar";
     public static final String PREF_AUTO_HIDE_TOOLBAR = "auto_hide_toolbar";
+    public static final String PREF_CLIPBOARD_TOOLBAR_KEYS = "clipboard_toolbar_keys";
     public static final String PREF_ABC_AFTER_EMOJI = "abc_after_emoji";
     public static final String PREF_ABC_AFTER_CLIP = "abc_after_clip";
     public static final String PREF_ABC_AFTER_SYMBOL_SPACE = "abc_after_symbol_space";

@@ -91,8 +91,8 @@
     <string name="user_dict_settings_edit_dialog_title">"Uređivanje riječi"</string>
     <string name="user_dict_settings_all_languages">"Za sve jezike"</string>
     <string name="user_dict_settings_more_languages">"Više jezika…"</string>
-    <string name="spell_checker_service_name">HeliBoard provjera pravopisa</string>
-    <string name="android_spell_checker_settings">Postavke HeliBoard provjere pravopisa</string>
+    <string name="spell_checker_service_name">TobiBoard provjera pravopisa</string>
+    <string name="android_spell_checker_settings">Postavke TobiBoard provjere pravopisa</string>
     <string name="subtype_akkhor_bn_BD">%s (Akkhor)</string>
     <string name="settings_category_suggestions">Prijedlozi</string>
     <string name="settings_category_clipboard_history">Povijest međuspremnika</string>
@@ -102,7 +102,7 @@
     <string name="show_emoji_key">Tipka za emojije</string>
     <string name="abbreviation_unit_minutes">%s min</string>
     <string name="settings_no_limit">Bez ograničenja</string>
-    <string name="ime_settings">HeliBoard postavke</string>
+    <string name="ime_settings">TobiBoard postavke</string>
     <string name="settings_category_input">Unos</string>
     <string name="settings_category_additional_keys">Dodatne tipke</string>
     <string name="enable_clipboard_history">Omogući povijest međuspremnika</string>
@@ -173,6 +173,7 @@
     <string name="gesture_floating_preview_static_summary">Prikazuje predloženu riječ tijekom kretnje</string>
     <string name="gesture_floating_preview_dynamic_summary">Pomiče pregled tijekom kretnje</string>
     <string name="gesture_trail_fadeout_duration">Trajanje traga kretnji</string>
+    <string name="clipboard_history_pinned_first">Prikaži prikvačene stavke na vrhu</string>
     <string name="backup_restore_title">Sig. kopiranje i vraćanje</string>
     <string name="backup_error">Greška kod sig. kopiranja: %s</string>
     <string name="restore_error">Greška vraćanja sig. kopije: %s</string>
@@ -238,6 +239,7 @@
     <string name="down" tools:keep="@string/down">Dolje</string>
     <string name="close_history" tools:keep="@string/close_history">Zatvori povijest međuspremnika</string>
     <string name="emoji" tools:keep="@string/emoji">Emoji</string>
+    <string name="clipboard_toolbar_keys">Odaberi tipke alatne trake međuspremnika</string>
     <string name="pinned_toolbar_keys">Odaberi prikvačene tipke alatne trake</string>
     <string name="quick_pin_toolbar_keys">Prikvači tipke alatne trake pomoću dugog pritiska</string>
     <string name="quick_pin_toolbar_keys_summary">Ovo će onemogućiti druge radnje za dugi pritisak tipki alatne trake koje nisu prikvačene</string>
@@ -310,6 +312,8 @@
     <string name="layout_number_row_basic" tools:keep="@string/layout_number_row_basic">Redak brojeva (osnovno)</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Donji redak emojija</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Donji redak emojija s tipkom za radnju</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Donji redak međuspremnika</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Donji redak međuspremnika s tipkom za radnju</string>
     <string name="customize_background_image">Postavi pozadinsku sliku</string>
     <string name="customize_background_image_landscape">Postavi pozadinsku sliku (horizontalno)</string>
     <string name="summary_customize_background_image_landscape">Ako nije postavljeno, koristit će se slika za vertikalni način rada</string>

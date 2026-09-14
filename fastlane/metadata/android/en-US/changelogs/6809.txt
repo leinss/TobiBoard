@@ -1,0 +1,1 @@
+- Add to dictionary now captures the whole email address or web link — no need to select the text first

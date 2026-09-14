@@ -104,16 +104,16 @@
     <string name="prefs_keyboard_height_scale">קנה-מידה גובה המקלדת</string>
     <string name="key_borders">גבולות מקלדת</string>
     <string name="day_night_mode">מצב יום/לילה אוטומטי</string>
-    <string name="android_spell_checker_settings">הגדרות בודק האיות של HeliBoard</string>
+    <string name="android_spell_checker_settings">הגדרות בודק האיות של TobiBoard</string>
     <string name="prefs_long_press_keyboard_to_change_lang">שינוי שיטת ההזנה על-ידי מקש רווח</string>
     <string name="show_emoji_key">מקש אמוג\'י</string>
     <string name="subtype_akkhor_bn_BD">%s (תווים)</string>
-    <string name="spell_checker_service_name">בודק האיות של HeliBoard</string>
+    <string name="spell_checker_service_name">בודק האיות של TobiBoard</string>
     <string name="settings_category_clipboard_history">היסטוריית הלוח</string>
     <string name="autospace_after_punctuation">הוספת רווח אוטומטית אחרי סימני פיסוק</string>
     <string name="day_night_mode_summary">המראה יעקוב אחר הגדרות המערכת</string>
     <string name="autospace_after_punctuation_summary">הוספת רווח אוטומטית לאחר סימני פיסוק בעת הקלדת מילה חדשה</string>
-    <string name="ime_settings">הגדרות HeliBoard</string>
+    <string name="ime_settings">הגדרות TobiBoard</string>
     <string name="settings_category_input">קֶלֶט</string>
     <string name="settings_category_experimental">נסיוני</string>
     <string name="settings_category_miscellaneous">שונות</string>
@@ -219,6 +219,7 @@
     <string name="dictionary_settings_category">מילונים</string>
     <string name="theme_style">סגנון</string>
     <string name="close_history" tools:keep="@string/close_history">סגירת היסטוריית הלוח</string>
+    <string name="clipboard_toolbar_keys">בחירת כפתורי סרגל הכלים של הלוח</string>
     <string name="edit_layout">לחיצה לעריכת פריסת בסיס</string>
     <string name="theme_name_chocolate" tools:keep="@string/theme_name_chocolate">שוקולד</string>
     <string name="layout_symbols" tools:keep="@string/layout_symbols">סימנים</string>
@@ -349,6 +350,7 @@
     <string name="icon_style">סגנון הסמלים</string>
     <string name="layout_number_row" tools:keep="@string/layout_number_row">שורת המספרים</string>
     <string name="prefs_space_bar_text">מלל מותאם על מקש הרווח</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">שורת הלוח התחתונה</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">שורת האמוג\'ים התחתונה</string>
     <string name="label_shortcut_key_disabled" tools:keep="@string/label_shortcut_key_disabled">קלט קולי מושבת</string>
     <string name="label_toolbar_key" tools:keep="@string/label_toolbar_key">הצגה / הסתרה של סרגל הכלים</string>
@@ -439,6 +441,8 @@
     <string name="about_wiki_link_description">ה-Wiki יכול להיות משופר ע\"י כל משתמש GitHub!</string>
     <string name="subtype_khipro_bn">%s (כיפרו)</string>
     <string name="save_subtype_per_app">שיוך שפה ליישום</string>
+    <string name="clipboard_history_pinned_first">הצגת פריטים נעוצים תחילה</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">שורה תחתונה בלוח עם פקד פעולה</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">שורת אמוג\'י תחתונה עם פקד פעולה</string>
     <string name="subtype_mhr">מארי (מזרח אורל)</string>
     <string name="emoji_dictionary_required">דרוש מילון אמוג\'י כדי שתכולה זו תפעל. מילונים בפורמט .dict ניתן להוריד ב %s.</string>

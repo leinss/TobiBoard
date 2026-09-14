@@ -159,6 +159,7 @@
     <string name="enable_clipboard_history">இடைநிலைப்பலகை வரலாற்றை இயக்கு</string>
     <string name="enable_clipboard_history_summary">முடக்கப்பட்டிருந்தால், இடைநிலைப்பலகை விசை ஏதேனும் இருந்தால் இடைநிலைப்பலகை உள்ளடக்கத்தை ஒட்டும்</string>
     <string name="clipboard_history_retention_time">வரலாற்றைத் தக்கவைக்கும் நேரம்</string>
+    <string name="clipboard_history_pinned_first">பின் செய்யப்பட்ட பொருட்களை மேலே காட்டு</string>
     <string name="delete_swipe">ச்வைப் செய்வதை நீக்கு</string>
     <string name="delete_swipe_summary">ஒரே நேரத்தில் உரையின் பெரிய பகுதிகளைத் தேர்ந்தெடுத்து அகற்ற, நீக்கு விசையிலிருந்து ச்வைப் செய்யவும்</string>
     <string name="backup_restore_title">காப்பு மற்றும் மீட்டமை</string>
@@ -239,6 +240,7 @@
     <string name="page_down" tools:keep="@string/page_down">பக்கம் கீழே</string>
     <string name="close_history" tools:keep="@string/close_history">இடைநிலைப்பலகை வரலாற்றை மூடு</string>
     <string name="emoji" tools:keep="@string/emoji">ஈமோசி</string>
+    <string name="clipboard_toolbar_keys">இடைநிலைப்பலகை கருவிப்பட்டி விசைகளைத் தேர்ந்தெடுக்கவும்</string>
     <string name="pinned_toolbar_keys">பின் செய்யப்பட்ட கருவிப்பட்டி விசைகளைத் தேர்ந்தெடுக்கவும்</string>
     <string name="quick_pin_toolbar_keys">நீண்ட அழுத்தத்தில் கருவிப்பட்டி விசையை பின் செய்யவும்</string>
     <string name="quick_pin_toolbar_keys_summary">இது பின் செய்யப்படாத கருவிப்பட்டி விசைகளுக்கான பிற நீண்ட அழுத்த செயல்களை முடக்கும்</string>
@@ -304,6 +306,8 @@
     <string name="layout_number_row_basic" tools:keep="@string/layout_number_row_basic">எண் வரிசை (அடிப்படை)</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">ஈமோசி கீழ் வரிசை</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">செயல் விசையுடன் ஈமோசியின் கீழ் வரிசை</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">இடைநிலைப்பலகை கீழ் வரிசை</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">செயல் விசையுடன் இடைநிலைப்பலகை கீழ் வரிசை</string>
     <string name="customize_background_image">பின்னணி படத்தை அமைக்கவும்</string>
     <string name="customize_background_image_landscape">பின்னணி படத்தை அமைக்கவும் (இயற்கை)</string>
     <string name="summary_customize_background_image_landscape">அமைக்கப்படவில்லை என்றால், உருவப்படம் பயன்படுத்தப்படும்</string>

@@ -4,7 +4,7 @@
     modified
     SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
 --><resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2" xmlns:tools="http://schemas.android.com/tools">
-    <string name="ime_settings">Configurações do HeliBoard</string>
+    <string name="ime_settings">Configurações do TobiBoard</string>
     <string name="vibrate_on_keypress">Vibrar ao tocar nas teclas</string>
     <string name="sound_on_keypress">Som ao tocar nas teclas</string>
     <string name="settings_screen_gesture">Digitação por gestos</string>
@@ -81,8 +81,8 @@
     <string name="user_dict_settings_all_languages">Para todos os idiomas</string>
     <string name="user_dict_settings_more_languages">Mais idiomas…</string>
     <string name="key_borders">Bordas nas teclas</string>
-    <string name="spell_checker_service_name">Verificador ortográfico do HeliBoard</string>
-    <string name="android_spell_checker_settings">Configurações do verificador ortográfico do HeliBoard</string>
+    <string name="spell_checker_service_name">Verificador ortográfico do TobiBoard</string>
+    <string name="android_spell_checker_settings">Configurações do verificador ortográfico do TobiBoard</string>
     <string name="use_contacts_dict">Buscar por nomes de contatos</string>
     <string name="popup_on_keypress">Mostrar pop-up ao tocar em teclas</string>
     <string name="settings_screen_preferences">Preferências</string>
@@ -301,6 +301,7 @@
     <string name="center_suggestion_text_to_enter">Sempre usar a sugestão do meio</string>
     <string name="center_suggestion_text_to_enter_summary">Ao pressionar espaço ou pontuação, a sugestão do meio será inserida</string>
     <string name="close_history" tools:keep="@string/close_history">Fechar histórico da área de transferência</string>
+    <string name="clipboard_toolbar_keys">Selecionar teclas da barra de ferramentas de área de transferência</string>
     <string name="subtype_generic_extended">%s (Extendido)</string>
     <string name="all_colors_warning">Essa configuração expõe todas as cores que são usadas internamente. A lista de cores pode mudar a qualquer momento. A cor padrão é derivada das cores normais, e os nomes não são traduzidos.</string>
     <string name="pinned_toolbar_keys">Selecionar teclas fixadas da barra de ferramentas</string>
@@ -350,6 +351,7 @@
     <string name="layout_number_row" tools:keep="@string/layout_number_row">Linha de números</string>
     <string name="prefs_space_bar_text">Texto customizado na barra de espaço</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Linha inferior de emojis</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Linha inferior da área de transferência</string>
     <string name="label_enter_key" tools:keep="@string/label_enter_key">Enter</string>
     <string name="label_tab_key" tools:keep="@string/label_tab_key">Tab</string>
     <string name="label_delete_key" tools:keep="@string/label_delete_key">Delete</string>
@@ -439,12 +441,14 @@
     <string name="about_wiki_link">Ir para a Wiki</string>
     <string name="about_wiki_link_description">A wiki pode ser melhorada por qualquer usuário do GitHub!</string>
     <string name="save_subtype_per_app">Lembrar idioma por app</string>
+    <string name="clipboard_history_pinned_first">Mostrar itens fixados no topo</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
     <string name="inline_emoji_search">Busca por emojis embutida</string>
     <string name="inline_emoji_search_summary">Sugerir apenas emojis quando uma palavra for precedida por dois pontos</string>
     <string name="emoji_dictionary_required">Um dicionário de emoji é necessário para esta funcionalidade. Dicionários no formato .dict podem ser baixados %s.</string>
     <string name="subtype_mhr">Mari (Oriental)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Fileira inferior de emojis com tecla de ação</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Fileira inferior da área de transferência com tecla de ação</string>
     <string name="number_row_in_symbols">Mostrar linha de números no modo de símbolos</string>
     <string name="custom_emoji_font">Definir fonte de emojis personalizada a partir de um arquivo</string>
     <string name="gesture_data_links">Informações sobre a coleta de dados de gestos em:</string>

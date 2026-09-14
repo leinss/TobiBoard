@@ -1,0 +1,4 @@
+* Clipboard history now captures what you copied in other apps: it's saved the moment the keyboard reappears, so your copies actually show up
+* The empty clipboard view now explains itself and lets you turn history on with one tap
+* New "Add to dictionary" toolbar key: select any text (even an email address) and save it to your personal dictionary in one tap
+* Setup now points out the optional, on-device clipboard history

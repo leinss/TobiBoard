@@ -12,11 +12,27 @@
     android:background="@android:color/transparent"
     style="?attr/clipboardHistoryViewStyle">
 
-    <androidx.compose.ui.platform.ComposeView
-        android:id="@+id/clipboard_panel"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_height="wrap_content">
+
+        <!-- Text is set at runtime in ClipboardHistoryView (off/empty hint), so no android:text here -->
+        <TextView
+            android:id="@+id/clipboard_empty_view"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:paddingHorizontal="24dp"
+            android:visibility="invisible" />
+
+        <helium314.keyboard.keyboard.clipboard.ClipboardHistoryRecyclerView
+            android:id="@+id/clipboard_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"/>
+
+    </FrameLayout>
 
     <helium314.keyboard.keyboard.MainKeyboardView
         android:id="@+id/bottom_row_keyboard"

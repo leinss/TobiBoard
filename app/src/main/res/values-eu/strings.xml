@@ -108,7 +108,7 @@
     <string name="more_keys_strip_description">Tekla gehiago</string>
     <string name="number_row">Zenbakien errenkada</string>
     <string name="prefs_long_press_keyboard_to_change_lang_summary">Zuriune tekla luze sakatzeak sarrera-metodoa hautatzeko menua erakutsiko du</string>
-    <string name="spell_checker_service_name">HeliBoard ortografia zuzentzailea</string>
+    <string name="spell_checker_service_name">TobiBoard ortografia zuzentzailea</string>
     <string name="autospace_after_punctuation">Zuriunea puntuazioen ondoren</string>
     <string name="incognito">Behartu ezkutuko modua</string>
     <string name="subtype_akkhor_bn_BD">%s (Akkhor hizkuntza)</string>
@@ -116,9 +116,9 @@
     <string name="key_borders">Teklen ertzak</string>
     <string name="day_night_mode">Egun/gau modu automatikoa</string>
     <string name="day_night_mode_summary">Itxurak sistemaren ezarpenei jarraituko die</string>
-    <string name="ime_settings">HeliBoard ezarpenak</string>
+    <string name="ime_settings">TobiBoard ezarpenak</string>
     <string name="settings_category_additional_keys">Tekla gehigarriak</string>
-    <string name="android_spell_checker_settings">HeliBoard ortografia zuzentzailearen ezarpenak</string>
+    <string name="android_spell_checker_settings">TobiBoard ortografia zuzentzailearen ezarpenak</string>
     <string name="show_emoji_key">Emoji tekla</string>
     <string name="delete_swipe">Desgaitu irristatzea</string>
     <string name="delete_swipe_summary">Ezabatu teklatik hatza irristatu, testuaren zati handiagoak hautatzeko eta ezabatzeko</string>
@@ -304,6 +304,7 @@
     <string name="center_suggestion_text_to_enter">Erabili beti erdiko iradokizuna</string>
     <string name="center_suggestion_text_to_enter_summary">Zuriunea edo puntuazioa sakatzean, erdiko iradokizuna sartuko da</string>
     <string name="close_history" tools:keep="@string/close_history">Itxi arbelaren historia</string>
+    <string name="clipboard_toolbar_keys">Hautatu arbeleko tresna-barrako teklak</string>
     <string name="more_colors">Erakutsi kolore gehiago</string>
     <string name="all_colors_warning">Ezarpen honek barnean erabiltzen diren kolore guztiak agerian uzten ditu. Koloreen zerrenda edozein unetan alda daiteke. Kolore lehenetsia aleatorioa da, eta izenak ez dira itzuliko.</string>
     <string name="layout_functional_keys" tools:keep="@string/layout_functional_keys">Funtzio-teklak</string>
@@ -350,6 +351,7 @@
     <string name="remove_redundant_popups_summary">Kendu oinarrizko diseinuan dauden popup teklak</string>
     <string name="space_swipe_toggle_numpad_entry">Aktibatu/desaktibatu zenbaki-teklatua</string>
     <string name="prefs_space_bar_text">Testu pertsonalizatua zuriune-barran</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Arbelaren beheko errenkada</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Emojien beheko errenkada</string>
     <string name="layout_number_row" tools:keep="@string/layout_number_row">Zenbakien errenkada</string>
     <string name="icon_style">Ikonoen estiloa</string>
@@ -441,11 +443,13 @@
     <string name="inline_emoji_search">Sareko emojien bilaketa</string>
     <string name="inline_emoji_search_summary">Iradoki emojiak bakarrik hitz baten aurretik bi puntu daudenean</string>
     <string name="emoji_dictionary_required">Emoji hiztegia behar da funtzio honek funtziona dezan. .dict formatuan dauden hiztegiak %s deskargatu daitezke.</string>
+    <string name="clipboard_history_pinned_first">Erakutsi ainguratutako elementuak goian</string>
     <string name="number_row_in_symbols">Erakutsi zenbaki-lerroa sinboloen ikuspegian</string>
     <string name="save_subtype_per_app">Gororatu hizkuntza aplikazioan</string>
     <string name="custom_emoji_font">Ezarri emoji iturria fitxategitik</string>
     <string name="subtype_mhr">Mari (ekialdekoa)</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Emojien beheko errenkada ekintza-teklarekin</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Arbelaren beheko errenkada ekintza-teklarekin</string>
     <string name="prefs_bottom_row_scale">Beheko lerroaren eskala</string>
 </resources>

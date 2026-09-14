@@ -1,0 +1,3 @@
+- Fixed the symbols layout staying on its second page: leaving symbols now always returns you to the first page next time you open it.
+- Fixed the keyboard hiding itself and refusing to come back in some chat and assistant apps, where tapping the text field no longer brought it up.
+- Made the keyboard more patient when an app is slow to hand over its text field, so keystrokes typed right after it opens are less likely to be lost.

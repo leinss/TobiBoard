@@ -205,10 +205,8 @@ private fun backupLauncher(
     val ctx = LocalContext.current
     return filePicker { uri ->
         val withKeys = includeApiKeys.value
-        // read on the main thread, like all other users of ClipboardDao
-        val pinnedClips = ClipboardDao.getInstance(ctx)?.getAll().orEmpty()
-            .filter { it.isPinned }
-            .map { BackupClip(it.timeStamp, it.text) }
+        // Clipboard content stays out of every backup in this fork, so pinned clips are not
+        // exported. Restore still reads the pinned clips of an upstream backup file.
         runBusy(busy, R.string.backup_in_progress) {
             try {
                 val backupPayload = collectBackupFiles(ctx)
@@ -241,11 +239,6 @@ private fun backupLauncher(
                     zipStream.putNextEntry(ZipEntry(PROTECTED_PREFS_FILE_NAME))
                     settingsToJsonStream(ctx.protectedPrefs().all, zipStream)
                     zipStream.closeEntry()
-                    if (pinnedClips.isNotEmpty()) {
-                        zipStream.putNextEntry(ZipEntry(PINNED_CLIPS_FILE_NAME))
-                        zipStream.write(Json.encodeToString(pinnedClips).toByteArray())
-                        zipStream.closeEntry()
-                    }
                     if (apiKeys.isNotEmpty()) {
                         zipStream.putNextEntry(ZipEntry(API_KEYS_FILE_NAME))
                         zipStream.write(Json.encodeToString(apiKeys).toByteArray())

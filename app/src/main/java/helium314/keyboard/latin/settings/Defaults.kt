@@ -12,6 +12,7 @@ import helium314.keyboard.latin.common.Constants.Subtype.ExtraValue
 import helium314.keyboard.latin.utils.LayoutType
 import helium314.keyboard.latin.utils.POPUP_KEYS_LABEL_DEFAULT
 import helium314.keyboard.latin.utils.POPUP_KEYS_ORDER_DEFAULT
+import helium314.keyboard.latin.utils.defaultClipboardToolbarPref
 import helium314.keyboard.latin.utils.defaultPinnedToolbarPref
 import helium314.keyboard.latin.utils.defaultToolbarPref
 
@@ -36,6 +37,7 @@ object Defaults {
         LayoutType.PHONE -> "phone"
         LayoutType.PHONE_SYMBOLS -> "phone_symbols"
         LayoutType.EMOJI_BOTTOM -> "emoji_bottom_row"
+        LayoutType.CLIPBOARD_BOTTOM -> "clip_bottom_row"
     }
 
     private const val DEFAULT_SIZE_SCALE = 1.0f // 100%
@@ -142,6 +144,7 @@ object Defaults {
     const val PREF_LANGUAGE_SWIPE_DISTANCE = 5
     const val PREF_ENABLE_CLIPBOARD_HISTORY = false
     const val PREF_CLIPBOARD_HISTORY_RETENTION_TIME = 10 // minutes
+    const val PREF_CLIPBOARD_HISTORY_PINNED_FIRST = true
     const val PREF_ADD_TO_PERSONAL_DICTIONARY = true
     @JvmField
     val PREF_NAVBAR_COLOR = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
@@ -158,6 +161,7 @@ object Defaults {
     val PREF_TOOLBAR_KEYS = defaultToolbarPref
     const val PREF_AUTO_SHOW_TOOLBAR = false
     const val PREF_AUTO_HIDE_TOOLBAR = false
+    val PREF_CLIPBOARD_TOOLBAR_KEYS = defaultClipboardToolbarPref
     const val PREF_ABC_AFTER_EMOJI = false
     const val PREF_ABC_AFTER_CLIP = false
     const val PREF_ABC_AFTER_SYMBOL_SPACE = true
@@ -178,7 +182,7 @@ object Defaults {
     const val PREF_SAVE_SUBTYPE_PER_APP = false
     const val PREF_VOICE_INPUT_ENABLED = false
     const val PREF_VOICE_SPEECH_ENGINE = "cloud"
-    const val PREF_AI_PROVIDER = "openrouter"
+    const val PREF_AI_PROVIDER = "local"
     const val PREF_OPENROUTER_API_KEY = ""
     const val PREF_OPENROUTER_ZDR_ENABLED = true
 
@@ -225,8 +229,10 @@ object Defaults {
     const val PREF_VOICE_AUTO_STOP_SILENCE = false
     const val PREF_VOICE_AUTO_STOP_SILENCE_SECONDS = 2
     const val PREF_VOICE_MIC_SENSITIVITY = "normal"
+    const val PREF_VOICE_OFFLINE_RETRY = false
     const val PREF_VOICE_LANGUAGE_HINT = true
     const val PREF_VOICE_SPACE_HEURISTIC = true
+    const val PREF_VOICE_COPY_TO_CLIPBOARD = false
     const val PREF_VOICE_HAPTIC_FEEDBACK = true
     const val PREF_VOICE_AUTO_POLISH_ENABLED = false
     // Polish level values: "natural" (bypass), "light", "fixed", "rephrased", "corrected", "polished".
@@ -245,6 +251,7 @@ object Defaults {
     const val PREF_TEXT_FIX_ENABLED = false
     const val PREF_TEXT_FIX_MODEL = "~openai/gpt-mini-latest"
     const val PREF_TEXT_FIX_MODEL_CUSTOM = ""
+    const val PREF_LOCAL_TEXT_FIX_MODEL = "qwen2.5-1.5b-instruct-q8"
     const val PREF_TEXT_FIX_PROMPT = "You are a writing assistant. Improve the following text: fix typos, grammar, and punctuation while preserving the original meaning, tone, and language. Output only the improved text, with no preamble, quotes, or explanation."
     const val PREF_TEXT_FIX_2_ENABLED = false
     const val PREF_TEXT_FIX_2_PROMPT = "You are a writing assistant. Rewrite the following text to be clearer and more concise while preserving the original meaning, tone, and language. Output only the rewritten text, with no preamble, quotes, or explanation."

@@ -7,12 +7,20 @@ object Links {
     const val DICTIONARY_NORMAL_SUFFIX = "dictionaries/"
     const val DICTIONARY_EXPERIMENTAL_SUFFIX = "dictionaries_experimental/"
     const val DICTIONARY_EMOJI_CLDR_SUFFIX = "emoji_cldr_signal_dictionaries/"
-    const val GITHUB = "https://github.com/HeliBorg/HeliBoard"
+    /** This fork. Everything the About screen offers as "this app" points here. */
+    const val GITHUB = "https://github.com/leinss/TobiBoard"
     const val LICENSE = "$GITHUB/blob/main/LICENSE"
-    const val WIKI_URL = "$GITHUB/wiki"
+    const val DOCS_URL = "$GITHUB#readme"
+    /**
+     * HeliBoard, the upstream project. TobiBoard has neither a wiki nor discussions enabled, so
+     * the layout, custom-colour and gesture-data links keep pointing at the pages that hold that
+     * content. Do not repoint them at [GITHUB] until the equivalent pages exist here.
+     */
+    const val UPSTREAM_GITHUB = "https://github.com/HeliBorg/HeliBoard"
+    const val WIKI_URL = "$UPSTREAM_GITHUB/wiki"
     const val LAYOUT_WIKI_URL = "$WIKI_URL/2.-Layouts"
-    const val CUSTOM_LAYOUTS = "$GITHUB/discussions/categories/custom-layout"
-    const val CUSTOM_COLORS = "$GITHUB/discussions/categories/custom-colors"
+    const val CUSTOM_LAYOUTS = "$UPSTREAM_GITHUB/discussions/categories/custom-layout"
+    const val CUSTOM_COLORS = "$UPSTREAM_GITHUB/discussions/categories/custom-colors"
     const val GESTURE_DATA_VIDEO_PEERTUBE = "https://makertube.net/w/cQECfDkuLGR9eUQquUEo4K"
     const val GESTURE_DATA_VIDEO_YOUTUBE = "https://youtu.be/CyjumVTWtJA"
     const val SWIPE_O_SCOPE = "https://codeberg.org/eclexic/swipe-o-scope"
@@ -23,10 +31,6 @@ object Links {
      * selectable when the device ships without a recogniser of its own.
      */
     const val ON_DEVICE_SPEECH_SERVICE = "https://play.google.com/store/apps/details?id=com.google.android.tts"
-    /** Support links on the About screen. The browser opens them; the keyboard does not connect to these hosts. */
-    const val DONATE = "https://btcpay.priorato.org/api/v1/invoices?storeId=31ntjiLSTmSSuTC6FrR81z6AAku46bLF2FKAL3MFHtV5&orderId=Donation&checkoutDesc=Donation&currency=USD"
-    const val X = "https://x.com/turtlecute33"
-    const val NOSTR = "https://primal.net/turtlecute"
 }
 
 val combiningRange = 0x300..0x35b

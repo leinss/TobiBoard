@@ -93,7 +93,7 @@
     <string name="user_dict_settings_more_languages">"مزيد من اللغات…"</string>
     <string name="show_emoji_key">مفتاح الرموز التعبيرية</string>
     <string name="settings_no_limit">بلا حدود</string>
-    <string name="ime_settings">إعدادات HeliBoard</string>
+    <string name="ime_settings">إعدادات TobiBoard</string>
     <string name="settings_category_input">الإدخال</string>
     <string name="prefs_force_incognito_mode_summary">تعطيل تعلم الكلمات الجديدة</string>
     <string name="more_keys_strip_description">المزيد من المفاتيح</string>
@@ -103,8 +103,8 @@
     <string name="settings_category_suggestions">الاقتراحات</string>
     <string name="settings_category_experimental">تجريبي</string>
     <string name="settings_category_miscellaneous">متنوعة</string>
-    <string name="spell_checker_service_name">المدقق الإملائي لـ HeliBoard</string>
-    <string name="android_spell_checker_settings">إعدادات المدقق الإملائي لـ HeliBoard</string>
+    <string name="spell_checker_service_name">المدقق الإملائي لـ TobiBoard</string>
+    <string name="android_spell_checker_settings">إعدادات المدقق الإملائي لـ TobiBoard</string>
     <string name="number_row">صف الأرقام</string>
     <string name="number_row_summary">أظهِر صف الأرقام دائما</string>
     <string name="day_night_mode_summary">سيتبع المظهر إعدادات النظام</string>
@@ -302,6 +302,7 @@
     <string name="center_suggestion_text_to_enter">استخدم دائمًا الاقتراح الأوسط</string>
     <string name="center_suggestion_text_to_enter_summary">عند الضغط على مسافة أو علامات الترقيم، سيتم إدخال الاقتراح الأوسط</string>
     <string name="close_history" tools:keep="@string/close_history">أغلِق تاريخ الحافظة</string>
+    <string name="clipboard_toolbar_keys">حدد مفاتيح شريط أدوات الحافظة</string>
     <string name="subtype_generic_extended">%s (ممتدة)</string>
     <string name="subtype_mns">مانسي</string>
     <string name="more_colors">أظهِر المزيد من الالوان</string>
@@ -350,6 +351,7 @@
     <string name="icon_style">نمط الأيقونة</string>
     <string name="layout_number_row" tools:keep="@string/layout_number_row">صف الأرقام</string>
     <string name="prefs_space_bar_text">نص مخصص على شريط المسافة</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">الصف السفلي للحافظة</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">الصف السفلي من الرموز التعبيرية</string>
     <string name="label_tab_key" tools:keep="@string/label_tab_key">تبويب</string>
     <string name="label_delete_key" tools:keep="@string/label_delete_key">احذف</string>
@@ -440,10 +442,12 @@
     <string name="about_wiki_link_description">يمكن تحسين الويكي من خلال أي مستخدم Github!</string>
     <string name="save_subtype_per_app">تذكر اللغة لكل تطبيق</string>
     <string name="subtype_khipro_bn">%s (خيبرو)</string>
+    <string name="clipboard_history_pinned_first">أظهر العناصر المثبتة في الأعلى</string>
     <string name="inline_emoji_search">البحث عن الرموز التعبيرية المضمنة</string>
     <string name="inline_emoji_search_summary">اقترح رموزًا تعبيرية فقط عندما تسبق الكلمة نقطتان رأسيتان</string>
     <string name="emoji_dictionary_required">مطلوب قاموس رموز تعبيرية لكي تعمل هذه الميزة. يمكن تنزيل القواميس بتنسيق .dict %s.</string>
     <string name="subtype_mhr">ماري (شرقي)</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">الصف السفلي للحافظة مع مفتاح الإجراء</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">صف الرموز التعبيرية السفلي مع مفتاح الإجراء</string>
     <string name="custom_emoji_font">عيِّن خط رموز التعبيرية مخصّص من ملف</string>
     <string name="number_row_in_symbols">أظهر صف الأرقام في عرض الرموز</string>

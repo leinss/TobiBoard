@@ -109,9 +109,9 @@
     <string name="settings_category_additional_keys">Lisaklahvid</string>
     <string name="prefs_long_press_keyboard_to_change_lang">Vaheta sisestusmeetodit tühikuklahviga</string>
     <string name="setup_step3_action">Seadista klahvistikku</string>
-    <string name="spell_checker_service_name">HeliBoardi õigekirjakontroll</string>
-    <string name="ime_settings">HeliBoardi seadistused</string>
-    <string name="android_spell_checker_settings">HeliBoardi õigekirjakontrolli seadistused</string>
+    <string name="spell_checker_service_name">TobiBoardi õigekirjakontroll</string>
+    <string name="ime_settings">TobiBoardi seadistused</string>
+    <string name="android_spell_checker_settings">TobiBoardi õigekirjakontrolli seadistused</string>
     <string name="select_color_background">Klahvistiku taust</string>
     <string name="var_toolbar_direction_summary">Vastupidine suund, kui klahvistiku paremalt-vasakule alamtüüp on valitud</string>
     <string name="prefs_keyboard_height_scale">Klahvistiku kõrguse proportsioonid</string>
@@ -214,6 +214,7 @@
     <string name="button_load_custom">Laadi fail</string>
     <string name="subtype_mns">Mansi</string>
     <string name="prefs_space_bar_text">Sinu tekst tühikuklahvil</string>
+    <string name="clipboard_toolbar_keys">Vali lõikelaua nupud tööriistariba jaoks</string>
     <string name="subtype_generic_extended">%s (laiendatud)</string>
     <string name="load">Laadi</string>
     <string name="button_title_add_custom_layout">Lisa kohandatud paigutus</string>
@@ -286,6 +287,7 @@
     <string name="theme_name_cloudy" tools:keep="@string/theme_name_cloudy">Pilvine</string>
     <string name="theme_name_indigo" tools:keep="@string/theme_name_indigo">Indigosinine</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Emojide alumine rida</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Lõikelaua alumine rida</string>
     <string name="day_night_mode_summary">Välimus järgib süsteemi seadistusi</string>
     <string name="theme_navbar">Navigatsiooniriba värv</string>
     <string name="theme_name_ocean" tools:keep="@string/theme_name_ocean">Ookeanisinine</string>
@@ -466,6 +468,7 @@
     <string name="suggest_punctuation_summary">Kui muid soovitusi ei leidu, siis näita kirjavahemärkide soovitusi</string>
     <string name="about_wiki_link_description">Iga GitHubi kasutaja võib viki importida!</string>
     <string name="about_wiki_link">Ava viki leht</string>
+    <string name="clipboard_history_pinned_first">Näita esiletõstetud objekte ülal</string>
     <string name="save_subtype_per_app">Jäta kasutatud keel meelde rakendusekohaselt</string>
     <string name="subtype_khipro_bn">%s (khipro)</string>
     <string name="subtype_mhr">idamari</string>
@@ -473,6 +476,7 @@
     <string name="inline_emoji_search_summary">Soovita emojisid vaid siis, kui sõna ees on koolon</string>
     <string name="emoji_dictionary_required">Et see funktsionaalsus toimiks, vajada emojide sõnastikku. Nõutavas .dict vormingus sõnastikke saad alla laadida siit: %s.</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Alumine emojide rida tegevusnupu vajutamisel</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Lõikelaua kirjete alumine rida tegevusnupu vajutamisel</string>
     <string name="number_row_in_symbols">Näita sümbolite vaates numbririda</string>
     <string name="custom_emoji_font">Lisa failist endavalitud emojid</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Funktsiooniklahvid (khipro)</string>

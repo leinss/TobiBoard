@@ -119,10 +119,10 @@
     <string name="show_emoji_key">Клавиша эмодзи</string>
     <string name="settings_category_clipboard_history">История буфера обмена</string>
     <string name="enable_clipboard_history">Включить журнал буфера обмена</string>
-    <string name="spell_checker_service_name">Проверка орфографии HeliBoard</string>
-    <string name="android_spell_checker_settings">Настройки проверки орфографии HeliBoard</string>
+    <string name="spell_checker_service_name">Проверка орфографии TobiBoard</string>
+    <string name="android_spell_checker_settings">Настройки проверки орфографии TobiBoard</string>
     <string name="abbreviation_unit_minutes">%s мин.</string>
-    <string name="ime_settings">Настройки HeliBoard</string>
+    <string name="ime_settings">Настройки TobiBoard</string>
     <string name="settings_no_limit">Без ограничений</string>
     <string name="clipboard_history_retention_time">Время хранения журнала буфера обмена</string>
     <string name="subtype_akkhor_bn_BD">%s (Акхор)</string>
@@ -303,6 +303,7 @@
     <string name="center_suggestion_text_to_enter">Всегда использовать среднюю подсказку</string>
     <string name="center_suggestion_text_to_enter_summary">При нажатии пробела или знака препинания будет вставлена средняя подсказка</string>
     <string name="close_history" tools:keep="@string/close_history">Закрыть историю буфера обмена</string>
+    <string name="clipboard_toolbar_keys">Выбрать клавиши панели буфера обмена</string>
     <string name="subtype_generic_extended">%s (Расширенная)</string>
     <string name="auto_hide_toolbar_summary">Скрывать панель инструментов при появлении подсказок</string>
     <string name="settings_screen_toolbar">Панель инструментов</string>
@@ -339,6 +340,7 @@
     <string name="gesture_floating_preview_static_summary">Показывать предложенное слово во время набора жестами</string>
     <string name="gesture_trail_fadeout_duration">Время жизни следа жеста</string>
     <string name="prefs_space_bar_text">Пользовательский текст на клавише пробела</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Строка буфера обмена внизу</string>
     <string name="gesture_floating_preview_static">Плавающий предпросмотр</string>
     <string name="gesture_floating_preview_dynamic_summary">Перемещаемый предпросмотр при наборе жестами</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Строка эмодзи внизу</string>
@@ -431,11 +433,13 @@
     <string name="about_wiki_link_description">Любой пользователь GitHub может улучшить Wiki!</string>
     <string name="save_subtype_per_app">Запоминать язык для каждого приложения</string>
     <string name="subtype_khipro_bn">%s (Кипро)</string>
+    <string name="clipboard_history_pinned_first">Показывать закреплённые элементы вверху</string>
     <string name="inline_emoji_search">Поиск эмодзи в строке ввода</string>
     <string name="inline_emoji_search_summary">Предлагать эмодзи только, если перед словом стоит двоеточие</string>
     <string name="emoji_dictionary_required">Для работы этой функции требуется словарь эмодзи. Словари в формате \'.dict\' можно загрузить по ссылке %s.</string>
     <string name="subtype_mhr">Луговомарийский (Лугововосточный марийский)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Строка эмодзи внизу с кнопкой действия</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Строка буфера обмена внизу с кнопкой действия</string>
     <string name="number_row_in_symbols">Показывать ряд с цифрами в режиме символов</string>
     <string name="custom_emoji_font">Установить пользовательский шрифт для эмодзи из файла</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Функциональные клавиши (Khipro)</string>

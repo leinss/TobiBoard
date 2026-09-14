@@ -83,6 +83,7 @@ public final class KeyboardLayoutSet {
         // TODO: Use {@link InputAttributes} instead of these variables.
         EditorInfo mEditorInfo;
         boolean mVoiceInputKeyEnabled;
+        boolean mSensitiveField;
         boolean mDeviceLocked;
         boolean mNumberRowEnabled;
         boolean mNumberRowInSymbols;
@@ -251,6 +252,16 @@ public final class KeyboardLayoutSet {
 
         public Builder setVoiceInputKeyEnabled(final boolean enabled) {
             mParams.mVoiceInputKeyEnabled = enabled;
+            return this;
+        }
+
+        /**
+         * Password / no-learning / incognito field. Part of the {@link KeyboardId} cache key,
+         * because the long-press-Return action popup drops the voice entries in such a field and a
+         * keyboard built for an ordinary field must not be served back for a sensitive one.
+         */
+        public Builder setSensitiveField(final boolean sensitive) {
+            mParams.mSensitiveField = sensitive;
             return this;
         }
 

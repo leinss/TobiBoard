@@ -99,8 +99,8 @@
     <string name="incognito">Impor modo incógnito</string>
     <string name="day_night_mode">Modo diurno/noturno automático</string>
     <string name="day_night_mode_summary">Aparência usa as definições do sistema</string>
-    <string name="spell_checker_service_name">Corretor ortográfico HeliBoard</string>
-    <string name="ime_settings">Definições de HeliBoard</string>
+    <string name="spell_checker_service_name">Corretor ortográfico TobiBoard</string>
+    <string name="ime_settings">Definições de TobiBoard</string>
     <string name="settings_category_input">Introdução</string>
     <string name="settings_category_additional_keys">Teclas adicionais</string>
     <string name="settings_category_correction">Correções</string>
@@ -116,7 +116,7 @@
     <string name="prefs_long_press_keyboard_to_change_lang_summary">Toque longo na tecla de Espaço abre o menu de seleção do método de entrada</string>
     <string name="prefs_keyboard_height_scale">Altura do teclado</string>
     <string name="key_borders">Limite das teclas</string>
-    <string name="android_spell_checker_settings">Definições do corretor ortográfico HeliBoard</string>
+    <string name="android_spell_checker_settings">Definições do corretor ortográfico TobiBoard</string>
     <string name="auto_correction_confidence">Confiança da correção automática</string>
     <string name="enable_clipboard_history_summary">Se desativado, a tecla da área de transferência colará o conteúdo disponível</string>
     <string name="select_input_method">"Escolher o método de entrada"</string>
@@ -234,6 +234,7 @@
     <string name="layout_symbols_arabic" tools:keep="@string/layout_symbols_arabic">Símbolos (Árabe)</string>
     <string name="select_color_background">Fundo do teclado</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Fila inferior de emojis</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Fila inferior da área de transferência</string>
     <string name="theme_name_violette" tools:keep="@string/theme_name_violette">Violeta</string>
     <string name="prefs_always_show_suggestions_except_web_text">Não mostrar sempre sugestões para campos de edição web</string>
     <string name="prefs_always_show_suggestions_except_web_text_summary">Os campos de edição na Web (encontrados principalmente nos navegadores) são uma causa muito comum de problemas com a configuração de mostrar sempre sugestões</string>
@@ -299,6 +300,7 @@
     <string name="show_tld_popup_keys_summary">Substituir popups de ponto final por domínios de topo ao digitar URLs e endereços de e-mail</string>
     <string name="split" tools:keep="@string/split">Teclado dividido</string>
     <string name="page_down" tools:keep="@string/page_down">Página para baixo</string>
+    <string name="clipboard_toolbar_keys">Selecionar teclas da barra de ferramentas de área de transferência</string>
     <string name="quick_pin_toolbar_keys_summary">Desativa outras ações de toque longo para teclas da barra de ferramentas desafixadas</string>
     <string name="show_popup_hints">Mostrar dicas funcionais</string>
     <string name="show_popup_hints_summary">Mostrar dicas se um toque longo numa tecla ativa funcionalidade adicional</string>
@@ -432,10 +434,12 @@
     <string name="inline_emoji_search">Pesquisa de emoji embutida</string>
     <string name="inline_emoji_search_summary">Apenas sugerir emojis quando uma palavra é precedida por dois pontos</string>
     <string name="emoji_dictionary_required">É necessário um dicionário de emojis para esta funcionalidade. Os dicionários no formato .dict podem ser descarregados %s.</string>
+    <string name="clipboard_history_pinned_first">Mostrar items afixados no topo</string>
     <string name="save_subtype_per_app">Lembrar idioma por app</string>
     <string name="subtype_mhr">Mai (Oriental)</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Fila inferior de emoji com tecla de ação</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Fila inferior da área de transferência com tecla de ação</string>
     <string name="custom_emoji_font">Definir fonte de emoji a partir de ficheiro</string>
     <string name="number_row_in_symbols">Mostrar linha de números no ecrã de símbolos</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Teclas funcionais (Khipro)</string>

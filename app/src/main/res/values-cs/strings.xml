@@ -101,8 +101,8 @@
     <string name="settings_no_limit">Bez limitu</string>
     <string name="enable_clipboard_history">Povolit historii schránky</string>
     <string name="clipboard_history_retention_time">Doba zachování historie</string>
-    <string name="spell_checker_service_name">Kontrola pravopisu HeliBoard</string>
-    <string name="android_spell_checker_settings">Nastavení kontroly pravopisu HeliBoard</string>
+    <string name="spell_checker_service_name">Kontrola pravopisu TobiBoard</string>
+    <string name="android_spell_checker_settings">Nastavení kontroly pravopisu TobiBoard</string>
     <string name="autospace_after_punctuation_summary">Automaticky vloží mezeru po ukončení slova znaménkem</string>
     <string name="incognito">Vynutit režim inkognito</string>
     <string name="prefs_force_incognito_mode_summary">Vypnout učení nových slov</string>
@@ -117,7 +117,7 @@
     <string name="prefs_long_press_keyboard_to_change_lang_summary">Dlouhý stisk mezerníku zobrazí výzvu změny vstupní metody</string>
     <string name="prefs_keyboard_height_scale">Měřítko výšky klávesnice</string>
     <string name="day_night_mode_summary">Vzhled podle systémového nastavení</string>
-    <string name="ime_settings">Nastavení HeliBoard</string>
+    <string name="ime_settings">Nastavení TobiBoard</string>
     <string name="settings_category_suggestions">Návrhy</string>
     <string name="show_emoji_key">Klávesa pro emodži</string>
     <string name="enable_clipboard_history_summary">Pokud vypnuto, tlačítko schránky vloží obsah schránky, pokud nějaký existuje</string>
@@ -193,6 +193,7 @@
     <string name="action_none">Žádné</string>
     <string name="subtype_xdq">Kaitag</string>
     <string name="close_history" tools:keep="@string/close_history">Zavřít historii schránky</string>
+    <string name="clipboard_toolbar_keys">Výběr kláves panelu nástrojů schránky</string>
     <string name="prefs_bottom_padding_scale">Měřítko dolního odsazení</string>
     <string name="message_add_custom_layout">Vybrat soubor v kompatibilním formátu. Informace o formátech jsou k dispozici %s.</string>
     <string name="layout_symbols" tools:keep="@string/layout_symbols">Symboly</string>
@@ -335,6 +336,7 @@
     <string name="quick_pin_toolbar_keys">Připnout klávesu do panelu nástrojů při dlouhém podržení</string>
     <string name="customize_currencies_detail">Nastavit hlavní a až 6 dalších symbolů měny, oddělených mezerami</string>
     <string name="name_invalid">Neplatný název</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Dolní řádek schránky</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Dolní řádek emodži</string>
     <string name="after_numpad_and_space">Stisknutí klávesy Enter nebo mezerníku po ostatních klávesách v numerické klávesnici</string>
     <string name="label_space_key_for_number_layout" tools:keep="@string/label_space_key_for_number_layout">Mezerník (číselné rozložení)</string>
@@ -433,11 +435,13 @@
     <string name="about_wiki_link_description">Wiki může vylepšit jakýkoli uživatel GitHubu!</string>
     <string name="save_subtype_per_app">Zapamatovat jazyk dle aplikace</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
+    <string name="clipboard_history_pinned_first">Zobrazit připnuté položky nahoře</string>
     <string name="inline_emoji_search">Vyhledávání emodži na řádku</string>
     <string name="inline_emoji_search_summary">Navrhovat emodži pouze, pokud je na začátku slova dvojtečka</string>
     <string name="emoji_dictionary_required">Aby tato funkce fungovala, je nutný slovník emodži. Slovníky ve formátu .dict lze stáhnout %s.</string>
     <string name="subtype_mhr">Mari (východní)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Spodní řádek emodži s akční klávesou</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Spodní řádek schránky s akční klávesou</string>
     <string name="number_row_in_symbols">Zobrazit číselný řádek na obrazovce znaků</string>
     <string name="custom_emoji_font">Nastavit vlastní písmo emodži ze souboru</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Funkční klávesy (Khipro)</string>

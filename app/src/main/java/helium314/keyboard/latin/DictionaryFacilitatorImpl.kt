@@ -718,6 +718,16 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
         }
     }
 
+    override fun addToUserDictionary(context: Context, word: String) {
+        if (word.isBlank()) return
+        scope.launch {
+            // locale = null adds the word "for all languages"; UserBinaryDictionary loads NULL-locale
+            // entries into every language group, and its ContentObserver reloads after this write.
+            // addWord can throw "Unknown URL content://user_dictionary/words" on non-compliant devices.
+            runCatching { UserDictionary.Words.addWord(context, word, 250, null, null) }
+        }
+    }
+
     override fun clearUserHistoryDictionary(context: Context) {
         // Words that wait for the delayed add must not come back after the clear.
         synchronized(wordsWaitingForHistory) {

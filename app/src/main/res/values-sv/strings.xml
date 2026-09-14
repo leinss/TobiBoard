@@ -99,12 +99,12 @@
     <string name="settings_no_limit">Ingen gräns</string>
     <string name="prefs_long_press_keyboard_to_change_lang_summary">Långtryckning på mellanslagstangenten öppnar menyn för val av inmatningsmetod</string>
     <string name="prefs_long_press_keyboard_to_change_lang">Ändra inmatningsmetod med mellanslagstangenten</string>
-    <string name="spell_checker_service_name">HeliBoards stavningskontroll</string>
-    <string name="android_spell_checker_settings">Inställningar för HeliBoards stavningskontroll</string>
+    <string name="spell_checker_service_name">TobiBoards stavningskontroll</string>
+    <string name="android_spell_checker_settings">Inställningar för TobiBoards stavningskontroll</string>
     <string name="number_row">Sifferrad</string>
     <string name="number_row_summary">Visa alltid sifferraden</string>
     <string name="show_emoji_key">Emoji-tangent</string>
-    <string name="ime_settings">HeliBoard-inställningar</string>
+    <string name="ime_settings">TobiBoard-inställningar</string>
     <string name="show_hints_summary">Visa tips för långtryckning</string>
     <string name="settings_category_additional_keys">Ytterligare tangenter</string>
     <string name="settings_category_clipboard_history">Urklippshistorik</string>
@@ -223,6 +223,7 @@
     <string name="popup_keys_layout" tools:keep="@string/popup_keys_layout">Layout</string>
     <string name="toolbar_keys">Välj verktygsfältstangenter</string>
     <string name="close_history" tools:keep="@string/close_history">Stäng urklippshistorik</string>
+    <string name="clipboard_toolbar_keys">Välj verktygsfältstangenter för urklipp</string>
     <string name="show_popup_hints_summary">Visa tips om långtryck på en tangent aktiverar ytterligare funktionalitet</string>
     <string name="show_popup_hints">Visa funktionalitetstips</string>
     <string name="clipboard" tools:keep="@string/clipboard">Urklipp</string>
@@ -268,5 +269,6 @@
     <string name="suggest_punctuation_summary">Visa skiljetecken när andra förslag är otillgängliga</string>
     <string name="suggest_clipboard_content">Föreslå urklippsinnehåll</string>
     <string name="gesture_fast_typing_cooldown_instant">Börja alltid omedelbart</string>
+    <string name="clipboard_history_pinned_first">Visa fastnålade objekt överst</string>
     <string name="backup_restored">Säkerhetskopia återställd</string>
 </resources>

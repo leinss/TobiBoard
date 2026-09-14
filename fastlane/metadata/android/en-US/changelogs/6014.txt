@@ -1,1 +1,1 @@
-Onboarding has been redesigned into clearer, skippable steps with better button contrast. The setup flow now detects when WisprBoard is selected as the active keyboard and continues without getting stuck.
+Onboarding has been redesigned into clearer, skippable steps with better button contrast. The setup flow now detects when TobiBoard is selected as the active keyboard and continues without getting stuck.

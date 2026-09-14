@@ -5,15 +5,12 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
-import android.os.SystemClock
 import androidx.annotation.StringRes
-import helium314.keyboard.keyboard.KeyboardSwitcher
-import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.settings.Defaults
+import helium314.keyboard.latin.voice.local.LocalModelLoadException
 import java.text.BreakIterator
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 
 private val SANITIZE_OUTPUT_REGEX =
     Regex("[[\\p{Cc}&&[^\\n\\r\\t]]\\u200B\\u200E\\u200F\\u2028\\u2029\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u2069\\uFEFF]")
@@ -38,10 +35,7 @@ internal fun cleanModelOutput(raw: String): String = raw.replace(SANITIZE_OUTPUT
     .replace(TAG_CHARACTER_REGEX) { it.groupValues[1] }
     .trim()
 
-/**
- * [cleanModelOutput], then cut to [maxLength] for dictation. Text Fix and Translate replace the
- * user's text, so they must refuse a long result, not cut it (R-02).
- */
+/** [cleanModelOutput], then cut to [maxLength] at a grapheme boundary. */
 internal fun sanitizeModelOutput(raw: String, maxLength: Int): String {
     val cleaned = cleanModelOutput(raw)
     if (cleaned.length <= maxLength) return cleaned
@@ -49,9 +43,7 @@ internal fun sanitizeModelOutput(raw: String, maxLength: Int): String {
     // sequence, or a base+combining-mark cluster - any of which would render as broken glyphs.
     // BreakIterator handles surrogate/combining boundaries, but Java/Android implementations can
     // still stop between emoji that are joined by U+200D, so we repair that boundary explicitly.
-    // Locale.ROOT so grapheme boundaries (and thus truncation points) do not depend on the
-    // device locale.
-    val breaker = BreakIterator.getCharacterInstance(Locale.ROOT)
+    val breaker = BreakIterator.getCharacterInstance()
     breaker.setText(cleaned)
     val boundary = breaker.preceding(maxLength + 1)
     val end = avoidPartialZwjSequence(cleaned, if (boundary == BreakIterator.DONE) 0 else boundary)
@@ -99,59 +91,23 @@ internal fun applySpacing(text: String, ctx: VoiceInputManager.SpacingContext?):
     return prefix + text + suffix
 }
 
-/**
- * Turns a provider status into an instruction the user can act on. Without this they reach the
- * strip as the raw, untranslated literal "API error: 402", which tells a non-developer nothing.
- *
- * 403 gets its own text: on OpenRouter it means the request was refused by moderation, not that
- * the credentials are bad, so it must never send the user to check the API key. Only 429 is a
- * rate limit; 503 means the provider is down (UX-012).
- */
-@StringRes
-internal fun actionableErrorResId(statusCode: Int): Int? = when (statusCode) {
-    400 -> R.string.ai_error_rejected_request
-    401 -> R.string.ai_error_bad_key
-    402 -> R.string.ai_error_out_of_credit
-    403 -> R.string.ai_error_refused_content
-    404 -> R.string.ai_error_model_not_found
-    408, OpenRouterClient.STATUS_TIMEOUT -> R.string.ai_error_timeout
-    413 -> R.string.ai_error_too_large
-    429 -> R.string.voice_error_rate_limited
-    in 500..599 -> R.string.ai_error_provider_down
-    OpenRouterClient.STATUS_NETWORK -> R.string.voice_error_no_network
-    OpenRouterClient.STATUS_ANSWER_CUT -> R.string.ai_error_answer_cut
-    OpenRouterClient.STATUS_CONTENT_FILTER -> R.string.ai_error_content_filter
-    else -> null
-}
-
-/**
- * True for the OpenRouter 404 "No endpoints found matching your data policy". The model is there,
- * but no provider of it meets the privacy settings (the data_collection "deny" floor of PRIV-001
- * or the account settings), so the text must not say that the model is no longer available.
- */
-internal fun isDataPolicyRefusal(statusCode: Int, errorBody: String): Boolean =
-    statusCode == 404 && errorBody.contains("data policy", ignoreCase = true)
-
 private val SENSITIVE_USER_FACING_PATTERNS: List<Pair<Regex, String>> = listOf(
     Regex("(?i)Bearer\\s+\\S+") to "Bearer ***",
     Regex("(?i)(\"?api[_-]?key\"?\\s*[:=]\\s*\"?)[^\"\\s,}]+") to "$1***",
 )
 
 /**
- * Resolves a user-facing error message from a transcription/text-fix exception. A known
- * [OpenRouterException] status gets its mapped text. Other messages are untranslated English, so
- * only debug builds show them (after scrubbing tokens); release builds and all other throwables
- * get [fallbackResId], so unrelated stack traces never leak.
+ * Resolves a user-facing error message from a transcription/text-fix exception. A
+ * [LocalModelLoadException] maps to the re-download hint; an [OpenRouterException] surfaces its
+ * message after scrubbing tokens; everything else falls back to [fallbackResId] so unrelated
+ * stack traces never leak.
  */
 internal fun safeUserFacingError(context: Context, e: Throwable, @StringRes fallbackResId: Int): String {
+    if (e is LocalModelLoadException) return context.getString(R.string.text_fix_error_local_load_failed)
     if (e is OpenRouterException) {
-        // An empty transcript describes the recording, not the service. Saying so keeps the user
-        // from re-recording to work around what reads like a provider outage.
-        if (e.statusCode == OpenRouterClient.STATUS_NO_SPEECH) return context.getString(R.string.voice_error_silent)
-        if (isDataPolicyRefusal(e.statusCode, e.errorBody)) return context.getString(R.string.ai_error_no_private_provider)
-        actionableErrorResId(e.statusCode)?.let { return context.getString(it) }
+        if (e.statusCode == 429 || e.statusCode == 503) return context.getString(R.string.voice_error_rate_limited)
         val raw = e.message?.takeIf { it.isNotBlank() }
-        if (BuildConfig.DEBUG && raw != null) {
+        if (raw != null) {
             return SENSITIVE_USER_FACING_PATTERNS.fold(raw) { acc, (regex, replacement) ->
                 acc.replace(regex, replacement)
             }
@@ -160,75 +116,17 @@ internal fun safeUserFacingError(context: Context, e: Throwable, @StringRes fall
     return context.getString(fallbackResId)
 }
 
-/**
- * Tells the user that this request went without ZDR. Shown on each affected request, not once per
- * model: an IME process lives for days, so a single notice hides later downgrades.
- */
-internal fun warnAfterZdrFallback(context: Context, model: String) {
-    showImeToast(context, context.getString(R.string.voice_warning_zdr_unenforceable, model), long = true)
-}
-
-/**
- * Shows a message from IME code. The keyboard shows it in its own view when it is on the screen,
- * because the system drops a toast of an IME on API 33 and later (see [KeyboardSwitcher.showToast]).
- */
-internal fun showImeToast(context: Context, @StringRes textResId: Int, long: Boolean = false) =
-    showImeToast(context, context.getString(textResId), long)
-
-internal fun showImeToast(context: Context, text: String, long: Boolean = false) =
-    KeyboardSwitcher.getInstance().showToast(context, text, !long)
-
-/**
- * Routing facts learned the expensive way, remembered briefly so the next request does not repeat
- * a doomed attempt. Both are deliberately short-lived rather than process-lifetime: an IME process
- * lives for days, and both conditions are recoverable — a ZDR route that was momentarily down
- * comes back, and a floating `~author/model-latest` alias can resolve to a different endpoint
- * tomorrow. Caching either verdict forever would silently and permanently downgrade the request.
- */
-/**
- * Wall-clock ceiling for a text-only AI request, retries and backoff included. Text Fix, Translate
- * and auto-polish previously inherited the audio read timeout, so a stalled provider could hold
- * the user for 4.5 minutes across three attempts. 90 s is generous for a copy-edit and still
- * leaves a slow model room to finish its first attempt untouched.
- */
-internal const val AI_TEXT_REQUEST_BUDGET_MS = 90_000L
-
-// The key of each fact is the provider and the model ("payperq|x-ai/grok-4.3"): the two providers
-// share model slugs, and a fact learned on one says nothing about the other.
-private const val ROUTE_FACT_TTL_MS = 30 * 60 * 1000L
-private val zdrUnavailableSince = ConcurrentHashMap<String, Long>()
-private val reasoningControlRejectedSince = ConcurrentHashMap<String, Long>()
-
-private fun isRouteFactFresh(map: ConcurrentHashMap<String, Long>, model: String): Boolean {
-    val since = map[model] ?: return false
-    if (SystemClock.elapsedRealtime() - since < ROUTE_FACT_TTL_MS) return true
-    map.remove(model)
-    return false
-}
-
-internal fun markZdrRouteUnavailable(model: String) {
-    zdrUnavailableSince[model] = SystemClock.elapsedRealtime()
-}
-
-/** True while this model is known to have no ZDR route, so asking again would waste an upload. */
-internal fun isZdrRouteKnownUnavailable(model: String): Boolean =
-    isRouteFactFresh(zdrUnavailableSince, model)
-
-internal fun markReasoningControlRejected(model: String) {
-    reasoningControlRejectedSince[model] = SystemClock.elapsedRealtime()
-}
-
-/** True while this model is known to reject `reasoning: {enabled: false}` with a hard error. */
-internal fun isReasoningControlKnownRejected(model: String): Boolean =
-    isRouteFactFresh(reasoningControlRejectedSince, model)
-
 internal fun isNetworkAvailable(context: Context): Boolean {
-    // The AI features need API 24 (SecretStore.vault), so there is no older path.
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
     val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-    val network = cm.activeNetwork ?: return false
-    val caps = cm.getNetworkCapabilities(network) ?: return false
-    return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+    @Suppress("DEPRECATION")
+    val activeNetwork = cm.activeNetworkInfo ?: return false
+    @Suppress("DEPRECATION")
+    return activeNetwork.isConnected
 }
 
 internal data class ResolvedVoicePrompt(
@@ -238,31 +136,7 @@ internal data class ResolvedVoicePrompt(
 
 enum class VoiceTranscriptionMode {
     CHAT_AUDIO,
-
-    /**
-     * The provider's dedicated speech-to-text endpoint rather than chat completions. Both providers
-     * expose one, and both are markedly faster than routing audio through a chat model: measured
-     * against PayPerQ, a 30-second clip comes back in about 1.7 s this way versus 10–15 s through
-     * a chat model.
-     */
-    DEDICATED_STT,
-}
-
-/**
- * Which engine turns speech into text. [CLOUD] uploads a WAV to the configured AI provider;
- * [ON_DEVICE] hands the microphone to Android's on-device recognizer and never touches the network.
- *
- * The engine covers speech recognition only. Text Fix and auto-polish are LLM features with no
- * on-device equivalent here, so they stay on the cloud provider regardless of this setting.
- */
-enum class SpeechEngine(val prefValue: String) {
-    CLOUD("cloud"),
-    ON_DEVICE("on_device");
-
-    companion object {
-        fun fromPref(value: String?): SpeechEngine =
-            entries.firstOrNull { it.prefValue == value } ?: CLOUD
-    }
+    OPENROUTER_STT,
 }
 
 /**
@@ -313,7 +187,7 @@ internal fun resolveVoicePrompt(
     expectedLanguagesRaw: String = "",
 ): ResolvedVoicePrompt {
     val base = savedPrompt.trim().takeIf { it.isNotEmpty() } ?: Defaults.PREF_VOICE_TRANSCRIPTION_PROMPT
-    val dictionaryTerms = parseExpectedLanguages(transcriptionDictionaryRaw)
+    val dictionaryTerms = parseVoiceDictionaryTerms(transcriptionDictionaryRaw)
     val expectedLanguages = parseExpectedLanguages(expectedLanguagesRaw)
     val systemPrompt = listOfNotNull(
         base,
@@ -328,8 +202,13 @@ internal fun resolveVoicePrompt(
     )
 }
 
-/** Parses each term list: the expected languages and also the dictionary terms. */
 internal fun parseExpectedLanguages(raw: String): List<String> =
+    raw.split(',', '\n', ';')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinctBy { it.lowercase(Locale.ROOT) }
+
+internal fun parseVoiceDictionaryTerms(raw: String): List<String> =
     raw.split(',', '\n', ';')
         .map { it.trim() }
         .filter { it.isNotEmpty() }

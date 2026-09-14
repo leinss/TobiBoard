@@ -134,8 +134,8 @@ Nouveau dictionnaire:
     <string name="user_dict_settings_more_languages">"Plus de langues…"</string>
     <string name="user_dict_word_already_present">Ce mot est déjà présent dans le dictionnaire utilisateur %s. Veuillez en saisir un autre.</string>
     <string name="user_dict_add_word_button">Ajouter un mot</string>
-    <string name="spell_checker_service_name">Correcteur orthographique HeliBoard</string>
-    <string name="android_spell_checker_settings">Paramètres du correcteur orthographique HeliBoard</string>
+    <string name="spell_checker_service_name">Correcteur orthographique TobiBoard</string>
+    <string name="android_spell_checker_settings">Paramètres du correcteur orthographique TobiBoard</string>
     <string name="number_row">Ligne de chiffres</string>
     <string name="delete_swipe">Balayage sur la touche Effacer</string>
     <string name="delete_swipe_summary">Glissez sur la touche de suppression pour supprimer des parties de texte en une seule fois</string>
@@ -153,7 +153,7 @@ Nouveau dictionnaire:
     <string name="checksum_mismatch_message">Fichier de bibliothèque inconnu. Êtes-vous sûr qu\'il provient d\'une source fiable et que c\'est pour CPU \'%s\' ?</string>
     <string name="load_gesture_library_button_load">Charger bibliothèque</string>
     <string name="load_gesture_library_button_delete">Supprimer bibliothèque</string>
-    <string name="ime_settings">Paramètres d\'HeliBoard</string>
+    <string name="ime_settings">Paramètres d\'TobiBoard</string>
     <string name="settings_category_input">Saisie</string>
     <string name="settings_category_correction">Corrections</string>
     <string name="settings_category_suggestions">Suggestions</string>
@@ -299,6 +299,7 @@ Nouveau dictionnaire:
     <string name="center_suggestion_text_to_enter">Toujours utiliser la suggestion du milieu</string>
     <string name="center_suggestion_text_to_enter_summary">En appuyant sur espace ou sur un signe de ponctuation, la suggestion du milieu sera saisie</string>
     <string name="close_history" tools:keep="@string/close_history">Fermer le presse-papiers</string>
+    <string name="clipboard_toolbar_keys">Sélectionner les touches de la barre d\'outils du presse-papiers</string>
     <string name="subtype_generic_extended">%s (Étendu)</string>
     <string name="subtype_mns">Mansi</string>
     <string name="more_colors">Afficher plus de couleurs</string>
@@ -347,6 +348,7 @@ Nouveau dictionnaire:
     <string name="icon_style">Style de l\'icône</string>
     <string name="layout_number_row" tools:keep="@string/layout_number_row">Rangée de chiffres</string>
     <string name="prefs_space_bar_text">Texte personnalisé sur la barre d\'espace</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Rangée inférieure du presse-papier</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Rangée inférieure des émojis</string>
     <string name="label_tab_key" tools:keep="@string/label_tab_key">Tabulation</string>
     <string name="label_delete_key" tools:keep="@string/label_delete_key">Supprimer</string>
@@ -437,11 +439,13 @@ Nouveau dictionnaire:
     <string name="about_wiki_link">Accéder au Wiki</string>
     <string name="save_subtype_per_app">Mémoriser la langue par application</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
+    <string name="clipboard_history_pinned_first">Afficher les éléments épinglés en haut</string>
     <string name="inline_emoji_search">Recherche d\'émojis intégrée</string>
     <string name="inline_emoji_search_summary">Proposer uniquement des émojis lorsqu\'un mot est précédé de deux points</string>
     <string name="emoji_dictionary_required">Un dictionnaire d\'émojis est nécessaire pour que cette fonctionnalité soit opérationnelle. Les dictionnaires au format .dict peuvent être téléchargés ici : %s.</string>
     <string name="subtype_mhr">Mari (Eastern)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Rangée inférieure (emoji) avec touche d\'action</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Rangée inférieure du presse-papiers avec touche d\'action</string>
     <string name="number_row_in_symbols">Afficher la ligne numérique en mode symboles</string>
     <string name="custom_emoji_font">Définir une police d\'emoji personnalisée à partir d\'un fichier</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Touches fonctionnelles (Khipro)</string>

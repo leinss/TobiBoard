@@ -1,0 +1,6 @@
+* Clipboard history is now encrypted at rest (AES-256, hardware-backed key on Android 6+)
+* Fixed: clipboard history could fail to save on a fresh install
+* On-device voice now lists its supported languages (English, German, Spanish, French)
+* Model downloads that fail now show the reason, with a Retry option
+* Clearer message when an on-device model can't load (suggests re-downloading)
+* Privacy and reliability improvements

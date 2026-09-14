@@ -3,7 +3,6 @@
 package helium314.keyboard.latin
 
 import android.content.ClipData
-import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.text.InputType
@@ -13,16 +12,24 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import androidx.core.view.isGone
 import helium314.keyboard.compat.ClipboardManagerCompat
-import helium314.keyboard.compat.isDeviceLocked
 import helium314.keyboard.event.HapticEvent
-import helium314.keyboard.keyboard.internal.KeyboardIconsSet
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
 import helium314.keyboard.latin.common.ColorType
 import helium314.keyboard.latin.common.isValidNumber
 import helium314.keyboard.latin.database.ClipboardDao
 import helium314.keyboard.latin.databinding.ClipboardSuggestionBinding
+import androidx.annotation.VisibleForTesting
 import helium314.keyboard.latin.utils.InputTypeUtils
+import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.ToolbarKey
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ClipboardHistoryManager(
         private val latinIME: LatinIME
@@ -31,33 +38,90 @@ class ClipboardHistoryManager(
     private lateinit var clipboardManager: ClipboardManager
     private var clipboardSuggestionView: View? = null
     private var clipboardDao: ClipboardDao? = null
+    private val scope = CoroutineScope(SupervisorJob() + loadDispatcher)
+    // Description timestamp of the clip most recently read by captureCurrentClipIfEnabled(), used to
+    // skip redundant content reads (and their OS clipboard-access toast) on repeated keyboard shows.
+    private var lastCatchUpTimestamp = 0L
 
     fun onCreate() {
         clipboardManager = latinIME.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboardManager.addPrimaryClipChangedListener(this)
-        clipboardDao = ClipboardDao.getInstance(latinIME)
-        if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
-            clipboardDao?.clearOldClips(true)
-            fetchPrimaryClip()
-        } else {
-            clipboardDao?.clear()
+        // Constructing the DAO is cheap (opens no DB); the costly part is loading its cache
+        // (SQLite open + per-row AES-GCM decrypt). Run that on a background thread so it never
+        // blocks the IME main thread during cold start, which was dropping the first keystrokes.
+        val dao = ClipboardDao.getInstance(latinIME)
+        clipboardDao = dao
+        scope.launch {
+            try {
+                dao?.ensureCacheLoaded()
+                // withContext is a cancellation point: if onDestroy() cancelled the scope while the
+                // (non-cancellable) DB load was running, this throws before the block runs, so we
+                // never touch a torn-down IME.
+                withContext(applyDispatcher) {
+                    if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
+                        dao?.clearOldClips(true)
+                        fetchPrimaryClip()
+                    } else {
+                        dao?.clear()
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e // never swallow cancellation
+            } catch (t: Throwable) {
+                // The load runs outside ClipboardDao.getInstance()'s try/catch and on a coroutine
+                // with no handler, so an unhandled throw here would crash the IME process. Degrade to
+                // an empty clipboard history instead.
+                Log.e(TAG, "clipboard cache load failed", t)
+            }
         }
     }
 
     fun onDestroy() {
+        scope.cancel()
         clipboardManager.removePrimaryClipChangedListener(this)
-        // Remove the panel listener first: the IME closes an open panel after this call, and
-        // that close must not post the clean again.
-        clipboardDao?.listener = null
-        clipboardDao?.cancelScheduledClear()
     }
 
     override fun onPrimaryClipChanged() {
-        // A new clip can show as a suggestion again, also when history is off (R-40).
-        dontShowCurrentSuggestion = false
         // Make sure we read clipboard content only if history settings is set
         if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
             fetchPrimaryClip()
+            dontShowCurrentSuggestion = false
+        }
+    }
+
+    /**
+     * Records the current system clipboard entry if history is enabled. Call this when the keyboard
+     * becomes visible (window shown / clipboard view opened): on Android 10+ an app may only read
+     * the clipboard while it is the focused IME, so a clip copied while the keyboard was hidden is
+     * NOT readable from the live [onPrimaryClipChanged] callback and would otherwise be lost — this
+     * catch-up read picks it up the moment the keyboard reappears.
+     *
+     * The content read (which triggers the OS clipboard-access notification on Android 12+) is
+     * skipped when the clip is unchanged since the last catch-up, using the description timestamp
+     * (metadata only, no access toast). The work runs on the background [scope] and only touches the
+     * cache after [ClipboardDao.ensureCacheLoaded], so it never blocks the IME main thread the way a
+     * cold synchronous cache load would (which used to swallow the first keystrokes).
+     */
+    fun captureCurrentClipIfEnabled() {
+        if (!latinIME.mSettings.current.mClipboardHistoryEnabled) return
+        val timeStamp = ClipboardManagerCompat.getPrimaryClipDescriptionTimestamp(clipboardManager)
+        // timeStamp == 0 means "unknown" (no clip, or API < 26): fall through and let addClip dedup
+        // by content. A known, unchanged timestamp means we already captured this clip — skip the
+        // content read so we don't re-trigger the clipboard-access toast on every keyboard show.
+        if (timeStamp != 0L && timeStamp == lastCatchUpTimestamp) return
+        lastCatchUpTimestamp = timeStamp
+        scope.launch {
+            try {
+                clipboardDao?.ensureCacheLoaded()
+                withContext(applyDispatcher) {
+                    if (latinIME.mSettings.current.mClipboardHistoryEnabled)
+                        fetchPrimaryClip()
+                }
+            } catch (e: CancellationException) {
+                throw e // never swallow cancellation
+            } catch (t: Throwable) {
+                Log.e(TAG, "clipboard catch-up capture failed", t)
+            }
         }
     }
 
@@ -71,45 +135,44 @@ class ClipboardHistoryManager(
         clipboardDao?.togglePinned(id)
     }
 
+    fun incrementUseCount(id: Long) {
+        clipboardDao?.incrementUseCount(id)
+    }
+
+    fun setAnnotation(id: Long, annotation: String?) {
+        clipboardDao?.setAnnotation(id, annotation)
+    }
+
+    fun deleteEntryById(id: Long) {
+        clipboardDao?.deleteById(id)
+    }
+
     fun clearHistory() {
         clipboardDao?.clearNonPinned()
         ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
         removeClipboardSuggestion()
     }
 
-    fun removeEntry(id: Long) {
-        clearPrimaryClipIfSame(clipboardDao?.get(id)?.text)
-        clipboardDao?.deleteClip(id)
+    fun canRemove(index: Int) = clipboardDao?.isPinned(index) == false
+
+    fun removeEntry(index: Int) {
+        if (canRemove(index))
+            clipboardDao?.deleteClipAt(index)
     }
 
-    fun updateEntryText(id: Long, text: String) {
-        val oldText = clipboardDao?.get(id)?.text
-        if (oldText != text) clearPrimaryClipIfSame(oldText)
-        if (text.isEmpty()) clipboardDao?.deleteClip(id)
-        else clipboardDao?.updateText(id, text)
-    }
-
-    /**
-     * Clears the system clip when it has [text], as [clearHistory] does. Else [onCreate] reads the
-     * clip again and adds the deleted or old text back to the history (R-11).
-     */
-    private fun clearPrimaryClipIfSame(text: String?) {
-        if (text == null) return
-        if (clipText(clipboardManager.primaryClip, skipSensitive = false)?.toString() != text) return
-        ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
-    }
-
-    /** Puts [text] back into the system clipboard, so other apps can paste it */
-    fun copyToSystemClipboard(text: String) {
-        clipboardManager.setPrimaryClip(ClipData.newPlainText(null, text))
+    fun sortHistoryEntries() {
+        clipboardDao?.sort()
     }
 
     // We do not want to update history while user is visualizing it, so we check retention only
     // when history is about to be shown
     fun prepareClipboardHistory() = clipboardDao?.clearOldClips(true)
 
-    /** Snapshot of the whole history, most recent (or pinned) first */
-    fun getHistoryEntries(): List<ClipboardHistoryEntry> = clipboardDao?.getAll().orEmpty()
+    fun getHistorySize() = clipboardDao?.count() ?: 0
+
+    fun getHistoryEntry(position: Int) = clipboardDao?.getAt(position)
+
+    fun getHistoryEntryContent(id: Long) = clipboardDao?.get(id)
 
     fun setHistoryChangeListener(listener: ClipboardDao.Listener?) {
         clipboardDao?.listener = listener
@@ -118,19 +181,8 @@ class ClipboardHistoryManager(
     fun retrieveClipboardContent(): CharSequence =
         clipText(clipboardManager.primaryClip, skipSensitive = false) ?: ""
 
-    /**
-     * The clipboard text, or "" when the clip is not text or the app that wrote it marked it
-     * sensitive. Pasting such a clip is fine because it stays on the device, but an AI action
-     * picks the clipboard up implicitly and sends it to a provider, so it must skip these.
-     * Also "" on a locked device: a person without the unlock code must not send the clipboard.
-     */
-    fun retrieveClipboardContentForAi(): CharSequence {
-        if (isDeviceLocked(latinIME)) return ""
-        return clipText(clipboardManager.primaryClip, skipSensitive = true) ?: ""
-    }
-
-    private fun isClipSensitive(description: ClipDescription?, inputType: Int): Boolean {
-        ClipboardManagerCompat.getClipSensitivity(description)?.let { return it }
+    private fun isClipSensitive(inputType: Int): Boolean {
+        ClipboardManagerCompat.getClipSensitivity(clipboardManager.primaryClip?.description)?.let { return it }
         return InputTypeUtils.isPasswordInputType(inputType)
     }
 
@@ -145,14 +197,8 @@ class ClipboardHistoryManager(
         if (parent == null) return null
         // No clipboard content on a locked device. Use the cached flag, not an IPC per keystroke.
         if (latinIME.mKeyboardSwitcher.keyboard?.mId?.mDeviceLocked == true) return null
-        // Check the description before fetching the clip. This runs once per keystroke for anyone
-        // with clipboard suggestions on, and getPrimaryClip() copies the entire clip across a
-        // binder boundary, whereas getPrimaryClipDescription() does not — so for a clip older than
-        // the recency window (the overwhelmingly common case) that copy was pure waste.
-        val description = clipboardManager.primaryClipDescription ?: return null
-        if (!description.hasMimeType("text/*")) return null
-        if (System.currentTimeMillis() - ClipboardManagerCompat.getClipTimestamp(description) > RECENT_TIME_MILLIS) return null
         val clipData = clipboardManager.primaryClip ?: return null
+        if (System.currentTimeMillis() - ClipboardManagerCompat.getClipTimestamp(clipData) > RECENT_TIME_MILLIS) return null
         val content = clipText(clipData, skipSensitive = false) ?: return null
         val inputType = editorInfo?.inputType ?: InputType.TYPE_NULL
         if (InputTypeUtils.isNumberInputType(inputType) && !content.isValidNumber()) return null
@@ -161,9 +207,9 @@ class ClipboardHistoryManager(
         val binding = ClipboardSuggestionBinding.inflate(LayoutInflater.from(latinIME), parent, false)
         val textView = binding.clipboardSuggestionText
         latinIME.mSettings.getCustomTypeface()?.let { textView.typeface = it }
-        textView.text = (if (isClipSensitive(clipData.description, inputType)) "*".repeat(content.length) else content)
+        textView.text = (if (isClipSensitive(inputType)) "*".repeat(content.length) else content)
             .take(200) // truncate displayed text for performance reasons
-        val clipIcon = KeyboardIconsSet.instance.getIconDrawable(ToolbarKey.PASTE.name.lowercase())
+        val clipIcon = latinIME.mKeyboardSwitcher.keyboard.mIconsSet.getIconDrawable(ToolbarKey.PASTE.name.lowercase())
         textView.setCompoundDrawablesRelativeWithIntrinsicBounds(clipIcon, null, null, null)
         textView.setOnClickListener {
             dontShowCurrentSuggestion = true
@@ -172,7 +218,7 @@ class ClipboardHistoryManager(
             binding.root.isGone = true
         }
         val closeButton = binding.clipboardSuggestionClose
-        closeButton.setImageDrawable(KeyboardIconsSet.instance.getIconDrawable(ToolbarKey.CLOSE_HISTORY.name.lowercase()))
+        closeButton.setImageDrawable(latinIME.mKeyboardSwitcher.keyboard.mIconsSet.getIconDrawable(ToolbarKey.CLOSE_HISTORY.name.lowercase()))
         closeButton.setOnClickListener { removeClipboardSuggestion() }
 
         val colors = latinIME.mSettings.current.mColors
@@ -197,6 +243,7 @@ class ClipboardHistoryManager(
     }
 
     companion object {
+        private const val TAG = "ClipboardHistoryManager"
         private var dontShowCurrentSuggestion: Boolean = false
         const val RECENT_TIME_MILLIS = 3 * 60 * 1000L // 3 minutes (for clipboard suggestions)
         /** The keyboard does not read a clip text that is longer than this, in chars (R-08). */
@@ -219,5 +266,11 @@ class ClipboardHistoryManager(
         /** [text], or null when it is empty or longer than [MAX_CLIP_TEXT_LENGTH]. */
         fun cappedClipText(text: CharSequence?): CharSequence? =
             text?.takeIf { it.isNotEmpty() && it.length <= MAX_CLIP_TEXT_LENGTH }
+
+        // Dispatchers for the off-main-thread cache load + its main-thread apply step. Overridable
+        // in tests (set both to Dispatchers.Unconfined) so the load runs synchronously and doesn't
+        // race Robolectric's manual main-looper message pump. Production uses IO + Main.
+        @VisibleForTesting var loadDispatcher: CoroutineDispatcher = Dispatchers.IO
+        @VisibleForTesting var applyDispatcher: CoroutineDispatcher = Dispatchers.Main
     }
 }

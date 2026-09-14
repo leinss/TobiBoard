@@ -21,7 +21,18 @@ tools/*.txt
 release-signing/
 *.jks
 *.keystore
+*.p12
+*.pkcs12
 keystore.properties
+*service-account*.json
+play-*.json
+
+# Native libs pulled by `make fetch-native-libs` — too large for git.
+app/libs/*.aar
+app/libs/*.jar
+
+# Local env (Keychain references + paths) — never commit
+.envrc
 
 # Internal dev docs
 docs/superpowers/
@@ -29,3 +40,7 @@ docs/superpowers/
 # Claude config
 CLAUDE.md
 .env
+
+# fastlane generated
+fastlane/README.md
+fastlane/report.xml

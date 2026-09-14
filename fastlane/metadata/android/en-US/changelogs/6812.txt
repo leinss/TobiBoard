@@ -1,0 +1,2 @@
+- On-device voice: a corrupted or incomplete speech model is now detected automatically and you're prompted to re-download it, instead of dictation silently failing
+- Clearer error message when the on-device voice model can't load

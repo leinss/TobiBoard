@@ -259,7 +259,7 @@
     <string name="theme_name_black" tools:keep="@string/theme_name_black">Negro</string>
     <string name="theme_name_indigo" tools:keep="@string/theme_name_indigo">Índigo</string>
     <string name="theme_name_ocean" tools:keep="@string/theme_name_ocean">Océano</string>
-    <string name="ime_settings">Axustes de HeliBoard</string>
+    <string name="ime_settings">Axustes de TobiBoard</string>
     <string name="localized_number_row_summary">Preferir números traducidos sobre os latinos</string>
     <string name="replace_dictionary_message">Tes certeza de querer substituír o dicionario engadido \"%1$s\"?
 \n
@@ -271,7 +271,7 @@
     <string name="dictionary_link_text">aquí</string>
     <string name="select_color_functional_key_background">Fondo da tecla función</string>
     <string name="spell_checker_service_name">Revisor de Ortografía</string>
-    <string name="android_spell_checker_settings">Axustes do revisor de Ortografía de HeliBoard</string>
+    <string name="android_spell_checker_settings">Axustes do revisor de Ortografía de TobiBoard</string>
     <string name="load_gesture_library_message">Vas precisar a biblioteca para \'%s\': As bibliotecas incompatibles podería estragar a app ao escribir.
 \n
 \nAviso: a carga de código externo é un risco de seguridade. Usa só bibliotecas de fontes de confianza.</string>
@@ -301,6 +301,7 @@
     <string name="prefs_long_press_symbol_for_numpad">Tecla con pulsación longa para teclado numérico</string>
     <string name="center_suggestion_text_to_enter">Usar sempre a suxestión do medio</string>
     <string name="center_suggestion_text_to_enter_summary">Ao premer no espazo ou puntuación, escríbese a suxestión do medio</string>
+    <string name="clipboard_toolbar_keys">Escoller teclas da barra de ferramentas do portapapeis</string>
     <string name="close_history" tools:keep="@string/close_history">Pechar historial do portapapeis</string>
     <string name="subtype_generic_extended">%s (Extendido)</string>
     <string name="subtype_mns">Mansi</string>
@@ -351,6 +352,7 @@
     <string name="icon_style">Estilo da icona</string>
     <string name="prefs_space_bar_text">Texto persoal na barra de espazo</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Liña inferior de emoji</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Liña inferior de portapapeis</string>
     <string name="label_tab_key" tools:keep="@string/label_tab_key">Tab</string>
     <string name="label_delete_key" tools:keep="@string/label_delete_key">Eliminar</string>
     <string name="label_enter_key" tools:keep="@string/label_enter_key">Enter</string>
@@ -438,6 +440,7 @@
     <string name="about_wiki_link">Ir á Wiki</string>
     <string name="about_wiki_link_description">Calquera usuaria de GitHub pode colaborar coa Wiki!</string>
     <string name="space_swipe_hide_keyboard_entry">Ocultar teclado</string>
+    <string name="clipboard_history_pinned_first">Mostrar arriba os elementos fixados</string>
     <string name="inline_emoji_search">Busca de emojis ao escribir</string>
     <string name="inline_emoji_search_summary">Só suxerir emojis cando a palabra comece por dous puntos</string>
     <string name="emoji_dictionary_required">Requírese un dicionario de emojis para que esta ferramenta funcione. Podes descargar dicionarios en formato .dict desde %s.</string>
@@ -447,6 +450,7 @@
     <string name="number_row_in_symbols">Mostrar fila de número na vista de símbolos</string>
     <string name="custom_emoji_font">Escoller emojis persoais desde ficheiro</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Fila inferior de emojis coa tecla de acción</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Fila inferior do portapapeis coa tecla de acción</string>
     <string name="timestamp_description">Podes engadir a telca de marca de tempo usando unha disposición persoal coa tecla \'marca de tempo\', ou código de tecla -10043</string>
     <string name="prefs_bottom_row_scale">Escala da fila inferior</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Teclas de función (Khipro)</string>

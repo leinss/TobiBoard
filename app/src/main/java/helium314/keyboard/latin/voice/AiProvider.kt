@@ -8,24 +8,28 @@ import helium314.keyboard.latin.settings.Settings
 
 enum class AiProvider(val prefValue: String) {
     OPENROUTER("openrouter"),
-    PAYPERQ("payperq");
+    PAYPERQ("payperq"),
+    LOCAL("local");
+
+    val isCloud: Boolean get() = this != LOCAL
 
     companion object {
-        /** @JvmStatic so LatinIME (Java) can resolve the provider without a Companion hop. */
-        @JvmStatic
         fun fromPref(value: String?): AiProvider =
-            entries.firstOrNull { it.prefValue == value } ?: OPENROUTER
+            values().firstOrNull { it.prefValue == value } ?: LOCAL
     }
 }
 
 internal fun AiProvider.apiKeyPrefKey(): String = when (this) {
     AiProvider.OPENROUTER -> helium314.keyboard.latin.settings.Settings.PREF_OPENROUTER_API_KEY
     AiProvider.PAYPERQ -> helium314.keyboard.latin.settings.Settings.PREF_PAYPERQ_API_KEY
+    // LOCAL has no API key; callers must gate on AiProvider.isCloud before reading SecretStore.
+    AiProvider.LOCAL -> helium314.keyboard.latin.settings.Settings.PREF_OPENROUTER_API_KEY
 }
 
 internal fun AiProvider.defaultApiKey(): String = when (this) {
     AiProvider.OPENROUTER -> Defaults.PREF_OPENROUTER_API_KEY
     AiProvider.PAYPERQ -> Defaults.PREF_PAYPERQ_API_KEY
+    AiProvider.LOCAL -> ""
 }
 
 internal fun resolveProviderModel(selectedModel: String, customModel: String): String? =
@@ -44,7 +48,6 @@ internal const val MODEL_CUSTOM = "custom"
  */
 private val OPENROUTER_VOICE_SLUGS: Set<String> = ModelCatalog.OPENROUTER_VOICE.mapTo(LinkedHashSet()) { it.slug }
 private val OPENROUTER_STT_SLUGS: Set<String> = ModelCatalog.OPENROUTER_STT.mapTo(LinkedHashSet()) { it.slug }
-private val PAYPERQ_STT_SLUGS: Set<String> = ModelCatalog.PAYPERQ_STT.mapTo(LinkedHashSet()) { it.slug }
 private val PAYPERQ_VOICE_SLUGS: Set<String> = ModelCatalog.PAYPERQ_VOICE.mapTo(LinkedHashSet()) { it.slug }
 private val OPENROUTER_TEXT_FIX_SLUGS: Set<String> = ModelCatalog.OPENROUTER_TEXT_FIX.mapTo(LinkedHashSet()) { it.slug }
 private val PAYPERQ_TEXT_FIX_SLUGS: Set<String> = ModelCatalog.PAYPERQ_TEXT_FIX.mapTo(LinkedHashSet()) { it.slug }
@@ -54,28 +57,14 @@ internal fun AiProvider.supportsVoiceSlug(slug: String): Boolean {
     return slug in when (this) {
         AiProvider.OPENROUTER -> OPENROUTER_VOICE_SLUGS
         AiProvider.PAYPERQ -> PAYPERQ_VOICE_SLUGS
+        // LOCAL doesn't offer a slug picker; managers bypass slug resolution for it.
+        AiProvider.LOCAL -> return true
     }
 }
 
-internal fun AiProvider.supportsSttSlug(slug: String): Boolean {
-    // PayPerQ's transcription endpoint routes by capability and ignores the `model` field, so
-    // "Custom" there is a dead end: the picker offers it, no slug field is ever shown, and the
-    // resolved model comes back null. Refusing it here makes both existing coercion sites in
-    // VoiceScreen reset a slug carried over from OpenRouter automatically.
-    if (slug == MODEL_CUSTOM) return this == AiProvider.OPENROUTER
-    return slug in when (this) {
-        AiProvider.OPENROUTER -> OPENROUTER_STT_SLUGS
-        AiProvider.PAYPERQ -> PAYPERQ_STT_SLUGS
-    }
-}
-
-/**
- * The transcription model to fall back to when the saved one belongs to the other provider. The two
- * dedicated endpoints do not share a namespace, so there is no single default that suits both.
- */
-internal fun AiProvider.defaultSttModel(): String = when (this) {
-    AiProvider.OPENROUTER -> Defaults.PREF_VOICE_STT_MODEL
-    AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_STT.first().slug
+internal fun supportsOpenRouterSttSlug(slug: String): Boolean {
+    if (slug == MODEL_CUSTOM) return true
+    return slug in OPENROUTER_STT_SLUGS
 }
 
 internal fun AiProvider.supportsTextFixSlug(slug: String): Boolean {
@@ -83,14 +72,16 @@ internal fun AiProvider.supportsTextFixSlug(slug: String): Boolean {
     return slug in when (this) {
         AiProvider.OPENROUTER -> OPENROUTER_TEXT_FIX_SLUGS
         AiProvider.PAYPERQ -> PAYPERQ_TEXT_FIX_SLUGS
+        AiProvider.LOCAL -> return true
     }
 }
 
 /**
- * Resets each saved model that this provider cannot serve. VoiceScreen and the setup wizard call it
- * when the user selects a provider. A model that the provider can serve stays, so a re-pick of the
- * same provider, or a switch away and back, keeps a deliberate choice. The voice and Text Fix
- * defaults are slugs that both providers support, so one fallback works for each.
+ * Resets each saved model that this provider cannot serve. VoiceScreen calls it when the user
+ * selects a provider, and a restore calls it because the restore keeps the current provider. A
+ * model that the provider can serve stays, so a re-pick of the same provider, or a switch away and
+ * back, keeps a deliberate choice. The voice and Text Fix defaults are slugs that both cloud
+ * providers support, so one fallback works for each. Only OpenRouter has an STT model picker.
  */
 internal fun AiProvider.resetUnsupportedModels(prefs: SharedPreferences) {
     val currentVoice = prefs.getString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
@@ -105,8 +96,8 @@ internal fun AiProvider.resetUnsupportedModels(prefs: SharedPreferences) {
         if (!supportsVoiceSlug(currentVoice)) {
             putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
         }
-        if (!supportsSttSlug(currentStt)) {
-            putString(Settings.PREF_VOICE_STT_MODEL, defaultSttModel())
+        if (this@resetUnsupportedModels != AiProvider.OPENROUTER || !supportsOpenRouterSttSlug(currentStt)) {
+            putString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
         }
         if (!supportsTextFixSlug(currentTextFix)) {
             putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)

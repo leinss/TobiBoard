@@ -92,7 +92,7 @@
     <string name="user_dict_settings_edit_dialog_title">Редагувати слово</string>
     <string name="user_dict_settings_all_languages">Для всіх мов</string>
     <string name="user_dict_settings_more_languages">"Інші мови…"</string>
-    <string name="ime_settings">Налаштування HeliBoard</string>
+    <string name="ime_settings">Налаштування TobiBoard</string>
     <string name="day_night_mode_summary">Вигляд наслідує системні налаштування</string>
     <string name="autospace_after_punctuation_summary">Автоматично вставляти пробіл після знаків пунктуації під час введення нового слова</string>
     <string name="theme_style">Стиль теми</string>
@@ -103,7 +103,7 @@
     <string name="settings_category_input">Введення</string>
     <string name="subtype_akkhor_bn_BD">%s (Аккгор)</string>
     <string name="autospace_after_punctuation">Автопробіл після знаків пунктуації</string>
-    <string name="android_spell_checker_settings">Налаштування перевірки правопису HeliBoard</string>
+    <string name="android_spell_checker_settings">Налаштування перевірки правопису TobiBoard</string>
     <string name="settings_category_correction">Виправлення</string>
     <string name="settings_category_suggestions">Пропозиції</string>
     <string name="settings_category_experimental">Експериментальне</string>
@@ -146,7 +146,7 @@
     <string name="show_hints">Показувати підказки клавіш</string>
     <string name="prefs_long_press_keyboard_to_change_lang">Змінювати метод введення клавішею пробіл</string>
     <string name="prefs_long_press_keyboard_to_change_lang_summary">Довге натискання клавіші пробіл виводить меню вибору способу введення</string>
-    <string name="spell_checker_service_name">Перевірка правопису HeliBoard</string>
+    <string name="spell_checker_service_name">Перевірка правопису TobiBoard</string>
     <string name="prefs_narrow_key_gaps">Збільшені клавіші</string>
     <string name="delete_swipe">Видаляти ковзанням</string>
     <string name="delete_swipe_summary">Проведіть пальцем по клавіші видалення, щоб виділити і вилучити більші фрагменти тексту за раз</string>
@@ -317,6 +317,7 @@
     <string name="word_right" tools:keep="@string/word_right">Слово правіше</string>
     <string name="page_up" tools:keep="@string/page_up">Сторінка вгору</string>
     <string name="page_down" tools:keep="@string/page_down">Сторінка вниз</string>
+    <string name="clipboard_toolbar_keys">Вибрати клавіші панелі інструментів буфера обміну</string>
     <string name="quick_pin_toolbar_keys">Закріплювати клавіші панелі інструментів при тривалому натисканні</string>
     <string name="quick_pin_toolbar_keys_summary">Це вимикає інші функції клавіш панелі інструментів при тривалому натисканні</string>
     <string name="page_start" tools:keep="@string/page_start">Початок сторінки</string>
@@ -343,6 +344,7 @@
     <string name="gesture_trail_fadeout_duration">Тривалість сліду жесту</string>
     <string name="prefs_space_bar_text">Свій текст на клавіші пробілу</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Ряд емоджі знизу</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Ряд буфера обміну внизу</string>
     <string name="label_enter_key" tools:keep="@string/label_enter_key">Enter</string>
     <string name="label_tab_key" tools:keep="@string/label_tab_key">Tab</string>
     <string name="label_delete_key" tools:keep="@string/label_delete_key">Видалити</string>
@@ -433,6 +435,7 @@
     <string name="custom_subtype">Власний макет</string>
     <string name="landscape">Горизонтальна</string>
     <string name="ask_later">Спитати пізніше</string>
+    <string name="clipboard_history_pinned_first">Показувати прикріплені об\'єкти вгорі</string>
     <string name="inline_emoji_search">Вбудований пошук емодзі</string>
     <string name="inline_emoji_search_summary">Запропонуйте лише емодзі, коли слову передує двокрапка</string>
     <string name="emoji_dictionary_required">Для роботи цієї функції потрібен словник емодзі. Словники у форматі .dict можна завантажити %s.</string>
@@ -444,6 +447,7 @@
     <string name="prefs_bottom_row_scale">Масштаб нижнього рядка</string>
     <string name="custom_emoji_font">Встановити користувацький шрифт емодзі з файлу</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Нижній ряд емодзі з кнопкою дії</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Нижній ряд буфера обміну з кнопкою дії</string>
     <string name="emoji_search_title">Пошук емодзі</string>
     <string name="search_field_placeholder">Пошук</string>
     <string name="gesture_data_screen">Збір даних жестів</string>

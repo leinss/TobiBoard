@@ -91,8 +91,8 @@
     <string name="user_dict_settings_edit_dialog_title">"Editar palavra"</string>
     <string name="user_dict_settings_all_languages">"Para todos os idiomas"</string>
     <string name="user_dict_settings_more_languages">"Mais idiomas…"</string>
-    <string name="spell_checker_service_name">Verificação ortográfica HeliBoard</string>
-    <string name="android_spell_checker_settings">Definições de verificação ortográfica HeliBoard</string>
+    <string name="spell_checker_service_name">Verificação ortográfica TobiBoard</string>
+    <string name="android_spell_checker_settings">Definições de verificação ortográfica TobiBoard</string>
     <string name="number_row">Número de linha</string>
     <string name="number_row_summary">Mostrar sempre n.º de linha</string>
     <string name="prefs_force_incognito_mode_summary">Desativar aprendizagem de palavras</string>
@@ -102,7 +102,7 @@
     <string name="settings_category_experimental">Experimental</string>
     <string name="settings_category_input">Introdução</string>
     <string name="settings_category_miscellaneous">Outras</string>
-    <string name="ime_settings">Definições HeliBoard</string>
+    <string name="ime_settings">Definições TobiBoard</string>
     <string name="settings_category_suggestions">Sugestões</string>
     <string name="delete_swipe">Deslize para eliminar</string>
     <string name="more_keys_strip_description">Mais teclas</string>
@@ -247,6 +247,7 @@
     <string name="edit_layout">Toque para editar o layout</string>
     <string name="layout_functional_keys" tools:keep="@string/layout_functional_keys">Teclas funcionais</string>
     <string name="layout_error">Erro de layout: %s</string>
+    <string name="layout_clip_bottom_row" tools:keep="@string/layout_clip_bottom_row">Última fila da área de transferência</string>
     <string name="layout_emoji_bottom_row" tools:keep="@string/layout_emoji_bottom_row">Última fila de emojis</string>
     <string name="prefs_bottom_padding_scale">Espaçamento em baixo</string>
     <string name="subtype_generic_sebeolsik_final">%s (Sebeolsik Final)</string>
@@ -305,6 +306,7 @@
     <string name="no_dictionary_dont_show_again_button">Não mostrar novamente</string>
     <string name="available_dictionary_experimental">%s (experimental)</string>
     <string name="replace_dictionary_message">Substituir o dicionário \"%1$s\" adicionado pelo utilizador?\n\nDicionário atual:\n%2$s\n\nNovo dicionário:\n%3$s</string>
+    <string name="clipboard_toolbar_keys">Selecionar teclas da barra de ferramentas da área de transferência</string>
     <string name="remove_redundant_popups">Remover pop-ups redundantes</string>
     <string name="pinned_toolbar_keys">Selecionar teclas afixadas da barra de ferramentas</string>
     <string name="quick_pin_toolbar_keys">Fixar tecla da barra de ferramentas ao pressionar</string>
@@ -432,10 +434,12 @@
     <string name="inline_emoji_search">Pesquisa por emojis embutida</string>
     <string name="inline_emoji_search_summary">Sugerir somente emojis para quando uma palavra é precedida por dois pontos</string>
     <string name="emoji_dictionary_required">Um dicionário de emojis é necessário para esta funcionalidade. Dicionários no formato .dict podem ser descarregados %s.</string>
+    <string name="clipboard_history_pinned_first">Mostrar items afixados no topo</string>
     <string name="save_subtype_per_app">Lembrar idioma por app</string>
     <string name="subtype_mhr">Mari (Oriental)</string>
     <string name="subtype_khipro_bn">%s (Khipro)</string>
     <string name="layout_emoji_bottom_row_with_action" tools:keep="@string/layout_emoji_bottom_row_with_action">Fila inferior de emojis com tecla de ação</string>
+    <string name="layout_clip_bottom_row_with_action" tools:keep="@string/layout_clip_bottom_row_with_action">Fila inferior da área de transferência com tecla de ação</string>
     <string name="number_row_in_symbols">Mostrar fila de números no modo de símbolos</string>
     <string name="custom_emoji_font">Definir fonte de emojis personalizada de ficheiro</string>
     <string name="layout_functional_keys_khipro" tools:keep="@string/layout_functional_keys">Teclas funcionais (Khipro)</string>
