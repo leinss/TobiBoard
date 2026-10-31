@@ -18,7 +18,17 @@ jobs:
   # are added, cannot produce a signed APK, and failing the whole workflow for that made
   # every run red and hid real build breakage. Report it once, as a warning, and skip.
   signing-secrets:
-    runs-on: ubuntu-latest
+    # The self-hosted runner while it is online, GitHub-hosted runners when it
+    # is not: CI_RUNS_ON names one or the other, and unset means GitHub-hosted.
+    # A pull request from another repository always runs on GitHub-hosted
+    # runners.
+    runs-on: >-
+      ${{ fromJSON(
+            (github.event_name == 'pull_request'
+             && github.event.pull_request.head.repo.full_name != github.repository)
+            && '["ubuntu-latest"]'
+            || vars.CI_RUNS_ON
+            || '["ubuntu-latest"]') }}
     timeout-minutes: 5
     outputs:
       available: ${{ steps.check.outputs.available }}
@@ -37,7 +47,17 @@ jobs:
   build:
     needs: signing-secrets
     if: needs.signing-secrets.outputs.available == 'true'
-    runs-on: ubuntu-latest
+    # The self-hosted runner while it is online, GitHub-hosted runners when it
+    # is not: CI_RUNS_ON names one or the other, and unset means GitHub-hosted.
+    # A pull request from another repository always runs on GitHub-hosted
+    # runners.
+    runs-on: >-
+      ${{ fromJSON(
+            (github.event_name == 'pull_request'
+             && github.event.pull_request.head.repo.full_name != github.repository)
+            && '["ubuntu-latest"]'
+            || vars.CI_RUNS_ON
+            || '["ubuntu-latest"]') }}
     timeout-minutes: 60
     permissions:
       contents: write  # only needed for the release-creation step
@@ -148,6 +168,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
+          # Without gh the check below would read every tag as unreleased.
+          command -v gh >/dev/null || { echo "::error::gh is not installed on this runner"; exit 1; }
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "::error::Release $TAG already exists; published artifacts are immutable"
             exit 1
