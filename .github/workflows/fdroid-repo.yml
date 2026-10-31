@@ -37,7 +37,17 @@ concurrency:
 jobs:
   publish:
     if: github.repository == 'leinss/TobiBoard'
-    runs-on: ubuntu-latest
+    # The self-hosted runner while it is online, GitHub-hosted runners when it
+    # is not: CI_RUNS_ON names one or the other, and unset means GitHub-hosted.
+    # A pull request from another repository always runs on GitHub-hosted
+    # runners.
+    runs-on: >-
+      ${{ fromJSON(
+            (github.event_name == 'pull_request'
+             && github.event.pull_request.head.repo.full_name != github.repository)
+            && '["ubuntu-latest"]'
+            || vars.CI_RUNS_ON
+            || '["ubuntu-latest"]') }}
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -53,11 +63,26 @@ jobs:
         with:
           python-version: '3.12'
 
+      # The self-hosted runner has no sudo and its image carries libmagic1.
+      - name: Install libmagic
+        if: runner.environment == 'github-hosted'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmagic1
+
+      # fdroid update verifies APK signatures with apksigner when it finds the
+      # build tools, which GitHub-hosted runners ship under ANDROID_HOME and
+      # the self-hosted runner does not. Without them it falls back to
+      # jarsigner, which cannot check a v2/v3-only signature.
+      - name: Set up Android build tools
+        if: runner.environment == 'self-hosted'
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: 'build-tools;36.0.0'
+
       - name: Install fdroidserver
         run: |
           set -eux
-          sudo apt-get update
-          sudo apt-get install -y libmagic1
           pip install --upgrade pip
           # androguard 4.1.4 regresses APK v2/v3 signature parsing
           # ('NoOverwriteDict' object has no attribute 'append'); pin the verified combo.

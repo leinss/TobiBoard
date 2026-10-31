@@ -6,7 +6,17 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    # The self-hosted runner while it is online, GitHub-hosted runners when it
+    # is not: CI_RUNS_ON names one or the other, and unset means GitHub-hosted.
+    # A pull request from another repository always runs on GitHub-hosted
+    # runners.
+    runs-on: >-
+      ${{ fromJSON(
+            (github.event_name == 'pull_request'
+             && github.event.pull_request.head.repo.full_name != github.repository)
+            && '["ubuntu-latest"]'
+            || vars.CI_RUNS_ON
+            || '["ubuntu-latest"]') }}
 
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +26,14 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
+      # GitHub-hosted runners ship the Android SDK and the self-hosted runner
+      # does not. This installs the command-line tools into the job's home and
+      # accepts the licenses; the Android Gradle plugin then installs the
+      # platform, build tools and NDK the build pins, on first use.
+      - name: Set up Android SDK
+        if: runner.environment == 'self-hosted'
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       - uses: gradle/actions/setup-gradle@v3
 
