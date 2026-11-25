@@ -25,6 +25,16 @@ ANDROID_HOME ?= $(ANDROID_SDK_ROOT)
 export ANDROID_HOME
 export ANDROID_SDK_ROOT
 
+# The emoji and grapheme unit tests need JDK 20 or later. Use Homebrew's JDK 21 when the
+# environment sets no JAVA_HOME, so `make check` does not fall back to an older default JDK.
+# CI jobs that set JAVA_HOME themselves are left alone.
+JDK21_HOME := /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+ifeq ($(origin JAVA_HOME),undefined)
+ifneq ($(wildcard $(JDK21_HOME)/bin/java),)
+export JAVA_HOME := $(JDK21_HOME)
+endif
+endif
+
 SDKMANAGER := $(ANDROID_SDK_ROOT)/cmdline-tools/latest/bin/sdkmanager
 AVDMANAGER := $(ANDROID_SDK_ROOT)/cmdline-tools/latest/bin/avdmanager
 EMULATOR := $(ANDROID_SDK_ROOT)/emulator/emulator
